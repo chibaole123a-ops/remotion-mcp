@@ -72,15 +72,20 @@ async function dispatchGitHubRender(
   }
 }
 
-async function isVideoReadyOnGitHub(repo: string, jobId: string): Promise<boolean> {
-  const url = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
+async function isVideoReadyOnGitHub(env: Env, jobId: string): Promise<boolean> {
+  const repo = env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
   try {
-    const res = await fetch(url, {
-      method: 'HEAD',
-      redirect: 'manual',
-      headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker' },
+    const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/videos-store`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+        'User-Agent': 'Remotion-Cloudflare-MCP-Worker',
+      },
     });
-    return res.status === 200 || res.status === 302;
+    if (!res.ok) return false;
+    const data: any = await res.json();
+    const assets: any[] = data?.assets || [];
+    return assets.some((a) => a.name === `video-${jobId}.mp4` && a.state === 'uploaded');
   } catch {
     return false;
   }
@@ -311,7 +316,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         let ready = false;
 
         while (Date.now() - start < 20000) {
-          ready = await isVideoReadyOnGitHub(repo, jobId);
+          ready = await isVideoReadyOnGitHub(env, jobId);
           if (ready) break;
           await new Promise((r) => setTimeout(r, 3000));
         }
@@ -403,7 +408,7 @@ export default {
     // Watch page route: /watch/:jobId
     if (pathParts[0] === 'watch' && pathParts[1]) {
       const jobId = pathParts[1];
-      const ready = await isVideoReadyOnGitHub(repo, jobId);
+      const ready = await isVideoReadyOnGitHub(env, jobId);
       const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
       if (!ready) {

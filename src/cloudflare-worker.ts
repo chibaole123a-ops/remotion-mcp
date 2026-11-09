@@ -407,7 +407,8 @@ export default {
 
     // Direct video streaming proxy route: /video/:jobId.mp4
     if (pathParts[0] === 'video' && pathParts[1]) {
-      const fileName = pathParts[1].endsWith('.mp4') ? pathParts[1] : `video-${pathParts[1]}.mp4`;
+      const rawId = pathParts[1].replace(/\.mp4$/, '').replace(/^video-/, '');
+      const fileName = `video-${rawId}.mp4`;
       const ghUrl = `https://github.com/${repo}/releases/download/videos-store/${fileName}`;
       const rangeHeader = request.headers.get('Range');
       const fetchHeaders: Record<string, string> = {

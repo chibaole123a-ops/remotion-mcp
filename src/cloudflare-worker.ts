@@ -430,6 +430,8 @@ export default {
       respHeaders.set('Content-Disposition', 'inline');
       respHeaders.set('Access-Control-Allow-Origin', '*');
       respHeaders.set('Accept-Ranges', 'bytes');
+      // Cache at Cloudflare Edge for 7 days so re-watching or seeking uses 0 Worker requests!
+      respHeaders.set('Cache-Control', 'public, max-age=604800, immutable');
 
       return new Response(ghRes.body, {
         status: ghRes.status,
@@ -451,7 +453,7 @@ export default {
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="5" />
+  <meta http-equiv="refresh" content="12" />
   <title>Đang Render trên Cloud 16GB RAM... (#${jobId})</title>
   <style>
     body { background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
@@ -463,7 +465,7 @@ export default {
 <body>
   <span class="loader"></span>
   <h2>⏳ Đang render video trên GitHub Actions Cloud (16GB RAM)...</h2>
-  <p>Mã công việc: <strong>#${jobId}</strong> — Trang này sẽ tự động làm mới mỗi 5 giây và phát video ngay khi hoàn tất!</p>
+  <p>Mã công việc: <strong>#${jobId}</strong> — Trang này tự động kiểm tra mỗi 12 giây và phát video ngay khi hoàn tất!</p>
   <p><a href="https://github.com/${repo}/actions" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
 </body>
 </html>`,

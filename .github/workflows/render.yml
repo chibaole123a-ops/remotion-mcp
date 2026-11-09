@@ -88,7 +88,7 @@ jobs:
       - name: Render Video with Remotion
         run: |
           mkdir -p outputs
-          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --gl=angle --concurrency=100%
+          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --gl=swangle --concurrency=2
 
       - name: Publish Video to GitHub Release (Free Unlimited CDN Link)
         env:

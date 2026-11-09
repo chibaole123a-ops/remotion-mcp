@@ -405,11 +405,44 @@ export default {
       }
     }
 
+    // Direct video streaming proxy route: /video/:jobId.mp4
+    if (pathParts[0] === 'video' && pathParts[1]) {
+      const fileName = pathParts[1].endsWith('.mp4') ? pathParts[1] : `video-${pathParts[1]}.mp4`;
+      const ghUrl = `https://github.com/${repo}/releases/download/videos-store/${fileName}`;
+      const rangeHeader = request.headers.get('Range');
+      const fetchHeaders: Record<string, string> = {
+        'User-Agent': 'Remotion-Cloudflare-MCP-Worker',
+      };
+      if (rangeHeader) fetchHeaders['Range'] = rangeHeader;
+
+      const ghRes = await fetch(ghUrl, {
+        headers: fetchHeaders,
+        redirect: 'follow',
+      });
+
+      if (!ghRes.ok) {
+        return new Response('Video not found', { status: 404 });
+      }
+
+      const respHeaders = new Headers(ghRes.headers);
+      respHeaders.set('Content-Type', 'video/mp4');
+      respHeaders.set('Content-Disposition', 'inline');
+      respHeaders.set('Access-Control-Allow-Origin', '*');
+      respHeaders.set('Accept-Ranges', 'bytes');
+
+      return new Response(ghRes.body, {
+        status: ghRes.status,
+        headers: respHeaders,
+      });
+    }
+
     // Watch page route: /watch/:jobId
     if (pathParts[0] === 'watch' && pathParts[1]) {
       const jobId = pathParts[1];
       const ready = await isVideoReadyOnGitHub(env, jobId);
-      const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
+      const secretSuffix = env.MCP_SECRET ? `?key=${encodeURIComponent(env.MCP_SECRET)}` : '';
+      const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
+      const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
       if (!ready) {
         return new Response(
@@ -452,9 +485,9 @@ export default {
 </head>
 <body>
   <h2>🎬 Video Remotion (#${jobId})</h2>
-  <video src="${videoUrl}" controls autoplay loop></video>
+  <video src="${streamUrl}" controls autoplay loop playsinline></video>
   <div class="actions">
-    <a href="${videoUrl}" download="remotion-${jobId}.mp4">⬇ Tải xuống MP4</a>
+    <a href="${downloadUrl}" download="remotion-${jobId}.mp4">⬇ Tải xuống MP4</a>
   </div>
 </body>
 </html>`,

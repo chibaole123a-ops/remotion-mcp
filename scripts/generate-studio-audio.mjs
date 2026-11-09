@@ -4,7 +4,6 @@ import { execSync } from 'child_process';
 const audioB64 = process.env.AUDIO_B64 || '';
 const fps = Number(process.env.FPS || 30);
 const defaultDurationFrames = Number(process.env.DURATION || 600);
-const durationSeconds = Math.max(10, Math.ceil(defaultDurationFrames / fps) + 5);
 
 fs.mkdirSync('public', { recursive: true });
 fs.mkdirSync('src/remotion/public', { recursive: true });
@@ -72,6 +71,32 @@ function generateStereoWav(filePath, durationSec, mood) {
   fs.writeFileSync(filePath, buffer);
 }
 
+// Convert WAV to real MP3 if ffmpeg is available, otherwise keep WAV fallback
+function writeWavOrMp3(outMp3Path, durationSec, mood) {
+  const tmpWav = `${outMp3Path}.tmp.wav`;
+  generateStereoWav(tmpWav, durationSec, mood);
+  try {
+    execSync(`ffmpeg -y -loglevel error -i "${tmpWav}" -codec:a libmp3lame -qscale:a 4 "${outMp3Path}"`);
+    fs.unlinkSync(tmpWav);
+  } catch {
+    fs.renameSync(tmpWav, outMp3Path);
+  }
+}
+
+// Measure audio duration in seconds via ffprobe
+function getAudioDurationSec(filePath, fallbackSec = 0) {
+  try {
+    const out = execSync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`,
+      { encoding: 'utf-8' }
+    ).trim();
+    const val = parseFloat(out);
+    return Number.isFinite(val) && val > 0 ? val : fallbackSec;
+  } catch {
+    return fallbackSec;
+  }
+}
+
 let config = {
   voice: 'vi-VN-NamMinhNeural',
   rate: '+5%',
@@ -88,19 +113,11 @@ if (audioB64) {
   }
 }
 
-// 1. Always generate public/bgm.mp3 (and copy to src/remotion/public/bgm.mp3)
-try {
-  generateStereoWav('public/bgm.mp3', durationSeconds, config.bgmMood || 'epic-space');
-  fs.copyFileSync('public/bgm.mp3', 'src/remotion/public/bgm.mp3');
-  console.log('✅ Generated ambient stereo BGM at public/bgm.mp3');
-} catch (err) {
-  console.error('Failed to generate BGM:', err);
-}
-
-// 2. Generate Neural AI Voiceovers via edge-tts for each narration segment (up to 30 segments)
+// 1. Generate Neural AI Voiceovers via edge-tts for each narration segment and measure exact durations
 const segments = Array.isArray(config.narrationSegments) ? config.narrationSegments : [];
 const voice = config.voice || 'vi-VN-NamMinhNeural';
 const rate = config.rate || '+5%';
+const segmentDurationsSec = [];
 
 for (let i = 0; i < Math.max(segments.length, 15); i++) {
   const seg = segments[i];
@@ -110,7 +127,7 @@ for (let i = 0; i < Math.max(segments.length, 15); i++) {
 
   if (!text.trim()) {
     // Create a silent fallback audio file so staticFile('voice-X.mp3') never 404s even if Gemini references an extra index
-    generateStereoWav(outFile, 1, 'epic-space');
+    writeWavOrMp3(outFile, 1, 'epic-space');
     fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
     continue;
   }
@@ -124,10 +141,50 @@ for (let i = 0; i < Math.max(segments.length, 15); i++) {
     );
     fs.unlinkSync(tmpTxt);
     fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
-    console.log(`🎙️ Generated Neural AI Voiceover: ${outFile}`);
+    const dur = getAudioDurationSec(outFile, 4);
+    segmentDurationsSec.push(dur);
+    console.log(`🎙️ Generated Neural AI Voiceover: ${outFile} (${dur.toFixed(2)}s)`);
   } catch (err) {
     console.warn(`Edge-TTS fallback for ${outFile}:`, err);
-    generateStereoWav(outFile, 3, 'epic-space');
+    writeWavOrMp3(outFile, 3, 'epic-space');
     fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
+    segmentDurationsSec.push(3);
   }
+}
+
+// Calculate required duration based on spoken voiceover (plus 0.6s breathing room per segment)
+const totalVoiceSeconds = segmentDurationsSec.reduce((acc, s) => acc + s + 0.6, 0);
+const minVoiceFrames = Math.ceil(totalVoiceSeconds * fps);
+const computedDurationInFrames = Math.max(defaultDurationFrames, minVoiceFrames);
+const bgmDurationSeconds = Math.max(10, Math.ceil(computedDurationInFrames / fps) + 5);
+
+// 2. Always generate public/bgm.mp3 matching the full computed duration
+try {
+  writeWavOrMp3('public/bgm.mp3', bgmDurationSeconds, config.bgmMood || 'epic-space');
+  fs.copyFileSync('public/bgm.mp3', 'src/remotion/public/bgm.mp3');
+  console.log(`✅ Generated ambient stereo BGM at public/bgm.mp3 (${bgmDurationSeconds}s)`);
+} catch (err) {
+  console.error('Failed to generate BGM:', err);
+}
+
+// 3. Persist computedDurationInFrames and audio segment metadata to src/remotion/meta.json
+try {
+  const prevMeta = fs.existsSync('src/remotion/meta.json')
+    ? JSON.parse(fs.readFileSync('src/remotion/meta.json', 'utf-8'))
+    : {};
+  fs.writeFileSync(
+    'src/remotion/meta.json',
+    JSON.stringify(
+      {
+        ...prevMeta,
+        computedDurationInFrames,
+        segmentDurationsFrames: segmentDurationsSec.map((s) => Math.ceil((s + 0.6) * fps)),
+      },
+      null,
+      2
+    ),
+    'utf-8'
+  );
+} catch (err) {
+  console.warn('Could not update src/remotion/meta.json with audio durations:', err);
 }

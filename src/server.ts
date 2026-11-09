@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { randomUUID } from 'crypto';
+import { Readable } from 'stream';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -21,12 +22,41 @@ function getPublicBaseUrl(req?: express.Request): string {
   return `http://localhost:${PORT}`;
 }
 
+function sanitizeJobId(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || 'unknown';
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function validateTsxCode(tsxCode: string): string[] {
+  const warnings: string[] = [];
+  if (!/export\s+(const|function)\s+DynamicVideo/.test(tsxCode)) {
+    warnings.push(
+      'CRITICAL: Code must export `export const DynamicVideo: React.FC = () => { ... }` or `export function DynamicVideo()`.'
+    );
+  }
+  if (/Math\.random\s*\(/.test(tsxCode)) {
+    warnings.push(
+      'NOTE: Detected `Math.random()`. Prefer `random("seed")` from "remotion" so parallel multi-core rendering stays 100% deterministic.'
+    );
+  }
+  return warnings;
+}
+
 interface CloudRenderJob {
   id: string;
   title: string;
   status: 'dispatched' | 'rendering' | 'completed' | 'failed';
   videoUrl?: string;
   watchPageUrl?: string;
+  streamUrl?: string;
   error?: string;
   createdAt: number;
 }
@@ -41,7 +71,7 @@ async function triggerGitHubActionsRender(
   fps: number,
   width: number,
   height: number,
-  baseUrl: string
+  audioConfig: { voice: string; bgmMood: string; narrationSegments: string[] }
 ) {
   if (!GITHUB_TOKEN) {
     throw new Error(
@@ -50,8 +80,9 @@ async function triggerGitHubActionsRender(
   }
 
   const tsxCodeBase64 = Buffer.from(tsxCode, 'utf-8').toString('base64');
-  const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
-  const callbackUrl = `${baseUrl}/webhook/github${secretSuffix}`;
+  const audioConfigBase64 = Buffer.from(JSON.stringify(audioConfig || {}), 'utf-8').toString(
+    'base64'
+  );
 
   const response = await fetch(
     `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/render.yml/dispatches`,
@@ -61,6 +92,7 @@ async function triggerGitHubActionsRender(
         Accept: 'application/vnd.github+json',
         Authorization: `Bearer ${GITHUB_TOKEN}`,
         'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'Remotion-Cloud-MCP-Server',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -73,7 +105,8 @@ async function triggerGitHubActionsRender(
           width: String(width),
           height: String(height),
           tsxCodeBase64,
-          callbackUrl,
+          audioConfigBase64,
+          callbackUrl: '',
         },
       }),
     }
@@ -85,45 +118,116 @@ async function triggerGitHubActionsRender(
   }
 }
 
-// Check if release asset is already uploaded on GitHub (fallback in case webhook was missed)
-async function checkGitHubReleaseAsset(jobId: string, baseUrl: string): Promise<boolean> {
-  const expectedUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
+async function checkReleaseAssetsOnGitHub(
+  jobId: string
+): Promise<{ videoReady: boolean; errorLogText?: string }> {
   try {
-    const res = await fetch(expectedUrl, { method: 'HEAD', redirect: 'manual' });
-    if (res.status === 200 || res.status === 302) {
-      const job = jobs.get(jobId);
-      if (job) {
-        const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
-        job.status = 'completed';
-        job.videoUrl = expectedUrl;
-        job.watchPageUrl = `${baseUrl}/watch/${jobId}${secretSuffix}`;
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'Remotion-Cloud-MCP-Server',
+    };
+    if (GITHUB_TOKEN) headers['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
+
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/tags/videos-store`, {
+      headers,
+    });
+    if (!res.ok) return { videoReady: false };
+    const data: any = await res.json();
+    const assets: any[] = data?.assets || [];
+
+    const videoReady = assets.some((a) => a.name === `video-${jobId}.mp4` && a.state === 'uploaded');
+    const errAsset = assets.find((a) => a.name === `error-${jobId}.txt` && a.state === 'uploaded');
+
+    let errorLogText: string | undefined;
+    if (errAsset) {
+      const errUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/error-${jobId}.txt`;
+      const errRes = await fetch(errUrl, {
+        headers: { 'User-Agent': 'Remotion-Cloud-MCP-Server' },
+        redirect: 'follow',
+      });
+      if (errRes.ok) {
+        errorLogText = await errRes.text();
       }
-      return true;
     }
-  } catch {}
-  return false;
+
+    return { videoReady, errorLogText };
+  } catch {
+    return { videoReady: false };
+  }
+}
+
+async function inspectGitHubWorkflowRun(jobId: string) {
+  try {
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'Remotion-Cloud-MCP-Server',
+    };
+    if (GITHUB_TOKEN) headers['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
+
+    const runsRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/render.yml/runs?per_page=15`,
+      { headers }
+    );
+    if (!runsRes.ok) return null;
+    const runsData: any = await runsRes.json();
+    const runs: any[] = runsData?.workflow_runs || [];
+    if (runs.length === 0) return null;
+
+    const targetRun =
+      runs.find(
+        (r) =>
+          (typeof r.display_title === 'string' && r.display_title.includes(jobId)) ||
+          (typeof r.name === 'string' && r.name.includes(jobId))
+      ) || runs[0];
+
+    const jobsRes = await fetch(targetRun.jobs_url, { headers });
+    const jobsData: any = jobsRes.ok ? await jobsRes.json() : null;
+    const ghJob = jobsData?.jobs?.[0];
+
+    const steps = (ghJob?.steps || []).map((s: any) => ({
+      name: s.name,
+      status: s.status,
+      conclusion: s.conclusion,
+    }));
+
+    return {
+      runId: targetRun.id,
+      status: targetRun.status,
+      conclusion: targetRun.conclusion,
+      htmlUrl: targetRun.html_url,
+      steps,
+    };
+  } catch {
+    return null;
+  }
 }
 
 const ECOSYSTEM_DOCS = `
-INSTALLED REMOTION ECOSYSTEM PACKAGES ON GITHUB ACTIONS CLOUD (4 vCPU, 16GB RAM):
-1. Core: 'remotion' (AbsoluteFill, Sequence, Series, Loop, Freeze, Audio, OffthreadVideo, Img, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, Easing, random)
-2. Transitions: '@remotion/transitions' (TransitionSeries, linearTiming, springTiming) + '@remotion/transitions/fade', '@remotion/transitions/slide', '@remotion/transitions/wipe', '@remotion/transitions/flip'
-3. 2D Shapes & SVG: '@remotion/shapes' (Circle, Rect, Triangle, Star, Polygon, Ellipse, Heart, Pie), '@remotion/paths' (evolvePath, getLength, interpolatePath), '@remotion/rounded-text-box'
-4. 3D Graphics: '@remotion/three' (ThreeCanvas) + 'three' + '@react-three/fiber' + '@react-three/drei'
-5. Effects: '@remotion/motion-blur' (Trail, CameraMotionBlur), '@remotion/noise' (noise2D, noise3D, noise4D)
-6. Typography & Fonts: '@remotion/google-fonts/BeVietnamPro', '@remotion/google-fonts/Inter', '@remotion/google-fonts/Montserrat', '@remotion/google-fonts/Roboto', '@remotion/layout-utils'
-7. Media & Captions: '@remotion/captions', '@remotion/media-utils', '@remotion/gif' (Gif), '@remotion/lottie' (Lottie), '@remotion/animation-utils'
+# REMOTION v4.0.541 — FULL-STACK AI VIDEO STUDIO (v4.0)
+## (Master Creative Director + Neural AI Voiceover + Cinematic BGM + Real Visual Media + Full Ecosystem)
+
+1. Automatic Neural AI Voiceover (\`narrationSegments\` & \`voice\`):
+   - Vietnamese Voices: \`"vi-VN-NamMinhNeural"\` (Male), \`"vi-VN-HoaiMyNeural"\` (Female)
+   - English Voices: \`"en-US-AndrewMultilingualNeural"\`, \`"en-US-BrianMultilingualNeural"\`, \`"en-US-AvaMultilingualNeural"\`
+   - Segment \`i\` is synthesized into \`staticFile('voice-' + i + '.mp3')\`. Include \`<Audio src={staticFile('voice-0.mp3')} volume={1} />\` inside Scene 0, etc.
+2. Automatic Background Music (\`bgmMood\` & \`staticFile('bgm.mp3')\`):
+   - Moods: \`"epic-space"\`, \`"cyber-tech"\`, \`"warm-inspiring"\`, \`"mystery-deep"\`, \`"upbeat-energetic"\`.
+   - At root of \`DynamicVideo\`, include \`<Audio src={staticFile('bgm.mp3')} volume={0.18} />\`.
+3. Installed Packages:
+   - Core: \`remotion\` (\`useCurrentFrame\`, \`useVideoConfig\`, \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`interpolate\`, \`spring\`, \`Audio\`, \`Img\`, \`staticFile\`, \`random\`)
+   - Transitions: \`@remotion/transitions\` (\`TransitionSeries\`, \`linearTiming\`, \`springTiming\`, \`fade\`, \`slide\`, \`wipe\`, \`flip\`)
+   - SFX & Effects: \`@remotion/sfx\`, \`@remotion/light-leaks\`, \`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/three\`, \`@remotion/noise\`, \`@remotion/motion-blur\`, \`@remotion/google-fonts\`, \`lucide-react\`.
 `;
 
 function createMcpServerInstance(baseUrl: string) {
   const server = new McpServer({
     name: 'remotion-cloud-github-actions',
-    version: '2.0.0',
+    version: '4.0.0',
   });
 
   server.tool(
     'get_remotion_ecosystem_guide',
-    'Get documentation for all installed @remotion/* packages available on the Cloud renderer.',
+    'Get the complete Remotion v4.0.541 Full-Stack AI Studio guide (Neural AI Voiceover `voice-0.mp3`, Cinematic BGM `bgm.mp3`, Real Imagery, Creative Director mindset, and all 26 package signatures).',
     {},
     async () => ({
       content: [{ type: 'text', text: ECOSYSTEM_DOCS }],
@@ -132,32 +236,56 @@ function createMcpServerInstance(baseUrl: string) {
 
   server.tool(
     'render_remotion_video',
-    `Dispatch a Remotion video render job to GitHub Actions Cloud (4 vCPU, 16GB RAM, supports long videos & full @remotion/* ecosystem).
-${ECOSYSTEM_DOCS}
-Rules for tsxCode:
-- Must export: \`export const DynamicVideo: React.FC = () => { ... }\`
-- After calling this tool, call check_render_status with the returned jobId to get the completed MP4 link.`,
+    `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, Neural AI Voiceover Edge-TTS, Cinematic BGM, WebGL2 swangle).\n${ECOSYSTEM_DOCS}`,
     {
-      title: z.string().default('Remotion Video').describe('Title of the video'),
+      title: z.string().default('Remotion Studio Video').describe('Title of the video project'),
       tsxCode: z
         .string()
-        .describe('Complete TypeScript/React code exporting `export const DynamicVideo: React.FC`'),
+        .describe(
+          'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`'
+        ),
       durationInFrames: z
         .number()
         .int()
         .min(15)
         .max(36000)
-        .default(150)
-        .describe('Total frames (e.g. 150 = 5s at 30fps, 1800 = 60s at 30fps)'),
+        .default(600)
+        .describe('Total frames of the video (`seconds * fps`)'),
+      narrationSegments: z
+        .array(z.string())
+        .default([])
+        .describe('Spoken voiceover script for each scene/chapter in order'),
+      voice: z
+        .string()
+        .default('vi-VN-NamMinhNeural')
+        .describe('Neural TTS voice ID (e.g. vi-VN-NamMinhNeural, vi-VN-HoaiMyNeural)'),
+      bgmMood: z
+        .enum(['epic-space', 'cyber-tech', 'warm-inspiring', 'mystery-deep', 'upbeat-energetic'])
+        .default('epic-space')
+        .describe('Mood for automatic copyright-free background music'),
       fps: z.number().int().default(30),
       width: z.number().int().default(1920),
       height: z.number().int().default(1080),
     },
-    async ({ title, tsxCode, durationInFrames, fps, width, height }) => {
+    async ({ title, tsxCode, durationInFrames, narrationSegments, voice, bgmMood, fps, width, height }) => {
+      const warnings = validateTsxCode(tsxCode);
+      if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call render_remotion_video again.`,
+            },
+          ],
+        };
+      }
+
       const jobId = randomUUID().slice(0, 8);
       const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
       const directDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
       const watchPageUrl = `${baseUrl}/watch/${jobId}${secretSuffix}`;
+      const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
 
       jobs.set(jobId, {
         id: jobId,
@@ -165,20 +293,16 @@ Rules for tsxCode:
         status: 'dispatched',
         videoUrl: directDownloadUrl,
         watchPageUrl,
+        streamUrl,
         createdAt: Date.now(),
       });
 
       try {
-        await triggerGitHubActionsRender(
-          jobId,
-          title,
-          tsxCode,
-          durationInFrames,
-          fps,
-          width,
-          height,
-          baseUrl
-        );
+        await triggerGitHubActionsRender(jobId, title, tsxCode, durationInFrames, fps, width, height, {
+          voice,
+          bgmMood,
+          narrationSegments,
+        });
 
         return {
           content: [
@@ -186,14 +310,21 @@ Rules for tsxCode:
               type: 'text',
               text: JSON.stringify(
                 {
-                  status: 'dispatched_to_github_actions',
+                  status: 'dispatched_to_github_actions_cloud',
                   jobId,
                   title,
+                  specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames / ${(durationInFrames / fps).toFixed(1)}s)`,
+                  audioStudio: {
+                    voice,
+                    bgmMood,
+                    narrationScenesCount: narrationSegments.length,
+                  },
                   watchPageUrl,
-                  expectedVideoUrl: directDownloadUrl,
-                  githubActionsUrl: `https://github.com/${GITHUB_REPO}/actions`,
+                  streamUrl,
+                  directDownloadUrl,
+                  notes: warnings.length > 0 ? warnings : undefined,
                   message:
-                    'Render job has been sent to GitHub Actions (16GB RAM Cloud)! Call check_render_status in ~30-45 seconds, or open watchPageUrl which automatically refreshes when the video is ready.',
+                    'Render job (with Neural AI Voiceover & BGM) dispatched to GitHub Actions Cloud! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
                 },
                 null,
                 2
@@ -214,14 +345,19 @@ Rules for tsxCode:
 
   server.tool(
     'render_batch_videos',
-    'Dispatch up to 20 Remotion videos simultaneously to GitHub Actions (runs on 20 parallel 16GB RAM Cloud machines at once!).',
+    'Dispatch up to 20 complete Remotion videos (with AI Voiceover & BGM) in parallel to GitHub Actions Cloud.',
     {
       videos: z
         .array(
           z.object({
             title: z.string(),
             tsxCode: z.string(),
-            durationInFrames: z.number().int().default(150),
+            durationInFrames: z.number().int().default(600),
+            narrationSegments: z.array(z.string()).default([]),
+            voice: z.string().default('vi-VN-NamMinhNeural'),
+            bgmMood: z
+              .enum(['epic-space', 'cyber-tech', 'warm-inspiring', 'mystery-deep', 'upbeat-energetic'])
+              .default('epic-space'),
             fps: z.number().int().default(30),
             width: z.number().int().default(1920),
             height: z.number().int().default(1080),
@@ -237,6 +373,7 @@ Rules for tsxCode:
       for (const v of videos) {
         const jobId = randomUUID().slice(0, 8);
         const watchPageUrl = `${baseUrl}/watch/${jobId}${secretSuffix}`;
+        const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
         const directDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
 
         jobs.set(jobId, {
@@ -245,6 +382,7 @@ Rules for tsxCode:
           status: 'dispatched',
           videoUrl: directDownloadUrl,
           watchPageUrl,
+          streamUrl,
           createdAt: Date.now(),
         });
 
@@ -256,10 +394,20 @@ Rules for tsxCode:
           v.fps,
           v.width,
           v.height,
-          baseUrl
+          {
+            voice: v.voice,
+            bgmMood: v.bgmMood,
+            narrationSegments: v.narrationSegments,
+          }
         );
 
-        results.push({ jobId, title: v.title, watchPageUrl, videoUrl: directDownloadUrl });
+        results.push({
+          jobId,
+          title: v.title,
+          watchPageUrl,
+          streamUrl,
+          directDownloadUrl,
+        });
       }
 
       return {
@@ -268,7 +416,8 @@ Rules for tsxCode:
             type: 'text',
             text: JSON.stringify(
               {
-                message: `Dispatched ${results.length} parallel render jobs to GitHub Actions Cloud!`,
+                status: 'batch_dispatched',
+                count: results.length,
                 jobs: results,
               },
               null,
@@ -282,33 +431,41 @@ Rules for tsxCode:
 
   server.tool(
     'check_render_status',
-    'Check if a GitHub Actions render job has finished and get the final MP4 link.',
+    'Check if a rendered video is ready on the Cloud, and inspect real-time GitHub Actions step progress or exact compiler error logs.',
     {
       jobId: z.string().describe('The jobId returned by render_remotion_video'),
     },
-    async ({ jobId }) => {
-      let job = jobs.get(jobId);
+    async ({ jobId: rawJobId }) => {
+      const jobId = sanitizeJobId(rawJobId);
       const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
+      const watchPageUrl = `${baseUrl}/watch/${jobId}${secretSuffix}`;
+      const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
+      const videoUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
 
-      if (!job) {
-        job = {
-          id: jobId,
-          title: `Video #${jobId}`,
-          status: 'dispatched',
-          videoUrl: `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`,
-          watchPageUrl: `${baseUrl}/watch/${jobId}${secretSuffix}`,
-          createdAt: Date.now(),
-        };
-        jobs.set(jobId, job);
-      }
-
-      // Poll up to 20 seconds
       const start = Date.now();
-      while (job.status !== 'completed' && job.status !== 'failed' && Date.now() - start < 20000) {
-        const ready = await checkGitHubReleaseAsset(jobId, baseUrl);
-        if (ready) break;
+      let ready = false;
+      let errorLogText: string | undefined;
+      let workflowInfo: any = null;
+
+      while (Date.now() - start < 15000) {
+        const check = await checkReleaseAssetsOnGitHub(jobId);
+        ready = check.videoReady;
+        errorLogText = check.errorLogText;
+        if (ready || errorLogText) break;
+
+        workflowInfo = await inspectGitHubWorkflowRun(jobId);
+        if (workflowInfo?.conclusion === 'failure' || workflowInfo?.conclusion === 'cancelled') {
+          break;
+        }
         await new Promise((r) => setTimeout(r, 3000));
       }
+
+      if (!ready && !workflowInfo) {
+        workflowInfo = await inspectGitHubWorkflowRun(jobId);
+      }
+
+      const activeStep = workflowInfo?.steps?.find((s: any) => s.status === 'in_progress')?.name;
+      const isFailed = Boolean(errorLogText) || workflowInfo?.conclusion === 'failure';
 
       return {
         content: [
@@ -316,12 +473,23 @@ Rules for tsxCode:
             type: 'text',
             text: JSON.stringify(
               {
-                jobId: job.id,
-                title: job.title,
-                status: job.status,
-                watchPageUrl: job.watchPageUrl,
-                videoUrl: job.videoUrl,
-                error: job.error,
+                jobId,
+                status: ready
+                  ? 'completed'
+                  : isFailed
+                  ? 'failed_on_github_actions'
+                  : 'rendering_on_github_actions',
+                currentCloudStep: activeStep || workflowInfo?.status,
+                watchPageUrl,
+                streamUrl,
+                videoUrl,
+                compilerErrorDetails: errorLogText,
+                cloudRunnerDiagnostics: workflowInfo,
+                message: ready
+                  ? 'Video is completed and ready to watch inline or download!'
+                  : isFailed
+                  ? 'CRITICAL: The render job FAILED on GitHub Actions. Read `compilerErrorDetails` above to see the exact error stack trace, fix your tsxCode, and call render_remotion_video with a corrected version immediately!'
+                  : `Job is actively running on GitHub Actions Cloud (current step: "${activeStep || 'rendering'}"). Present watchPageUrl and videoUrl to the user now; the watchPageUrl automatically tracks live progress and plays the video as soon as it finishes!`,
               },
               null,
               2
@@ -349,47 +517,115 @@ export function startApp() {
   app.use(cors());
   app.use(express.json({ limit: '15mb' }));
 
-  // Webhook called by GitHub Actions when a video finishes rendering
-  app.post('/webhook/github', (req, res) => {
+  // Direct video streaming proxy route: /video/:jobId.mp4
+  app.get('/video/:file', async (req, res) => {
     if (!checkAuth(req, res)) return;
-    const { jobId, status, videoUrl, error } = req.body || {};
-    const job = jobs.get(jobId);
-    if (job) {
-      job.status = status;
-      if (videoUrl) job.videoUrl = videoUrl;
-      if (error) job.error = error;
+    const rawId = sanitizeJobId(req.params.file.replace(/\.mp4$/, '').replace(/^video-/, ''));
+    const fileName = `video-${rawId}.mp4`;
+    const ghUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/${fileName}`;
+    const rangeHeader = req.headers.range;
+    const fetchHeaders: Record<string, string> = {
+      'User-Agent': 'Remotion-Cloud-MCP-Server',
+    };
+    if (rangeHeader) fetchHeaders['Range'] = rangeHeader;
+
+    try {
+      const ghRes = await fetch(ghUrl, {
+        headers: fetchHeaders,
+        redirect: 'follow',
+      });
+
+      if (!ghRes.ok || !ghRes.body) {
+        res.status(404).send('Video not found');
+        return;
+      }
+
+      res.status(ghRes.status);
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Content-Disposition', 'inline');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+      const contentRange = ghRes.headers.get('content-range');
+      if (contentRange) res.setHeader('Content-Range', contentRange);
+      const contentLength = ghRes.headers.get('content-length');
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+
+      Readable.fromWeb(ghRes.body as any).pipe(res);
+    } catch {
+      res.status(502).send('Failed to stream video');
     }
-    res.json({ ok: true });
   });
 
   // Smart Watch Page (auto-checks if video is still rendering on GitHub Actions and plays automatically when done!)
   app.get('/watch/:jobId', async (req, res) => {
     if (!checkAuth(req, res)) return;
-    const jobId = req.params.jobId;
+    const jobId = sanitizeJobId(req.params.jobId);
     const baseUrl = getPublicBaseUrl(req);
-    const isReady = await checkGitHubReleaseAsset(jobId, baseUrl);
-    const job = jobs.get(jobId);
-    const videoUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
+    const check = await checkReleaseAssetsOnGitHub(jobId);
+    const ready = check.videoReady;
+    const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
+    const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
+    const downloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
 
-    if (!isReady && job?.status !== 'completed') {
+    if (!ready) {
+      const wf = await inspectGitHubWorkflowRun(jobId);
+      const isFailed =
+        Boolean(check.errorLogText) ||
+        wf?.conclusion === 'failure' ||
+        wf?.conclusion === 'cancelled';
+      const activeStep = escapeHtml(
+        wf?.steps?.find((s: any) => s.status === 'in_progress')?.name ||
+          'Đang xử lý khung hình & âm thanh...'
+      );
+      const safeHtmlUrl = escapeHtml(wf?.htmlUrl || `https://github.com/${GITHUB_REPO}/actions`);
+
+      if (isFailed) {
+        res.send(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Render Thất Bại (#${jobId})</title>
+  <style>
+    body { background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
+    .card { background: #1e1b2e; border: 1px solid #ef4444; padding: 28px; border-radius: 14px; max-width: 680px; text-align: left; }
+    h2 { color: #f87171; margin-top: 0; }
+    pre { background: #090d16; padding: 14px; border-radius: 8px; overflow-x: auto; font-size: 12px; color: #fca5a5; max-height: 260px; }
+    a { color: #38bdf8; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>⚠️ Bản render #${jobId} gặp lỗi trên Cloud</h2>
+    <p>Tiến trình đã tự động dừng (không lặp vô hạn). Hãy bảo Gemini kiểm tra lỗi và gửi bản render mới.</p>
+    ${check.errorLogText ? `<pre>${escapeHtml(check.errorLogText)}</pre>` : ''}
+    <p><a href="${safeHtmlUrl}" target="_blank">Xem chi tiết trên GitHub Actions ↗</a></p>
+  </div>
+</body>
+</html>`);
+        return;
+      }
+
       res.send(`<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="5" />
-  <title>Đang Render trên Cloud... (#${jobId})</title>
+  <meta http-equiv="refresh" content="12" />
+  <title>Đang Render trên Cloud 16GB RAM... (#${jobId})</title>
   <style>
     body { background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
     .loader { width: 48px; height: 48px; border: 5px solid #1e293b; border-bottom-color: #38bdf8; border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite; margin-bottom: 20px; }
     @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .step-badge { background: #1e293b; border: 1px solid #334155; color: #38bdf8; padding: 8px 16px; border-radius: 999px; font-weight: 600; margin: 10px 0; display: inline-block; }
     a { color: #38bdf8; }
   </style>
 </head>
 <body>
   <span class="loader"></span>
-  <h2>⏳ Đang render video trên GitHub Actions Cloud (16GB RAM)...</h2>
-  <p>Mã công việc: <strong>#${jobId}</strong> — Trang này sẽ tự động cập nhật mỗi 5 giây và phát video ngay khi hoàn tất!</p>
-  <p><a href="https://github.com/${GITHUB_REPO}/actions" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
+  <h2>⏳ Đang thu âm giọng đọc AI, phối nhạc nền & render trên Cloud (16GB RAM)...</h2>
+  <div class="step-badge">⚡ Bước hiện tại: ${activeStep}</div>
+  <p>Mã công việc: <strong>#${jobId}</strong> — Trang này tự động kiểm tra mỗi 12 giây và sẽ tự phát video ngay khi hoàn tất!</p>
+  <p><a href="${safeHtmlUrl}" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
 </body>
 </html>`);
       return;
@@ -399,7 +635,7 @@ export function startApp() {
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <title>${job?.title || 'Remotion Video'} (#${jobId})</title>
+  <title>Remotion Cloud Video (#${jobId})</title>
   <style>
     body { background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
     video { max-width: 90vw; max-height: 75vh; border-radius: 14px; box-shadow: 0 25px 60px rgba(0,0,0,0.65); border: 1px solid #1e293b; background: #000; }
@@ -408,10 +644,10 @@ export function startApp() {
   </style>
 </head>
 <body>
-  <h2>🎬 ${job?.title || 'Video Remotion'} (#${jobId})</h2>
-  <video src="${videoUrl}" controls autoplay loop></video>
+  <h2>🎬 Video Remotion (#${jobId})</h2>
+  <video src="${streamUrl}" controls autoplay loop playsinline></video>
   <div class="actions">
-    <a href="${videoUrl}" download="remotion-${jobId}.mp4">⬇ Tải xuống MP4</a>
+    <a href="${downloadUrl}" download="remotion-${jobId}.mp4">⬇ Tải xuống MP4</a>
   </div>
 </body>
 </html>`);
@@ -459,6 +695,7 @@ export function startApp() {
     const baseUrl = getPublicBaseUrl(req);
     res.json({
       status: 'online',
+      version: '4.0.0 (Full-Stack AI Video Studio: Neural TTS + BGM + Full Remotion 4.0.541)',
       mode: 'GitHub Actions Cloud Renderer (4 vCPU, 16GB RAM x 20 parallel jobs)',
       repository: GITHUB_REPO,
       mcpEndpoint: `${baseUrl}/mcp${MCP_SECRET ? '/<YOUR_SECRET>' : ''}`,
@@ -466,7 +703,7 @@ export function startApp() {
   });
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ Remotion Cloud Coordinator MCP listening on port ${PORT}`);
+    console.log(`✅ Remotion Cloud Coordinator MCP v4.0.0 listening on port ${PORT}`);
   });
 }
 

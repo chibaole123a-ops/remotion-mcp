@@ -87,6 +87,19 @@ function randomJobId(): string {
   return crypto.randomUUID().slice(0, 8);
 }
 
+function sanitizeJobId(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || 'unknown';
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function validateTsxCode(tsxCode: string): string[] {
   const warnings: string[] = [];
   if (!/export\s+(const|function)\s+DynamicVideo/.test(tsxCode)) {
@@ -190,7 +203,7 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
   const repo = env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
   try {
     const runsRes = await fetch(
-      `https://api.github.com/repos/${repo}/actions/workflows/render.yml/runs?per_page=5`,
+      `https://api.github.com/repos/${repo}/actions/workflows/render.yml/runs?per_page=15`,
       {
         headers: {
           Accept: 'application/vnd.github+json',
@@ -204,8 +217,15 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
     const runs: any[] = runsData?.workflow_runs || [];
     if (runs.length === 0) return null;
 
-    const latestRun = runs[0];
-    const jobsRes = await fetch(latestRun.jobs_url, {
+    // Match the exact workflow run by jobId in display_title or name, falling back to latest active run
+    const targetRun =
+      runs.find(
+        (r) =>
+          (typeof r.display_title === 'string' && r.display_title.includes(jobId)) ||
+          (typeof r.name === 'string' && r.name.includes(jobId))
+      ) || runs[0];
+
+    const jobsRes = await fetch(targetRun.jobs_url, {
       headers: {
         Accept: 'application/vnd.github+json',
         Authorization: `Bearer ${env.GITHUB_TOKEN}`,
@@ -222,10 +242,10 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
     }));
 
     return {
-      runId: latestRun.id,
-      status: latestRun.status,
-      conclusion: latestRun.conclusion,
-      htmlUrl: latestRun.html_url,
+      runId: targetRun.id,
+      status: targetRun.status,
+      conclusion: targetRun.conclusion,
+      htmlUrl: targetRun.html_url,
       steps,
     };
   } catch {
@@ -532,7 +552,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
       }
 
       if (toolName === 'check_render_status') {
-        const jobId = String(args.jobId || '');
+        const jobId = sanitizeJobId(String(args.jobId || ''));
         const start = Date.now();
         let ready = false;
         let errorLogText: string | undefined;
@@ -652,7 +672,7 @@ export default {
 
     // Direct video streaming proxy route: /video/:jobId.mp4
     if (pathParts[0] === 'video' && pathParts[1]) {
-      const rawId = pathParts[1].replace(/\.mp4$/, '').replace(/^video-/, '');
+      const rawId = sanitizeJobId(pathParts[1].replace(/\.mp4$/, '').replace(/^video-/, ''));
       const fileName = `video-${rawId}.mp4`;
       const ghUrl = `https://github.com/${repo}/releases/download/videos-store/${fileName}`;
       const rangeHeader = request.headers.get('Range');
@@ -685,7 +705,7 @@ export default {
 
     // Watch page route: /watch/:jobId
     if (pathParts[0] === 'watch' && pathParts[1]) {
-      const jobId = pathParts[1];
+      const jobId = sanitizeJobId(pathParts[1]);
       const check = await checkReleaseAssetsOnGitHub(env, jobId);
       const ready = check.videoReady;
       const secretSuffix = env.MCP_SECRET ? `?key=${encodeURIComponent(env.MCP_SECRET)}` : '';
@@ -698,9 +718,11 @@ export default {
           Boolean(check.errorLogText) ||
           wf?.conclusion === 'failure' ||
           wf?.conclusion === 'cancelled';
-        const activeStep =
+        const activeStep = escapeHtml(
           wf?.steps?.find((s: any) => s.status === 'in_progress')?.name ||
-          'Đang xử lý khung hình & âm thanh...';
+            'Đang xử lý khung hình & âm thanh...'
+        );
+        const safeHtmlUrl = escapeHtml(wf?.htmlUrl || `https://github.com/${repo}/actions`);
 
         if (isFailed) {
           return new Response(
@@ -721,8 +743,8 @@ export default {
   <div class="card">
     <h2>⚠️ Bản render #${jobId} gặp lỗi trên Cloud</h2>
     <p>Tiến trình đã tự động dừng (không lặp vô hạn). Hãy bảo Gemini kiểm tra lỗi và gửi bản render mới.</p>
-    ${check.errorLogText ? `<pre>${check.errorLogText.replace(/</g, '&lt;')}</pre>` : ''}
-    <p><a href="${wf?.htmlUrl || `https://github.com/${repo}/actions`}" target="_blank">Xem chi tiết trên GitHub Actions ↗</a></p>
+    ${check.errorLogText ? `<pre>${escapeHtml(check.errorLogText)}</pre>` : ''}
+    <p><a href="${safeHtmlUrl}" target="_blank">Xem chi tiết trên GitHub Actions ↗</a></p>
   </div>
 </body>
 </html>`,
@@ -750,7 +772,7 @@ export default {
   <h2>⏳ Đang thu âm giọng đọc AI, phối nhạc nền & render trên Cloud (16GB RAM)...</h2>
   <div class="step-badge">⚡ Bước hiện tại: ${activeStep}</div>
   <p>Mã công việc: <strong>#${jobId}</strong> — Trang này tự động kiểm tra mỗi 12 giây và sẽ tự phát video ngay khi hoàn tất!</p>
-  <p><a href="${wf?.htmlUrl || `https://github.com/${repo}/actions`}" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
+  <p><a href="${safeHtmlUrl}" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
 </body>
 </html>`,
           { headers: { 'Content-Type': 'text/html; charset=utf-8' } }

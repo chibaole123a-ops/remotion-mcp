@@ -1,5 +1,8 @@
 node_modules
 outputs
 dist
+public
+src/remotion/public
+.wrangler
 .DS_Store
 .env

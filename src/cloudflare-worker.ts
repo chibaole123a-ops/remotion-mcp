@@ -5,73 +5,87 @@ export interface Env {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — FULL-STACK AI VIDEO STUDIO (v4.0)
-## (Master Creative Director + Neural AI Voiceover + Cinematic BGM + Real Visual Media + Full Ecosystem)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.0)
+## (100% Creative Freedom + Frame-Exact Word-to-Visual Sync + Word-by-Word Highlight Captions + Full Ecosystem)
 
-You have **100% creative autonomy**. When the user gives you a topic (even a single short phrase), think and act as a **World-Class Film Director, High-Retention Editor, Screenwriter, and Viral Content Strategist (YouTube / TikTok / Reels / Documentary)**.
-
----
-
-## I. FULL-STACK AI AUDIO STUDIO (NEURAL VOICEOVER + BGM + SFX)
-
-Unlike basic motion graphics, your videos should feel like **complete, broadcast-ready productions** with **Voiceover Narration + Background Music + Sound Effects + Synchronized Subtitles**:
-
-### 1. Automatic Neural AI Voiceover (\`narrationSegments\` & \`voice\`)
-When calling \`render_remotion_video\`, pass the \`narrationSegments\` array (one spoken script string per scene/chapter) and \`voice\`:
-- **Vietnamese Neural Voices**:
-  - \`"vi-VN-NamMinhNeural"\`: Deep, authoritative, engaging male voice (Best for Science, Space, Tech, History, Finance, Documentaries).
-  - \`"vi-VN-HoaiMyNeural"\`: Clear, expressive, natural female voice (Best for Storytelling, Lifestyle, Education, TikTok/Reels).
-- **English Neural Voices**:
-  - \`"en-US-AndrewMultilingualNeural"\`, \`"en-US-BrianMultilingualNeural"\`, \`"en-US-AvaMultilingualNeural"\`.
-- **How it works in your \`tsxCode\`**:
-  - The Cloud studio automatically synthesizes \`narrationSegments[0]\` -> \`staticFile('voice-0.mp3')\`, \`narrationSegments[1]\` -> \`staticFile('voice-1.mp3')\`, \`narrationSegments[2]\` -> \`staticFile('voice-2.mp3')\`, etc.!
-  - Inside each Scene \`i\` (0-indexed), simply include:
-    \`<Audio src={staticFile('voice-0.mp3')} volume={1} />\` (for Scene 0), \`<Audio src={staticFile('voice-1.mp3')} volume={1} />\` (for Scene 1), etc., using \`import { Audio, staticFile } from 'remotion';\`!
-  - **Duration Matching Rule**: In Vietnamese/English, normal speech is ~3 words per second (~15–18 words per 5 seconds / 150 frames). Make sure each scene's frame duration is long enough for its \`narrationSegments[i]\` text to finish speaking naturally (plus a ~0.8s breathing pause)!
-
-### 2. Automatic Copyright-Free Background Music (\`bgmMood\` & \`staticFile('bgm.mp3')\`)
-- The Cloud studio automatically generates \`staticFile('bgm.mp3')\` tailored to your chosen \`bgmMood\` (\`"epic-space"\`, \`"cyber-tech"\`, \`"warm-inspiring"\`, \`"mystery-deep"\`, or \`"upbeat-energetic"\`).
-- At the root of \`DynamicVideo\`, always include:
-  \`<Audio src={staticFile('bgm.mp3')} volume={0.18} />\` so the entire video has a cohesive atmospheric musical bed underneath the voiceover!
-
-### 3. Synchronized Sound Effects (\`@remotion/sfx\`)
-- \`import { whoosh, whip, pageTurn, mouseClick, shutterModern, shutterOld, ding, vineBoom } from '@remotion/sfx';\`
-- Layer \`<Audio src={whoosh} volume={0.3} />\` on transitions and \`ding\` / \`mouseClick\` on key visual reveals.
+You have **100% creative freedom** with **ZERO rigid templates or fixed slide matrices**. Think and act as a **World-Class Film Director, Motion Graphics Artist, and High-Retention Video Editor**. Every video you craft should be a bespoke visual experience tailored to the topic's soul, pacing, and emotion.
 
 ---
 
-## II. CREATIVE DIRECTOR & VIRAL CONTENT CREATOR MINDSET
+## I. THE 6-STEP PROFESSIONAL EDITOR WORKFLOW (AUDIO-FIRST, WORD-LOCKED CHOREOGRAPHY)
 
-1. **Story-First Duration & Multi-Chapter Depth**:
-   - Let the depth of the topic determine the number of chapters/scenes and total \`durationInFrames\`.
-   - Use **Data-Driven Scene Arrays + Modular Visual Archetypes** so you can effortlessly craft 6 to 15+ rich chapters in clean, concise code.
-2. **Retention Psychology**:
-   - **0–3s Hook**: Start with a powerful visual & verbal Curiosity Gap.
-   - **Dynamic Captions / Subtitle Bar**: Display the spoken narration (or key highlighted phrases) at the bottom safe-zone of each scene so viewers can both listen and read along!
-   - **Rich Visual Variety**: Combine 2D/3D geometry (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/three\`), animated data charts/counters, vector icons (\`lucide-react\`), and real-world/AI visual imagery (\`<Img src="https://image.pollinations.ai/prompt/{encoded_english_visual_prompt}?width=1280&height=720&nologo=true" />\` with Ken Burns slow zoom & dark gradient overlay when real photography/art enhances the scene).
+1. **Step 1 — Creative Direction & Visual Language**:
+   - Freely choose the aesthetic, color palette, typography, camera style, and motion paradigm that best fits the topic (3D WebGL worlds, dynamic SVG vector drawing, D3 data storytelling, 2.5D parallax documentary, or fast-paced kinetic typography).
+   - Never fall into repetitive "PowerPoint slide decks". Treat the screen as a continuous **Camera Lens** in space.
+2. **Step 2 — Narrative Scripting & Visual Cue Planning**:
+   - Write engaging \`narrationSegments\` (one spoken paragraph per scene/chapter).
+   - Identify the exact **keywords, numbers, or action verbs** inside each sentence where a visual transformation, camera movement, chart reveal, or sound effect should trigger.
+3. **Step 3 — Frame-Exact Timeline & Word Cue Measurement (\`analyze_narration_timeline\` & \`./audio-sync\`)**:
+   - You can call \`analyze_narration_timeline\` before writing code (or import directly from \`'./audio-sync'\` inside \`DynamicVideo.tsx\`) to get the exact frame duration of every scene and the exact \`startFrame\` / \`endFrame\` of every single spoken word!
+4. **Step 4 — Synchronized Visual Choreography ("Say X -> Illustrate X at that Exact Frame")**:
+   - Import the synchronization helpers in \`DynamicVideo.tsx\`:
+     \`\`\`tsx
+     import {
+       getSceneFrames,
+       getWordFrame,
+       getWordProgress,
+       getSceneCaptions,
+       WordHighlightCaptions,
+       audioTelemetry,
+     } from './audio-sync';
+     \`\`\`
+   - **Scene Duration Lock**: Always use \`const s0Frames = getSceneFrames(0, 180);\` for Scene 0, \`getSceneFrames(1, 180)\` for Scene 1, etc., so every scene's duration matches the real synthesized \`voice-i.mp3\` file on the Cloud 100% with zero audio clipping!
+   - **Word-to-Visual Trigger Lock**: Inside Scene \`i\`, use \`const cueFrame = getWordFrame(i, 'bùng nổ', 45);\` (or \`getWordProgress(i, 'từ đầu', 'từ cuối', frame)\`). Trigger your \`spring({ frame: frame - cueFrame, fps })\` or \`interpolate(frame, [cueFrame, cueFrame + 25], ...)\` at \`cueFrame\` so that **at the exact millisecond the narrator pronounces that keyword, the corresponding graphic/3D object/chart/SFX reacts on screen!**
+5. **Step 5 — 3-Layer Soundscape & Word-by-Word Karaoke Highlight Captions**:
+   - **Layer 1 - Voiceover**: Inside each Scene \`i\`, include \`<Audio src={staticFile('voice-0.mp3')} volume={1} />\` (for Scene 0), \`voice-1.mp3\` (for Scene 1), etc. (Cloud automatically masters voice clarity & loudness via FFmpeg).
+   - **Layer 2 - Multi-Layer BGM**: At the root of \`DynamicVideo\`, include \`<Audio src={staticFile('bgm.mp3')} volume={0.18} />\` (4-chord progression + bass pulse + arpeggio tailored to \`bgmMood\`).
+   - **Layer 3 - Synchronized SFX (\`@remotion/sfx\`)**: Trigger \`<Sequence from={cueFrame}><Audio src={whoosh} volume={0.3} /></Sequence>\` on transitions and visual reveals.
+   - **Word-by-Word Highlight Captions**: Place \`<WordHighlightCaptions sceneIndex={0} />\` (or build custom captions using \`getSceneCaptions(i)\` and \`createTikTokStyleCaptions\` from \`@remotion/captions\`) inside each scene so every spoken word lights up in real time as it is pronounced!
+6. **Step 6 — Visual Polish & Deterministic QA**:
+   - Use \`random('seed')\` from \`remotion\` instead of \`Math.random()\`.
+   - Always clamp \`interpolate()\` ranges (\`extrapolateLeft: 'clamp', extrapolateRight: 'clamp'\`).
+   - External images (\`https://image.pollinations.ai/prompt/{encoded_english_prompt}?width=1280&height=720&nologo=true\`, Unsplash, Wikimedia) are automatically pre-fetched and cached on the Cloud before rendering.
 
 ---
 
-## III. INSTALLED PACKAGES & EXACT API SIGNATURES (Remotion v4.0.541)
+## II. COMPLETE INSTALLED ECOSYSTEM & API SIGNATURES (Remotion v4.0.541)
 
-1. **Core (\`remotion\`)**: \`useCurrentFrame\`, \`useVideoConfig\`, \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`Loop\`, \`Freeze\`, \`interpolate\`, \`interpolateColors\`, \`spring\`, \`Easing\`, \`random\`, \`Audio\`, \`OffthreadVideo\`, \`Img\`, \`staticFile\`.
-2. **Transitions (\`@remotion/transitions\`)**: \`TransitionSeries\`, \`linearTiming\`, \`springTiming\`, plus \`@remotion/transitions/fade\`, \`slide\`, \`wipe\`, \`flip\`, \`clock-wipe\`, \`iris\`.
-3. **SFX (\`@remotion/sfx\`)**: \`whoosh\`, \`whip\`, \`pageTurn\`, \`mouseClick\`, \`shutterModern\`, \`shutterOld\`, \`ding\`, \`vineBoom\`, \`windowsXpError\`.
-4. **Light Leaks (\`@remotion/light-leaks\`)**: \`LightLeak\`.
-5. **Shapes & Paths (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/rounded-text-box\`)**: \`Circle\`, \`Rect\`, \`Triangle\`, \`Star\`, \`Polygon\`, \`Ellipse\`, \`Heart\`, \`Pie\`, \`evolvePath\`, \`getLength\`, \`getPointAtLength\`, \`interpolatePath\`, \`createRoundedTextBox\`.
-6. **3D WebGL (\`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)**: \`ThreeCanvas\`.
-7. **Noise, Motion Blur & Transforms (\`@remotion/noise\`, \`@remotion/motion-blur\`, \`@remotion/animation-utils\`)**: \`noise2D\`, \`noise3D\`, \`Trail\`, \`CameraMotionBlur\`, \`makeTransform\`, \`scale\`, \`translate\`, \`rotate\`.
-8. **Google Fonts & Layout (\`@remotion/google-fonts\`, \`@remotion/layout-utils\`)**:
-   - \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily } = loadFont('normal', { weights: ['400', '600', '700', '800'], subsets: ['vietnamese', 'latin'], ignoreTooManyRequestsWarning: true });\`
-   - \`fitText\`, \`measureText\`, \`fillTextBox\`.
-9. **Icons (\`lucide-react\`)**: \`Sparkles\`, \`Rocket\`, \`Zap\`, \`Globe\`, \`Shield\`, \`Cpu\`, \`Layers\`, \`TrendingUp\`, \`CheckCircle2\`, \`ArrowRight\`, \`Play\`, \`Star\`, \`Award\`, \`Flame\`, \`Heart\`, \`Code2\`, \`BarChart3\`, \`Lock\`, \`Smartphone\`, \`Cloud\`, \`Compass\`, \`Orbit\`, \`Atom\`, \`Eye\`, \`Brain\`, \`Telescope\`.
-
----
-
-## IV. DETERMINISTIC ENGINE TRUTHS
-1. Must export \`export const DynamicVideo: React.FC = () => { ... };\`.
-2. Never use CSS \`transition\`, \`animation\`, \`@keyframes\`, \`setTimeout\`, or \`Math.random()\` (always use \`random('seed')\` from \`remotion\`).
-3. Always clamp \`interpolate()\` ranges (\`extrapolateLeft: 'clamp', extrapolateRight: 'clamp'\`).
+1. **Core (\`remotion\`)**:
+   \`useCurrentFrame\`, \`useVideoConfig\`, \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`Loop\`, \`Freeze\`, \`interpolate\`, \`interpolateColors\`, \`spring\`, \`Easing\`, \`random\`, \`Audio\`, \`OffthreadVideo\`, \`Img\`, \`staticFile\`.
+2. **Audio-Visual Word Sync (\`./audio-sync\`)**:
+   - \`getSceneFrames(sceneIndex: number, fallbackFrames?: number): number\`
+   - \`getWordFrame(sceneIndex: number, keywordOrPhrase: string, fallbackFrame?: number): number\`
+   - \`getWordProgress(sceneIndex: number, startKeyword: string, endKeyword: string, localFrame: number): number\`
+   - \`getSceneCaptions(sceneIndex: number): Caption[]\`
+   - \`<WordHighlightCaptions sceneIndex={number} highlightColor?: string activeBgColor?: string fontSize?: number bottomOffset?: number />\`
+   - \`audioTelemetry\`: \`{ fps, totalFrames, sceneFrames: number[], scenes: [{ sceneIndex, text, durationInFrames, words: [{ word, startMs, endMs, startFrame, endFrame }] }] }\`
+3. **Captions (\`@remotion/captions\`)**:
+   \`import { createTikTokStyleCaptions, Caption } from '@remotion/captions';\`
+4. **Audio Analysis & Spectrum Visualization (\`@remotion/media-utils\`)**:
+   \`import { useAudioData, visualizeAudio, visualizeAudioWaveform } from '@remotion/media-utils';\`
+5. **Transitions (\`@remotion/transitions\`)**:
+   \`TransitionSeries\`, \`linearTiming\`, \`springTiming\`, plus \`@remotion/transitions/fade\`, \`slide\`, \`wipe\`, \`flip\`, \`clock-wipe\`, \`iris\`.
+6. **Sound Effects (\`@remotion/sfx\`)**:
+   \`import { whoosh, whip, pageTurn, mouseClick, shutterModern, shutterOld, ding, vineBoom, windowsXpError } from '@remotion/sfx';\`
+7. **Cinematic Light Leaks (\`@remotion/light-leaks\`)**:
+   \`import { LightLeak } from '@remotion/light-leaks';\` (\`<LightLeak seed={1} hueShift={120} />\`)
+8. **2D Vector Shapes, SVG Paths & Text Boxes (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/rounded-text-box\`)**:
+   - \`Circle\`, \`Rect\`, \`Triangle\`, \`Star\`, \`Polygon\`, \`Ellipse\`, \`Heart\`, \`Pie\`, \`makeCircle\`, \`makeRect\`, \`makeStar\`, \`makeTriangle\`, \`makePolygon\`.
+   - \`evolvePath\`, \`interpolatePath\`, \`getLength\`, \`getPointAtLength\`, \`getTangentAtLength\`, \`getSubpaths\`.
+   - \`createRoundedTextBox\`.
+9. **3D WebGL Engine (\`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)**:
+   \`import { ThreeCanvas } from '@remotion/three';\` + full Three.js meshes, lights, shaders, geometries, and Drei helpers.
+10. **Motion Blur, Organic Noise & Style Transforms (\`@remotion/motion-blur\`, \`@remotion/noise\`, \`@remotion/animation-utils\`)**:
+    - \`Trail\`, \`CameraMotionBlur\` from \`@remotion/motion-blur\`.
+    - \`noise2D\`, \`noise3D\`, \`noise4D\` from \`@remotion/noise\`.
+    - \`makeTransform\`, \`scale\`, \`translate\`, \`rotate\`, \`interpolateStyles\` from \`@remotion/animation-utils\`.
+11. **Typography & Google Fonts (\`@remotion/google-fonts/*\`, \`@remotion/layout-utils\`)**:
+    - \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily } = loadFont('normal', { weights: ['400', '600', '700', '800'], subsets: ['vietnamese', 'latin'], ignoreTooManyRequestsWarning: true });\` (Also available: \`Inter\`, \`Montserrat\`, \`Roboto\`, \`PlayfairDisplay\`, \`SpaceGrotesk\`, \`JetBrainsMono\`).
+    - \`fitText\`, \`measureText\`, \`fillTextBox\` from \`@remotion/layout-utils\`.
+12. **Lottie & GIF (\`@remotion/lottie\`, \`@remotion/gif\`)**:
+    \`Lottie\`, \`Gif\`.
+13. **Vector Icons (\`lucide-react\`)**:
+    Import any icon from \`lucide-react\` (all imports are automatically guarded before bundling).
 `;
 
 function toBase64Utf8(str: string): string {
@@ -113,6 +127,97 @@ function validateTsxCode(tsxCode: string): string[] {
     );
   }
   return warnings;
+}
+
+/**
+ * Analyze narration segments into a frame-accurate word & scene timeline map
+ * so Gemini knows the exact frame of every spoken keyword and scene duration before writing tsxCode.
+ */
+function buildNarrationTimelineAnalysis(
+  narrationSegments: string[],
+  fps = 30,
+  rate = '+5%'
+) {
+  const rateMatch = String(rate).match(/([+-]?\d+)%/);
+  const rateFactor = rateMatch ? 1 + Number(rateMatch[1]) / 100 : 1.05;
+  // Natural Vietnamese/English neural TTS speaking rate is ~3.15 words/sec at +5%
+  const baseWordsPerSec = 3.0 * rateFactor;
+
+  let cumulativeFrames = 0;
+  const scenes = narrationSegments.map((rawSeg, sceneIndex) => {
+    const text = String(rawSeg || '').trim();
+    const tokens = text.split(/\s+/).filter(Boolean);
+
+    if (tokens.length === 0) {
+      const emptyFrames = Math.ceil(2 * fps);
+      const s = {
+        sceneIndex,
+        text: '',
+        estimatedAudioSeconds: 1.5,
+        durationInFrames: emptyFrames,
+        startFrame: cumulativeFrames,
+        endFrame: cumulativeFrames + emptyFrames,
+        words: [] as any[],
+      };
+      cumulativeFrames += emptyFrames;
+      return s;
+    }
+
+    // Weight each word by syllable character length and punctuation pauses
+    const weights = tokens.map((w) => {
+      const cleanLen = w.replace(/[^\p{L}\p{N}]/gu, '').length || 1;
+      const commaPause = /[,;:]/.test(w) ? 1.4 : 0;
+      const periodPause = /[.!?…]$/.test(w) ? 2.4 : 0;
+      return Math.max(1.2, cleanLen * 0.78 + commaPause + periodPause);
+    });
+
+    const avgWeightPerWord = 3.2;
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    const spokenDurationSec = Math.max(
+      1.6,
+      totalWeight / (avgWeightPerWord * baseWordsPerSec)
+    );
+    const totalAudioMs = Math.round(spokenDurationSec * 1000);
+    const sceneDurationFrames = Math.ceil((spokenDurationSec + 0.55) * fps);
+
+    let cursorMs = 80;
+    const usableMs = Math.max(300, totalAudioMs - 160);
+    const words = tokens.map((w, idx) => {
+      const durMs = (weights[idx] / totalWeight) * usableMs;
+      const startMs = Math.round(cursorMs);
+      const endMs = Math.round(cursorMs + durMs);
+      cursorMs += durMs;
+      return {
+        word: w,
+        startMs,
+        endMs,
+        startFrame: Math.floor((startMs / 1000) * fps),
+        endFrame: Math.ceil((endMs / 1000) * fps),
+      };
+    });
+
+    const sceneObj = {
+      sceneIndex,
+      text,
+      estimatedAudioSeconds: Number(spokenDurationSec.toFixed(2)),
+      durationInFrames: sceneDurationFrames,
+      startFrame: cumulativeFrames,
+      endFrame: cumulativeFrames + sceneDurationFrames,
+      words,
+    };
+    cumulativeFrames += sceneDurationFrames;
+    return sceneObj;
+  });
+
+  return {
+    fps,
+    totalFrames: Math.max(90, cumulativeFrames),
+    totalSeconds: Number((Math.max(90, cumulativeFrames) / fps).toFixed(2)),
+    sceneFrames: scenes.map((s) => s.durationInFrames),
+    scenes,
+    usageHint:
+      'Use `getSceneFrames(sceneIndex)` for each scene duration, `getWordFrame(sceneIndex, keyword)` to trigger visual animations at the exact spoken word, and `<WordHighlightCaptions sceneIndex={i} />` from `./audio-sync` for real-time word-by-word karaoke captions!',
+  };
 }
 
 async function dispatchGitHubRender(
@@ -158,6 +263,41 @@ async function dispatchGitHubRender(
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`GitHub Actions dispatch error (${res.status}): ${errText}`);
+  }
+}
+
+async function listReleaseVideosOnGitHub(env: Env, baseUrl: string) {
+  const repo = env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
+  const secretSuffix = env.MCP_SECRET ? `?key=${encodeURIComponent(env.MCP_SECRET)}` : '';
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/videos-store`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+        'User-Agent': 'Remotion-Cloudflare-MCP-Worker',
+      },
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const assets: any[] = data?.assets || [];
+
+    return assets
+      .filter((a) => typeof a.name === 'string' && a.name.startsWith('video-') && a.name.endsWith('.mp4') && a.state === 'uploaded')
+      .sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime())
+      .map((a) => {
+        const jobId = a.name.replace(/^video-/, '').replace(/\.mp4$/, '');
+        return {
+          jobId,
+          fileName: a.name,
+          sizeMB: Number(((a.size || 0) / (1024 * 1024)).toFixed(2)),
+          createdAt: a.updated_at || a.created_at,
+          watchPageUrl: `${baseUrl}/watch/${jobId}${secretSuffix}`,
+          streamUrl: `${baseUrl}/video/${jobId}.mp4${secretSuffix}`,
+          directDownloadUrl: `https://github.com/${repo}/releases/download/videos-store/${a.name}`,
+        };
+      });
+  } catch {
+    return [];
   }
 }
 
@@ -217,7 +357,6 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
     const runs: any[] = runsData?.workflow_runs || [];
     if (runs.length === 0) return null;
 
-    // Match the exact workflow run by jobId in display_title or name, falling back to latest active run
     const targetRun =
       runs.find(
         (r) =>
@@ -257,15 +396,41 @@ const TOOLS = [
   {
     name: 'get_remotion_ecosystem_guide',
     description:
-      'Get the complete Remotion v4.0.541 Full-Stack AI Studio guide (Neural AI Voiceover `voice-0.mp3`, Cinematic BGM `bgm.mp3`, Real Imagery, Creative Director mindset, and all 26 package signatures).',
+      'Get the complete Remotion v4.0.541 Open Creative Studio v5.0 guide (6-Step Professional Editor Workflow, Frame-Exact Word-to-Visual Sync `./audio-sync`, Word-by-Word Karaoke Captions, and all 26+ package APIs).',
     inputSchema: {
       type: 'object',
       properties: {},
     },
   },
   {
+    name: 'analyze_narration_timeline',
+    description:
+      'Step 1 for Frame-Exact Audio-Visual Sync: Analyze spoken `narrationSegments` BEFORE writing `tsxCode` to get the exact frame duration of each scene (`sceneFrames`) and the exact `startFrame`/`endFrame` of every spoken word/keyword so your visual animations illustrate each concept at the exact moment it is spoken.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        narrationSegments: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of spoken narration paragraphs (one per scene/chapter in order).',
+        },
+        fps: {
+          type: 'number',
+          description: 'Frames per second (default 30)',
+          default: 30,
+        },
+        voice: {
+          type: 'string',
+          description: 'Neural voice ID (default vi-VN-NamMinhNeural)',
+          default: 'vi-VN-NamMinhNeural',
+        },
+      },
+      required: ['narrationSegments'],
+    },
+  },
+  {
     name: 'render_remotion_video',
-    description: `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, Neural AI Voiceover Edge-TTS, Cinematic BGM, WebGL2 swangle).
+    description: `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, Frame-Exact WordBoundary Sync, Multi-Layer BGM, WebGL2 swangle).
 ${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
@@ -277,18 +442,18 @@ ${ECOSYSTEM_DOCS}`,
         tsxCode: {
           type: 'string',
           description:
-            'Complete TypeScript/React code for DynamicVideo.tsx exporting `export const DynamicVideo: React.FC = () => { ... }`. Remember to include `<Audio src={staticFile("bgm.mp3")} volume={0.18} />` at root and `<Audio src={staticFile("voice-0.mp3")} volume={1} />` (etc.) in each scene when using `narrationSegments`!',
+            'Complete TypeScript/React code for DynamicVideo.tsx exporting `export const DynamicVideo: React.FC = () => { ... }`. Use `getSceneFrames`, `getWordFrame`, and `<WordHighlightCaptions sceneIndex={i} />` from `./audio-sync` along with `<Audio src={staticFile("bgm.mp3")} volume={0.18} />` and `<Audio src={staticFile("voice-0.mp3")} volume={1} />`!',
         },
         durationInFrames: {
           type: 'number',
           description:
-            'Total frames of the video (`seconds * fps`). Determined freely by you (the Director) to match the full narrative arc and spoken voiceover length.',
+            'Total frames of the video (`seconds * fps`). Automatically expanded on Cloud if spoken voiceover is longer.',
         },
         narrationSegments: {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Spoken voiceover script for each scene/chapter in order. Segment 0 is automatically synthesized into `staticFile("voice-0.mp3")`, Segment 1 into `staticFile("voice-1.mp3")`, etc.',
+            'Spoken voiceover script for each scene/chapter in order. Segment `i` is synthesized into `staticFile("voice-" + i + ".mp3")` with exact word-level timestamps in `./audio-sync`.',
         },
         voice: {
           type: 'string',
@@ -300,7 +465,7 @@ ${ECOSYSTEM_DOCS}`,
           type: 'string',
           enum: ['epic-space', 'cyber-tech', 'warm-inspiring', 'mystery-deep', 'upbeat-energetic'],
           description:
-            'Mood for automatic copyright-free background music synthesized into `staticFile("bgm.mp3")`.',
+            'Mood for automatic multi-layer 4-chord background music synthesized into `staticFile("bgm.mp3")`.',
           default: 'epic-space',
         },
         fps: {
@@ -325,7 +490,7 @@ ${ECOSYSTEM_DOCS}`,
   {
     name: 'render_batch_videos',
     description:
-      'Dispatch up to 20 complete Remotion videos (with AI Voiceover & BGM) in parallel to GitHub Actions Cloud.',
+      'Dispatch up to 20 complete Remotion videos (with AI Voiceover, Word-Level Captions & Multi-Layer BGM) in parallel to GitHub Actions Cloud.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -363,6 +528,21 @@ ${ECOSYSTEM_DOCS}`,
       required: ['jobId'],
     },
   },
+  {
+    name: 'list_rendered_videos',
+    description:
+      'List all previously rendered MP4 videos stored in the Cloud Gallery along with their watch URLs, stream URLs, and download links.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'number',
+          description: 'Maximum number of videos to return (default 20)',
+          default: 20,
+        },
+      },
+    },
+  },
 ];
 
 async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
@@ -381,7 +561,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         },
         serverInfo: {
           name: 'remotion-cloudflare-github-mcp',
-          version: '4.0.0',
+          version: '5.0.0',
         },
       },
     };
@@ -418,6 +598,49 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         };
       }
 
+      if (toolName === 'analyze_narration_timeline') {
+        const segments = Array.isArray(args.narrationSegments) ? args.narrationSegments : [];
+        const fps = Number(args.fps || 30);
+        const analysis = buildNarrationTimelineAnalysis(segments, fps);
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(analysis, null, 2),
+              },
+            ],
+          },
+        };
+      }
+
+      if (toolName === 'list_rendered_videos') {
+        const limit = Math.max(1, Math.min(100, Number(args.limit || 20)));
+        const videos = await listReleaseVideosOnGitHub(env, baseUrl);
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    totalStoredVideos: videos.length,
+                    galleryUrl: `${baseUrl}/gallery${secretQuery}`,
+                    videos: videos.slice(0, limit),
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          },
+        };
+      }
+
       if (toolName === 'render_remotion_video') {
         const tsxCode = String(args.tsxCode || '');
         const warnings = validateTsxCode(tsxCode);
@@ -439,14 +662,25 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         const jobId = randomJobId();
         const title = args.title || 'Remotion Studio Video';
-        const durationInFrames = Number(args.durationInFrames || 600);
         const fps = Number(args.fps || 30);
         const width = Number(args.width || 1920);
         const height = Number(args.height || 1080);
+        const narrationSegments = Array.isArray(args.narrationSegments)
+          ? args.narrationSegments
+          : [];
+        const timelineEst =
+          narrationSegments.length > 0
+            ? buildNarrationTimelineAnalysis(narrationSegments, fps)
+            : null;
+        const durationInFrames = Math.max(
+          Number(args.durationInFrames || 600),
+          timelineEst?.totalFrames || 0
+        );
+
         const audioConfig = {
           voice: args.voice || 'vi-VN-NamMinhNeural',
           bgmMood: args.bgmMood || 'epic-space',
-          narrationSegments: Array.isArray(args.narrationSegments) ? args.narrationSegments : [],
+          narrationSegments,
         };
 
         await dispatchGitHubRender(
@@ -463,6 +697,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         const watchPageUrl = `${baseUrl}/watch/${jobId}${secretQuery}`;
         const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretQuery}`;
+        const galleryUrl = `${baseUrl}/gallery${secretQuery}`;
         const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
         return {
@@ -482,13 +717,15 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       voice: audioConfig.voice,
                       bgmMood: audioConfig.bgmMood,
                       narrationScenesCount: audioConfig.narrationSegments.length,
+                      wordBoundarySync: true,
                     },
                     watchPageUrl,
                     streamUrl,
+                    galleryUrl,
                     directDownloadUrl: videoUrl,
                     notes: warnings.length > 0 ? warnings : undefined,
                     message:
-                      'Render job (with Neural AI Voiceover & BGM) dispatched to GitHub Actions Cloud! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
+                      'Render job (with Frame-Exact WordBoundary Sync, Voiceover Mastering & Multi-Layer BGM) dispatched to GitHub Actions Cloud! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
                   },
                   null,
                   2
@@ -505,19 +742,24 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         for (const v of videos) {
           const jobId = randomJobId();
+          const fps = Number(v.fps || 30);
+          const segs = Array.isArray(v.narrationSegments) ? v.narrationSegments : [];
+          const est = segs.length > 0 ? buildNarrationTimelineAnalysis(segs, fps) : null;
+          const dur = Math.max(Number(v.durationInFrames || 600), est?.totalFrames || 0);
+
           await dispatchGitHubRender(
             env,
             jobId,
             v.title || 'Batch Video',
             v.tsxCode,
-            Number(v.durationInFrames || 600),
-            Number(v.fps || 30),
+            dur,
+            fps,
             Number(v.width || 1920),
             Number(v.height || 1080),
             {
               voice: v.voice || 'vi-VN-NamMinhNeural',
               bgmMood: v.bgmMood || 'epic-space',
-              narrationSegments: Array.isArray(v.narrationSegments) ? v.narrationSegments : [],
+              narrationSegments: segs,
             }
           );
           jobs.push({
@@ -540,6 +782,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                   {
                     status: 'batch_dispatched',
                     count: jobs.length,
+                    galleryUrl: `${baseUrl}/gallery${secretQuery}`,
                     jobs,
                   },
                   null,
@@ -670,6 +913,61 @@ export default {
       }
     }
 
+    // Cloud Video Gallery route: /gallery
+    if (pathParts[0] === 'gallery') {
+      const videos = await listReleaseVideosOnGitHub(env, baseUrl);
+      const cardsHtml =
+        videos.length === 0
+          ? `<p style="color:#94a3b8;">Chưa có video nào được lưu trong kho Cloud.</p>`
+          : videos
+              .map(
+                (v) => `
+        <div class="card">
+          <video src="${escapeHtml(v.streamUrl)}" controls preload="metadata" playsinline></video>
+          <div class="meta">
+            <div class="title">🎬 Video #${escapeHtml(v.jobId)}</div>
+            <div class="sub">${escapeHtml(String(v.sizeMB))} MB • ${escapeHtml(
+                  new Date(v.createdAt).toLocaleString('vi-VN')
+                )}</div>
+            <div class="btns">
+              <a href="${escapeHtml(v.watchPageUrl)}" class="btn-outline">Mở trang xem</a>
+              <a href="${escapeHtml(v.directDownloadUrl)}" class="btn-primary" download>⬇ Tải MP4</a>
+            </div>
+          </div>
+        </div>`
+              )
+              .join('\n');
+
+      return new Response(
+        `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kho Video Remotion Cloud (${videos.length})</title>
+  <style>
+    body { background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; margin: 0; padding: 36px 5%; }
+    h1 { margin-top: 0; color: #38bdf8; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 24px; margin-top: 24px; }
+    .card { background: #111827; border: 1px solid #1e293b; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+    video { width: 100%; aspect-ratio: 16/9; background: #000; object-fit: contain; }
+    .meta { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .title { font-weight: 700; font-size: 16px; }
+    .sub { color: #94a3b8; font-size: 13px; }
+    .btns { display: flex; gap: 10px; margin-top: 8px; }
+    a { text-decoration: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-align: center; flex: 1; }
+    .btn-primary { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; }
+    .btn-outline { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+  </style>
+</head>
+<body>
+  <h1>🎞️ Kho Video Đã Render (${videos.length} videos)</h1>
+  <div class="grid">${cardsHtml}</div>
+</body>
+</html>`,
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+      );
+    }
+
     // Direct video streaming proxy route: /video/:jobId.mp4
     if (pathParts[0] === 'video' && pathParts[1]) {
       const rawId = sanitizeJobId(pathParts[1].replace(/\.mp4$/, '').replace(/^video-/, ''));
@@ -710,6 +1008,7 @@ export default {
       const ready = check.videoReady;
       const secretSuffix = env.MCP_SECRET ? `?key=${encodeURIComponent(env.MCP_SECRET)}` : '';
       const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
+      const galleryUrl = `${baseUrl}/gallery${secretSuffix}`;
       const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
       if (!ready) {
@@ -769,7 +1068,7 @@ export default {
 </head>
 <body>
   <span class="loader"></span>
-  <h2>⏳ Đang thu âm giọng đọc AI, phối nhạc nền & render trên Cloud (16GB RAM)...</h2>
+  <h2>⏳ Đang thu âm giọng đọc AI, đồng bộ từng từ & render trên Cloud (16GB RAM)...</h2>
   <div class="step-badge">⚡ Bước hiện tại: ${activeStep}</div>
   <p>Mã công việc: <strong>#${jobId}</strong> — Trang này tự động kiểm tra mỗi 12 giây và sẽ tự phát video ngay khi hoàn tất!</p>
   <p><a href="${safeHtmlUrl}" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
@@ -790,6 +1089,7 @@ export default {
     video { max-width: 90vw; max-height: 75vh; border-radius: 14px; box-shadow: 0 25px 60px rgba(0,0,0,0.65); border: 1px solid #1e293b; background: #000; }
     .actions { margin-top: 22px; display: flex; gap: 14px; }
     a { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; }
+    a.secondary { background: #1e293b; border: 1px solid #334155; }
   </style>
 </head>
 <body>
@@ -797,6 +1097,7 @@ export default {
   <video src="${streamUrl}" controls autoplay loop playsinline></video>
   <div class="actions">
     <a href="${downloadUrl}" download="remotion-${jobId}.mp4">⬇ Tải xuống MP4</a>
+    <a href="${galleryUrl}" class="secondary">🎞️ Kho Video Cloud</a>
   </div>
 </body>
 </html>`,
@@ -834,7 +1135,7 @@ export default {
         }
       }
 
-      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '4.0.0' }), {
+      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '5.0.0' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -843,7 +1144,8 @@ export default {
     return new Response(
       JSON.stringify({
         status: 'online_24_7',
-        version: '4.0.0 (Full-Stack AI Video Studio: Neural TTS + BGM + Full Remotion 4.0.541)',
+        version:
+          '5.0.0 (Open Creative AI Studio: Frame-Exact WordBoundary Sync + Word-Highlight Captions + Multi-Layer BGM + Full Remotion 4.0.541)',
         platform: 'Cloudflare Workers + GitHub Actions (16GB RAM Cloud)',
         repository: repo,
         security: env.MCP_SECRET ? 'PROTECTED 🔒' : 'OPEN',

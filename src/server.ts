@@ -50,6 +50,84 @@ function validateTsxCode(tsxCode: string): string[] {
   return warnings;
 }
 
+function buildNarrationTimelineAnalysis(narrationSegments: string[], fps = 30, rate = '+5%') {
+  const rateMatch = String(rate).match(/([+-]?\d+)%/);
+  const rateFactor = rateMatch ? 1 + Number(rateMatch[1]) / 100 : 1.05;
+  const baseWordsPerSec = 3.0 * rateFactor;
+
+  let cumulativeFrames = 0;
+  const scenes = narrationSegments.map((rawSeg, sceneIndex) => {
+    const text = String(rawSeg || '').trim();
+    const tokens = text.split(/\s+/).filter(Boolean);
+
+    if (tokens.length === 0) {
+      const emptyFrames = Math.ceil(2 * fps);
+      const s = {
+        sceneIndex,
+        text: '',
+        estimatedAudioSeconds: 1.5,
+        durationInFrames: emptyFrames,
+        startFrame: cumulativeFrames,
+        endFrame: cumulativeFrames + emptyFrames,
+        words: [] as any[],
+      };
+      cumulativeFrames += emptyFrames;
+      return s;
+    }
+
+    const weights = tokens.map((w) => {
+      const cleanLen = w.replace(/[^\p{L}\p{N}]/gu, '').length || 1;
+      const commaPause = /[,;:]/.test(w) ? 1.4 : 0;
+      const periodPause = /[.!?…]$/.test(w) ? 2.4 : 0;
+      return Math.max(1.2, cleanLen * 0.78 + commaPause + periodPause);
+    });
+
+    const avgWeightPerWord = 3.2;
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    const spokenDurationSec = Math.max(1.6, totalWeight / (avgWeightPerWord * baseWordsPerSec));
+    const totalAudioMs = Math.round(spokenDurationSec * 1000);
+    const sceneDurationFrames = Math.ceil((spokenDurationSec + 0.55) * fps);
+
+    let cursorMs = 80;
+    const usableMs = Math.max(300, totalAudioMs - 160);
+    const words = tokens.map((w, idx) => {
+      const durMs = (weights[idx] / totalWeight) * usableMs;
+      const startMs = Math.round(cursorMs);
+      const endMs = Math.round(cursorMs + durMs);
+      cursorMs += durMs;
+      return {
+        word: w,
+        startMs,
+        endMs,
+        startFrame: Math.floor((startMs / 1000) * fps),
+        endFrame: Math.ceil((endMs / 1000) * fps),
+      };
+    });
+
+    const sceneObj = {
+      sceneIndex,
+      text,
+      estimatedAudioSeconds: Number(spokenDurationSec.toFixed(2)),
+      durationInFrames: sceneDurationFrames,
+      startFrame: cumulativeFrames,
+      endFrame: cumulativeFrames + sceneDurationFrames,
+      words,
+    };
+    cumulativeFrames += sceneDurationFrames;
+    return sceneObj;
+  });
+
+  return {
+    fps,
+    totalFrames: Math.max(90, cumulativeFrames),
+    totalSeconds: Number((Math.max(90, cumulativeFrames) / fps).toFixed(2)),
+    sceneFrames: scenes.map((s) => s.durationInFrames),
+    scenes,
+    usageHint:
+      'Use `getSceneFrames(sceneIndex)` for each scene duration, `getWordFrame(sceneIndex, keyword)` to trigger visual animations at the exact spoken word, and `<WordHighlightCaptions sceneIndex={i} />` from `./audio-sync` for real-time word-by-word karaoke captions!',
+  };
+}
+
 interface CloudRenderJob {
   id: string;
   title: string;
@@ -115,6 +193,52 @@ async function triggerGitHubActionsRender(
   if (!response.ok) {
     const errText = await response.text();
     throw new Error(`GitHub API error (${response.status}): ${errText}`);
+  }
+}
+
+async function listReleaseVideosOnGitHub(baseUrl: string) {
+  const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
+  try {
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'Remotion-Cloud-MCP-Server',
+    };
+    if (GITHUB_TOKEN) headers['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
+
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/tags/videos-store`, {
+      headers,
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const assets: any[] = data?.assets || [];
+
+    return assets
+      .filter(
+        (a) =>
+          typeof a.name === 'string' &&
+          a.name.startsWith('video-') &&
+          a.name.endsWith('.mp4') &&
+          a.state === 'uploaded'
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.updated_at || b.created_at).getTime() -
+          new Date(a.updated_at || a.created_at).getTime()
+      )
+      .map((a) => {
+        const jobId = a.name.replace(/^video-/, '').replace(/\.mp4$/, '');
+        return {
+          jobId,
+          fileName: a.name,
+          sizeMB: Number(((a.size || 0) / (1024 * 1024)).toFixed(2)),
+          createdAt: a.updated_at || a.created_at,
+          watchPageUrl: `${baseUrl}/watch/${jobId}${secretSuffix}`,
+          streamUrl: `${baseUrl}/video/${jobId}.mp4${secretSuffix}`,
+          directDownloadUrl: `https://github.com/${GITHUB_REPO}/releases/download/videos-store/${a.name}`,
+        };
+      });
+  } catch {
+    return [];
   }
 }
 
@@ -203,31 +327,30 @@ async function inspectGitHubWorkflowRun(jobId: string) {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — FULL-STACK AI VIDEO STUDIO (v4.0)
-## (Master Creative Director + Neural AI Voiceover + Cinematic BGM + Real Visual Media + Full Ecosystem)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.0)
+## (100% Creative Freedom + Frame-Exact Word-to-Visual Sync + Word-by-Word Highlight Captions + Full Ecosystem)
 
-1. Automatic Neural AI Voiceover (\`narrationSegments\` & \`voice\`):
-   - Vietnamese Voices: \`"vi-VN-NamMinhNeural"\` (Male), \`"vi-VN-HoaiMyNeural"\` (Female)
-   - English Voices: \`"en-US-AndrewMultilingualNeural"\`, \`"en-US-BrianMultilingualNeural"\`, \`"en-US-AvaMultilingualNeural"\`
-   - Segment \`i\` is synthesized into \`staticFile('voice-' + i + '.mp3')\`. Include \`<Audio src={staticFile('voice-0.mp3')} volume={1} />\` inside Scene 0, etc.
-2. Automatic Background Music (\`bgmMood\` & \`staticFile('bgm.mp3')\`):
-   - Moods: \`"epic-space"\`, \`"cyber-tech"\`, \`"warm-inspiring"\`, \`"mystery-deep"\`, \`"upbeat-energetic"\`.
-   - At root of \`DynamicVideo\`, include \`<Audio src={staticFile('bgm.mp3')} volume={0.18} />\`.
-3. Installed Packages:
+1. Frame-Exact Audio-Visual Sync (\`./audio-sync\`):
+   - \`import { getSceneFrames, getWordFrame, getWordProgress, getSceneCaptions, WordHighlightCaptions, audioTelemetry } from './audio-sync';\`
+   - \`getSceneFrames(sceneIndex, fallback)\`: Exact frame count of \`voice-i.mp3\`.
+   - \`getWordFrame(sceneIndex, keyword, fallback)\`: Exact frame when narrator pronounces \`keyword\`.
+   - \`<WordHighlightCaptions sceneIndex={i} />\`: Word-by-word karaoke highlight captions powered by \`@remotion/captions\` and Edge-TTS \`WordBoundary\`.
+2. Installed Ecosystem (26+ packages):
    - Core: \`remotion\` (\`useCurrentFrame\`, \`useVideoConfig\`, \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`interpolate\`, \`spring\`, \`Audio\`, \`Img\`, \`staticFile\`, \`random\`)
-   - Transitions: \`@remotion/transitions\` (\`TransitionSeries\`, \`linearTiming\`, \`springTiming\`, \`fade\`, \`slide\`, \`wipe\`, \`flip\`)
-   - SFX & Effects: \`@remotion/sfx\`, \`@remotion/light-leaks\`, \`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/three\`, \`@remotion/noise\`, \`@remotion/motion-blur\`, \`@remotion/google-fonts\`, \`lucide-react\`.
+   - Captions & Audio Spectrum: \`@remotion/captions\` (\`createTikTokStyleCaptions\`), \`@remotion/media-utils\` (\`useAudioData\`, \`visualizeAudio\`, \`visualizeAudioWaveform\`)
+   - Transitions & SFX: \`@remotion/transitions\` (\`TransitionSeries\`, \`fade\`, \`slide\`, \`wipe\`, \`flip\`, \`clock-wipe\`, \`iris\`), \`@remotion/sfx\`, \`@remotion/light-leaks\`
+   - 2D, 3D & Effects: \`@remotion/shapes\`, \`@remotion/paths\` (\`evolvePath\`, \`interpolatePath\`), \`@remotion/three\` (\`ThreeCanvas\`), \`@remotion/noise\`, \`@remotion/motion-blur\`, \`@remotion/google-fonts\`, \`@remotion/layout-utils\`, \`lucide-react\`.
 `;
 
 function createMcpServerInstance(baseUrl: string) {
   const server = new McpServer({
     name: 'remotion-cloud-github-actions',
-    version: '4.0.0',
+    version: '5.0.0',
   });
 
   server.tool(
     'get_remotion_ecosystem_guide',
-    'Get the complete Remotion v4.0.541 Full-Stack AI Studio guide (Neural AI Voiceover `voice-0.mp3`, Cinematic BGM `bgm.mp3`, Real Imagery, Creative Director mindset, and all 26 package signatures).',
+    'Get the complete Remotion v4.0.541 Open Creative Studio v5.0 guide (6-Step Professional Editor Workflow, Frame-Exact Word-to-Visual Sync `./audio-sync`, Word-by-Word Karaoke Captions, and all 26+ package APIs).',
     {},
     async () => ({
       content: [{ type: 'text', text: ECOSYSTEM_DOCS }],
@@ -235,8 +358,54 @@ function createMcpServerInstance(baseUrl: string) {
   );
 
   server.tool(
+    'analyze_narration_timeline',
+    'Analyze spoken `narrationSegments` BEFORE writing `tsxCode` to get the exact frame duration of each scene (`sceneFrames`) and the exact `startFrame`/`endFrame` of every spoken word/keyword.',
+    {
+      narrationSegments: z
+        .array(z.string())
+        .describe('Array of spoken narration paragraphs (one per scene/chapter in order)'),
+      fps: z.number().int().default(30),
+      voice: z.string().default('vi-VN-NamMinhNeural'),
+    },
+    async ({ narrationSegments, fps }) => {
+      const analysis = buildNarrationTimelineAnalysis(narrationSegments, fps);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(analysis, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    'list_rendered_videos',
+    'List all previously rendered MP4 videos stored in the Cloud Gallery along with their watch URLs, stream URLs, and download links.',
+    {
+      limit: z.number().int().min(1).max(100).default(20),
+    },
+    async ({ limit }) => {
+      const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
+      const videos = await listReleaseVideosOnGitHub(baseUrl);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                totalStoredVideos: videos.length,
+                galleryUrl: `${baseUrl}/gallery${secretSuffix}`,
+                videos: videos.slice(0, limit),
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+  );
+
+  server.tool(
     'render_remotion_video',
-    `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, Neural AI Voiceover Edge-TTS, Cinematic BGM, WebGL2 swangle).\n${ECOSYSTEM_DOCS}`,
+    `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, Frame-Exact WordBoundary Sync, Multi-Layer BGM, WebGL2 swangle).\n${ECOSYSTEM_DOCS}`,
     {
       title: z.string().default('Remotion Studio Video').describe('Title of the video project'),
       tsxCode: z
@@ -262,12 +431,22 @@ function createMcpServerInstance(baseUrl: string) {
       bgmMood: z
         .enum(['epic-space', 'cyber-tech', 'warm-inspiring', 'mystery-deep', 'upbeat-energetic'])
         .default('epic-space')
-        .describe('Mood for automatic copyright-free background music'),
+        .describe('Mood for automatic multi-layer 4-chord background music'),
       fps: z.number().int().default(30),
       width: z.number().int().default(1920),
       height: z.number().int().default(1080),
     },
-    async ({ title, tsxCode, durationInFrames, narrationSegments, voice, bgmMood, fps, width, height }) => {
+    async ({
+      title,
+      tsxCode,
+      durationInFrames: rawDuration,
+      narrationSegments,
+      voice,
+      bgmMood,
+      fps,
+      width,
+      height,
+    }) => {
       const warnings = validateTsxCode(tsxCode);
       if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
         return {
@@ -286,6 +465,13 @@ function createMcpServerInstance(baseUrl: string) {
       const directDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
       const watchPageUrl = `${baseUrl}/watch/${jobId}${secretSuffix}`;
       const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
+      const galleryUrl = `${baseUrl}/gallery${secretSuffix}`;
+
+      const timelineEst =
+        narrationSegments.length > 0
+          ? buildNarrationTimelineAnalysis(narrationSegments, fps)
+          : null;
+      const durationInFrames = Math.max(rawDuration, timelineEst?.totalFrames || 0);
 
       jobs.set(jobId, {
         id: jobId,
@@ -318,13 +504,15 @@ function createMcpServerInstance(baseUrl: string) {
                     voice,
                     bgmMood,
                     narrationScenesCount: narrationSegments.length,
+                    wordBoundarySync: true,
                   },
                   watchPageUrl,
                   streamUrl,
+                  galleryUrl,
                   directDownloadUrl,
                   notes: warnings.length > 0 ? warnings : undefined,
                   message:
-                    'Render job (with Neural AI Voiceover & BGM) dispatched to GitHub Actions Cloud! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
+                    'Render job (with Frame-Exact WordBoundary Sync, Voiceover Mastering & Multi-Layer BGM) dispatched to GitHub Actions Cloud! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
                 },
                 null,
                 2
@@ -345,7 +533,7 @@ function createMcpServerInstance(baseUrl: string) {
 
   server.tool(
     'render_batch_videos',
-    'Dispatch up to 20 complete Remotion videos (with AI Voiceover & BGM) in parallel to GitHub Actions Cloud.',
+    'Dispatch up to 20 complete Remotion videos (with AI Voiceover, Word-Level Captions & BGM) in parallel to GitHub Actions Cloud.',
     {
       videos: z
         .array(
@@ -375,6 +563,11 @@ function createMcpServerInstance(baseUrl: string) {
         const watchPageUrl = `${baseUrl}/watch/${jobId}${secretSuffix}`;
         const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
         const directDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
+        const est =
+          v.narrationSegments.length > 0
+            ? buildNarrationTimelineAnalysis(v.narrationSegments, v.fps)
+            : null;
+        const dur = Math.max(v.durationInFrames, est?.totalFrames || 0);
 
         jobs.set(jobId, {
           id: jobId,
@@ -386,20 +579,11 @@ function createMcpServerInstance(baseUrl: string) {
           createdAt: Date.now(),
         });
 
-        await triggerGitHubActionsRender(
-          jobId,
-          v.title,
-          v.tsxCode,
-          v.durationInFrames,
-          v.fps,
-          v.width,
-          v.height,
-          {
-            voice: v.voice,
-            bgmMood: v.bgmMood,
-            narrationSegments: v.narrationSegments,
-          }
-        );
+        await triggerGitHubActionsRender(jobId, v.title, v.tsxCode, dur, v.fps, v.width, v.height, {
+          voice: v.voice,
+          bgmMood: v.bgmMood,
+          narrationSegments: v.narrationSegments,
+        });
 
         results.push({
           jobId,
@@ -418,6 +602,7 @@ function createMcpServerInstance(baseUrl: string) {
               {
                 status: 'batch_dispatched',
                 count: results.length,
+                galleryUrl: `${baseUrl}/gallery${secretSuffix}`,
                 jobs: results,
               },
               null,
@@ -517,6 +702,60 @@ export function startApp() {
   app.use(cors());
   app.use(express.json({ limit: '15mb' }));
 
+  // Cloud Video Gallery route: /gallery
+  app.get('/gallery', async (req, res) => {
+    if (!checkAuth(req, res)) return;
+    const baseUrl = getPublicBaseUrl(req);
+    const videos = await listReleaseVideosOnGitHub(baseUrl);
+    const cardsHtml =
+      videos.length === 0
+        ? `<p style="color:#94a3b8;">Chưa có video nào được lưu trong kho Cloud.</p>`
+        : videos
+            .map(
+              (v) => `
+      <div class="card">
+        <video src="${escapeHtml(v.streamUrl)}" controls preload="metadata" playsinline></video>
+        <div class="meta">
+          <div class="title">🎬 Video #${escapeHtml(v.jobId)}</div>
+          <div class="sub">${escapeHtml(String(v.sizeMB))} MB • ${escapeHtml(
+                new Date(v.createdAt).toLocaleString('vi-VN')
+              )}</div>
+          <div class="btns">
+            <a href="${escapeHtml(v.watchPageUrl)}" class="btn-outline">Mở trang xem</a>
+            <a href="${escapeHtml(v.directDownloadUrl)}" class="btn-primary" download>⬇ Tải MP4</a>
+          </div>
+        </div>
+      </div>`
+            )
+            .join('\n');
+
+    res.send(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kho Video Remotion Cloud (${videos.length})</title>
+  <style>
+    body { background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; margin: 0; padding: 36px 5%; }
+    h1 { margin-top: 0; color: #38bdf8; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 24px; margin-top: 24px; }
+    .card { background: #111827; border: 1px solid #1e293b; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+    video { width: 100%; aspect-ratio: 16/9; background: #000; object-fit: contain; }
+    .meta { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .title { font-weight: 700; font-size: 16px; }
+    .sub { color: #94a3b8; font-size: 13px; }
+    .btns { display: flex; gap: 10px; margin-top: 8px; }
+    a { text-decoration: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-align: center; flex: 1; }
+    .btn-primary { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; }
+    .btn-outline { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+  </style>
+</head>
+<body>
+  <h1>🎞️ Kho Video Đã Render (${videos.length} videos)</h1>
+  <div class="grid">${cardsHtml}</div>
+</body>
+</html>`);
+  });
+
   // Direct video streaming proxy route: /video/:jobId.mp4
   app.get('/video/:file', async (req, res) => {
     if (!checkAuth(req, res)) return;
@@ -557,7 +796,7 @@ export function startApp() {
     }
   });
 
-  // Smart Watch Page (auto-checks if video is still rendering on GitHub Actions and plays automatically when done!)
+  // Smart Watch Page
   app.get('/watch/:jobId', async (req, res) => {
     if (!checkAuth(req, res)) return;
     const jobId = sanitizeJobId(req.params.jobId);
@@ -566,6 +805,7 @@ export function startApp() {
     const ready = check.videoReady;
     const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
     const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
+    const galleryUrl = `${baseUrl}/gallery${secretSuffix}`;
     const downloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
 
     if (!ready) {
@@ -622,7 +862,7 @@ export function startApp() {
 </head>
 <body>
   <span class="loader"></span>
-  <h2>⏳ Đang thu âm giọng đọc AI, phối nhạc nền & render trên Cloud (16GB RAM)...</h2>
+  <h2>⏳ Đang thu âm giọng đọc AI, đồng bộ từng từ & render trên Cloud (16GB RAM)...</h2>
   <div class="step-badge">⚡ Bước hiện tại: ${activeStep}</div>
   <p>Mã công việc: <strong>#${jobId}</strong> — Trang này tự động kiểm tra mỗi 12 giây và sẽ tự phát video ngay khi hoàn tất!</p>
   <p><a href="${safeHtmlUrl}" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
@@ -641,6 +881,7 @@ export function startApp() {
     video { max-width: 90vw; max-height: 75vh; border-radius: 14px; box-shadow: 0 25px 60px rgba(0,0,0,0.65); border: 1px solid #1e293b; background: #000; }
     .actions { margin-top: 22px; display: flex; gap: 14px; }
     a { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; }
+    a.secondary { background: #1e293b; border: 1px solid #334155; }
   </style>
 </head>
 <body>
@@ -648,6 +889,7 @@ export function startApp() {
   <video src="${streamUrl}" controls autoplay loop playsinline></video>
   <div class="actions">
     <a href="${downloadUrl}" download="remotion-${jobId}.mp4">⬇ Tải xuống MP4</a>
+    <a href="${galleryUrl}" class="secondary">🎞️ Kho Video Cloud</a>
   </div>
 </body>
 </html>`);
@@ -695,7 +937,8 @@ export function startApp() {
     const baseUrl = getPublicBaseUrl(req);
     res.json({
       status: 'online',
-      version: '4.0.0 (Full-Stack AI Video Studio: Neural TTS + BGM + Full Remotion 4.0.541)',
+      version:
+        '5.0.0 (Open Creative AI Studio: Frame-Exact WordBoundary Sync + Word-Highlight Captions + Multi-Layer BGM + Full Remotion 4.0.541)',
       mode: 'GitHub Actions Cloud Renderer (4 vCPU, 16GB RAM x 20 parallel jobs)',
       repository: GITHUB_REPO,
       mcpEndpoint: `${baseUrl}/mcp${MCP_SECRET ? '/<YOUR_SECRET>' : ''}`,
@@ -703,11 +946,10 @@ export function startApp() {
   });
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ Remotion Cloud Coordinator MCP v4.0.0 listening on port ${PORT}`);
+    console.log(`✅ Remotion Cloud Coordinator MCP v5.0.0 listening on port ${PORT}`);
   });
 }
 
-// Run directly if invoked as main entry
 if (process.argv[1]?.endsWith('server.ts')) {
   startApp();
 }

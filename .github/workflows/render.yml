@@ -83,7 +83,7 @@ jobs:
           mkdir -p public
           node scripts/generate-studio-audio.mjs
 
-      - name: Prepare DynamicVideo.tsx and meta.json
+      - name: Prepare DynamicVideo.tsx, Pre-fetch External Assets & Guard Imports
         env:
           TSX_B64: ${{ inputs.tsxCodeBase64 }}
           DURATION: ${{ inputs.durationInFrames }}
@@ -91,18 +91,7 @@ jobs:
           WIDTH: ${{ inputs.width }}
           HEIGHT: ${{ inputs.height }}
         run: |
-          node -e '
-            const fs = require("fs");
-            const code = Buffer.from(process.env.TSX_B64, "base64").toString("utf-8");
-            fs.writeFileSync("src/remotion/DynamicVideo.tsx", code, "utf-8");
-            const prevMeta = fs.existsSync("src/remotion/meta.json") ? JSON.parse(fs.readFileSync("src/remotion/meta.json", "utf-8")) : {};
-            fs.writeFileSync("src/remotion/meta.json", JSON.stringify({
-              durationInFrames: prevMeta.computedDurationInFrames || Number(process.env.DURATION),
-              fps: Number(process.env.FPS),
-              width: Number(process.env.WIDTH),
-              height: Number(process.env.HEIGHT)
-            }, null, 2), "utf-8");
-          '
+          node scripts/prepare-render.mjs
 
       - name: Render Video with Remotion
         id: render_step

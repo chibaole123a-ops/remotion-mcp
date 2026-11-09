@@ -1,0 +1,16 @@
+{
+  "fps": 30,
+  "totalFrames": 150,
+  "sceneFrames": [150],
+  "scenes": [
+    {
+      "sceneIndex": 0,
+      "text": "",
+      "audioDurationSec": 4.5,
+      "durationInFrames": 150,
+      "startFrame": 0,
+      "endFrame": 150,
+      "words": []
+    }
+  ]
+}

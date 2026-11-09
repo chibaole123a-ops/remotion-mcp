@@ -1,7 +1,7 @@
 {
   "name": "remotion-mcp-cloud",
-  "version": "4.0.0",
-  "description": "Full Remotion 4.0.541 Ecosystem MCP Server (Neural AI Voiceover + BGM + 3D WebGL) for Gemini Web on Cloudflare & GitHub Actions",
+  "version": "5.0.0",
+  "description": "Open Creative AI Video Studio v5.0 (Frame-Exact WordBoundary Sync + Word-Highlight Captions + Multi-Layer BGM + Full Remotion 4.0.541) on Cloudflare & GitHub Actions",
   "type": "module",
   "scripts": {
     "start": "tsx src/server.ts",

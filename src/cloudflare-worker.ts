@@ -5,14 +5,17 @@ export interface Env {
 }
 
 const ECOSYSTEM_DOCS = `
-INSTALLED REMOTION ECOSYSTEM PACKAGES ON GITHUB ACTIONS CLOUD (4 vCPU, 16GB RAM):
+INSTALLED REMOTION v4.0.541 (LATEST) FULL ECOSYSTEM ON GITHUB ACTIONS CLOUD (4 vCPU, 16GB RAM):
 1. Core: 'remotion' (AbsoluteFill, Sequence, Series, Loop, Freeze, Audio, OffthreadVideo, Img, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, Easing, random)
-2. Transitions: '@remotion/transitions' (TransitionSeries, linearTiming, springTiming) + '@remotion/transitions/fade', '@remotion/transitions/slide', '@remotion/transitions/wipe', '@remotion/transitions/flip'
-3. 2D Shapes & SVG: '@remotion/shapes' (Circle, Rect, Triangle, Star, Polygon, Ellipse, Heart, Pie), '@remotion/paths' (evolvePath, getLength, interpolatePath), '@remotion/rounded-text-box'
-4. 3D Graphics: '@remotion/three' (ThreeCanvas) + 'three' + '@react-three/fiber' + '@react-three/drei'
-5. Effects: '@remotion/motion-blur' (Trail, CameraMotionBlur), '@remotion/noise' (noise2D, noise3D, noise4D)
-6. Typography & Fonts: '@remotion/google-fonts/BeVietnamPro', '@remotion/google-fonts/Inter', '@remotion/google-fonts/Montserrat', '@remotion/google-fonts/Roboto', '@remotion/layout-utils'
-7. Media & Captions: '@remotion/captions', '@remotion/media-utils', '@remotion/gif' (Gif), '@remotion/lottie' (Lottie), '@remotion/animation-utils'
+2. Transitions: '@remotion/transitions' (TransitionSeries, linearTiming, springTiming) + presentations: '@remotion/transitions/fade', '@remotion/transitions/slide', '@remotion/transitions/wipe', '@remotion/transitions/flip', '@remotion/transitions/clock-wipe', '@remotion/transitions/iris'
+3. Light Leaks & Cinematic Overlays: '@remotion/light-leaks' (LightLeak)
+4. Built-in Sound Effects (SFX - No external audio file needed!): '@remotion/sfx' (whoosh, whip, pageTurn, switch, mouseClick, shutterModern, shutterOld, ding,vineBoom, windowsXpError) -> use with <Audio src={whoosh} />!
+5. 2D Shapes, SVG & Skia: '@remotion/shapes' (Circle, Rect, Triangle, Star, Polygon, Ellipse, Heart, Pie), '@remotion/paths' (evolvePath, getLength, interpolatePath), '@remotion/rounded-text-box' (createRoundedTextBox), '@remotion/skia' (SkiaCanvas)
+6. 3D Graphics: '@remotion/three' (ThreeCanvas) + 'three' + '@react-three/fiber' + '@react-three/drei'
+7. Effects & Motion: '@remotion/motion-blur' (Trail, CameraMotionBlur), '@remotion/noise' (noise2D, noise3D, noise4D), '@remotion/animation-utils' (makeTransform, scale, translate, rotate)
+8. Typography & Fonts: '@remotion/google-fonts/BeVietnamPro', '@remotion/google-fonts/Inter', '@remotion/google-fonts/Montserrat', '@remotion/google-fonts/Roboto', '@remotion/google-fonts/PlayfairDisplay', '@remotion/layout-utils' (fitText, measureText, fillTextBox)
+9. Media, Captions, Rive & Lottie: '@remotion/captions', '@remotion/media-utils', '@remotion/gif' (Gif), '@remotion/lottie' (Lottie), '@remotion/rive' (RemotionRiveCanvas)
+10. Icons: 'lucide-react' (Sparkles, Zap, Rocket, Check, Star, Play, Globe, Shield, Cpu, Layers, etc.)
 `;
 
 function toBase64Utf8(str: string): string {

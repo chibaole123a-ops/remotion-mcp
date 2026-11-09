@@ -327,19 +327,16 @@ async function inspectGitHubWorkflowRun(jobId: string) {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.0)
-## (100% Creative Freedom + Frame-Exact Word-to-Visual Sync + Word-by-Word Highlight Captions + Full Ecosystem)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.1)
+## (Continuous Camera Flow + Frame-Exact WordBoundary Sync + Crystal-Clear Audio + Full Ecosystem)
 
-1. Frame-Exact Audio-Visual Sync (\`./audio-sync\`):
-   - \`import { getSceneFrames, getWordFrame, getWordProgress, getSceneCaptions, WordHighlightCaptions, audioTelemetry } from './audio-sync';\`
-   - \`getSceneFrames(sceneIndex, fallback)\`: Exact frame count of \`voice-i.mp3\`.
-   - \`getWordFrame(sceneIndex, keyword, fallback)\`: Exact frame when narrator pronounces \`keyword\`.
-   - \`<WordHighlightCaptions sceneIndex={i} />\`: Word-by-word karaoke highlight captions powered by \`@remotion/captions\` and Edge-TTS \`WordBoundary\`.
-2. Installed Ecosystem (26+ packages):
-   - Core: \`remotion\` (\`useCurrentFrame\`, \`useVideoConfig\`, \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`interpolate\`, \`spring\`, \`Audio\`, \`Img\`, \`staticFile\`, \`random\`)
-   - Captions & Audio Spectrum: \`@remotion/captions\` (\`createTikTokStyleCaptions\`), \`@remotion/media-utils\` (\`useAudioData\`, \`visualizeAudio\`, \`visualizeAudioWaveform\`)
-   - Transitions & SFX: \`@remotion/transitions\` (\`TransitionSeries\`, \`fade\`, \`slide\`, \`wipe\`, \`flip\`, \`clock-wipe\`, \`iris\`), \`@remotion/sfx\`, \`@remotion/light-leaks\`
-   - 2D, 3D & Effects: \`@remotion/shapes\`, \`@remotion/paths\` (\`evolvePath\`, \`interpolatePath\`), \`@remotion/three\` (\`ThreeCanvas\`), \`@remotion/noise\`, \`@remotion/motion-blur\`, \`@remotion/google-fonts\`, \`@remotion/layout-utils\`, \`lucide-react\`.
+1. Anti-Slide-Deck Rule & Continuous Visual Flow:
+   - NEVER repeat the same "TopHeader + Circle Icon + Bottom Box" template across scenes!
+   - Design bespoke visual metaphors for every segment (3D ThreeCanvas, SVG path drawing \`evolvePath\`, real photography \`<Img>\` with parallax zoom, data charts, multi-beat choreography).
+   - Break each spoken sentence into 2–4 visual beats triggered at exact spoken keywords via \`getWordFrame(i, 'keyword')\` and \`getWordProgress(i, 'startWord', 'endWord', frame)\`.
+2. Frame-Exact Audio-Visual Sync (\`./audio-sync\`):
+   - \`import { getSceneFrames, getSegmentStartFrame, getWordFrame, getGlobalWordFrame, getWordProgress, ContinuousAudioTrack, WordHighlightCaptions, audioTelemetry } from './audio-sync';\`
+   - Keep BGM subtle (\`volume={0.10}\`) and SFX soft (\`volume={0.15}\`) for crystal-clear voiceover.
 `;
 
 function createMcpServerInstance(baseUrl: string) {

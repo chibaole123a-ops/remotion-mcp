@@ -66,10 +66,10 @@ jobs:
             node_modules
           key: remotion-deps-${{ runner.os }}-${{ hashFiles('package.json') }}
 
-      - name: Install dependencies (Full Remotion Ecosystem + Edge-TTS)
+      - name: Install dependencies (Full Remotion Ecosystem + Edge-TTS + Mutagen)
         run: |
           npm install --legacy-peer-deps
-          pip install edge-tts --quiet || pip3 install edge-tts --break-system-packages --quiet
+          pip install edge-tts mutagen --quiet || pip3 install edge-tts mutagen --break-system-packages --quiet
 
       - name: Ensure Remotion Browser
         run: npx remotion browser ensure

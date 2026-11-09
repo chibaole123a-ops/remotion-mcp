@@ -173,10 +173,11 @@ async function main() {
     ? JSON.parse(fs.readFileSync('src/remotion/meta.json', 'utf-8'))
     : {};
 
-  const finalDuration = Math.max(
-    Number(prevMeta.computedDurationInFrames || 0),
-    durationEnv
-  );
+  // Always prefer the exact measured voiceover total frames from generate-studio-audio.mjs
+  const finalDuration =
+    Number(prevMeta.computedDurationInFrames) > 0
+      ? Number(prevMeta.computedDurationInFrames)
+      : durationEnv;
 
   fs.writeFileSync(
     'src/remotion/meta.json',

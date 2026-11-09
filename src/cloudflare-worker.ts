@@ -5,46 +5,47 @@ export interface Env {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.0)
-## (100% Creative Freedom + Frame-Exact Word-to-Visual Sync + Word-by-Word Highlight Captions + Full Ecosystem)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.1)
+## (Continuous Camera Flow + Frame-Exact WordBoundary Sync + Crystal-Clear Audio + Full Ecosystem)
 
-You have **100% creative freedom** with **ZERO rigid templates or fixed slide matrices**. Think and act as a **World-Class Film Director, Motion Graphics Artist, and High-Retention Video Editor**. Every video you craft should be a bespoke visual experience tailored to the topic's soul, pacing, and emotion.
+You have **100% creative freedom**. Act as a **World-Class Film Director, Motion Graphics Artist, and High-Retention Video Editor (Vox / Kurzgesagt / Lemmino / Apple Keynote)**.
 
 ---
 
-## I. THE 6-STEP PROFESSIONAL EDITOR WORKFLOW (AUDIO-FIRST, WORD-LOCKED CHOREOGRAPHY)
+## I. CRITICAL DIRECTING RULES: HOW TO AVOID REPETITIVE "SLIDE-SHOW SCENES" & ACHIEVE 100% SYNC
 
-1. **Step 1 — Creative Direction & Visual Language**:
-   - Freely choose the aesthetic, color palette, typography, camera style, and motion paradigm that best fits the topic (3D WebGL worlds, dynamic SVG vector drawing, D3 data storytelling, 2.5D parallax documentary, or fast-paced kinetic typography).
-   - Never fall into repetitive "PowerPoint slide decks". Treat the screen as a continuous **Camera Lens** in space.
-2. **Step 2 — Narrative Scripting & Visual Cue Planning**:
-   - Write engaging \`narrationSegments\` (one spoken paragraph per scene/chapter).
-   - Identify the exact **keywords, numbers, or action verbs** inside each sentence where a visual transformation, camera movement, chart reveal, or sound effect should trigger.
-3. **Step 3 — Frame-Exact Timeline & Word Cue Measurement (\`analyze_narration_timeline\` & \`./audio-sync\`)**:
-   - You can call \`analyze_narration_timeline\` before writing code (or import directly from \`'./audio-sync'\` inside \`DynamicVideo.tsx\`) to get the exact frame duration of every scene and the exact \`startFrame\` / \`endFrame\` of every single spoken word!
-4. **Step 4 — Synchronized Visual Choreography ("Say X -> Illustrate X at that Exact Frame")**:
-   - Import the synchronization helpers in \`DynamicVideo.tsx\`:
+1. **NO Repetitive "Icon-on-Top + Box-Below" Slide Templates**:
+   - **NEVER** build 5–7 identical scenes (\`Scene0\`, \`Scene1\`, \`Scene2\`...) that all share the same layout (e.g. a top header badge + a centered circle icon + a bottom text card). That looks like a static PowerPoint slide deck!
+   - Instead, design a **Continuous Visual Journey (One-Shot Camera Canvas or Seamless Spatial Evolution)**:
+     - Every chapter/segment must have a **completely distinct visual architecture** and **visual metaphor** that directly illustrates what the narrator is saying:
+       - *Example*: Full-bleed real photography/AI art (\`<Img>\` with Ken Burns zoom & parallax depth), interactive 3D WebGL worlds (\`<ThreeCanvas>\`), animated SVG path drawing (\`evolvePath\`), split-screen live comparisons, timeline maps, glowing neural networks, or multi-stage visual transformations where elements morph continuously as the narrator speaks!
+2. **Continuous Intra-Segment Evolution ("Speak X -> Illustrate X in Real Time")**:
+   - Within a 6-to-8 second narration segment, the screen must **NOT** just pop in at frame 0 and sit static until the sentence ends!
+   - Break each spoken sentence into **2 to 4 visual beats** locked to the exact spoken words using \`getWordFrame(segmentIndex, 'từ khóa')\` and \`getWordProgress(segmentIndex, 'từ đầu', 'từ cuối', frame)\`:
+     - *Beat 1 (\`frame 0 -> cue1\`)*: Establish the visual environment / initial state as the narrator begins the sentence.
+     - *Beat 2 (\`cue1 -> cue2\`, e.g. \`const cue1 = getWordFrame(i, 'từ khóa 1', 35)\`)*: Camera pans/zooms or visual elements transform/draw to illustrate keyword 1 at the exact moment it is spoken!
+     - *Beat 3 (\`cue2 -> end\`, e.g. \`const cue2 = getWordFrame(i, 'từ khóa 2', 90)\`)*: Data counter, visual climax, or dramatic reveal unfolds right as the narrator delivers the punchline!
+3. **100% Exact Audio-Visual Duration Lock (\`./audio-sync\`)**:
+   - Import from \`'./audio-sync'\`:
      \`\`\`tsx
      import {
        getSceneFrames,
+       getSegmentStartFrame,
        getWordFrame,
+       getGlobalWordFrame,
        getWordProgress,
-       getSceneCaptions,
+       ContinuousAudioTrack,
        WordHighlightCaptions,
        audioTelemetry,
      } from './audio-sync';
      \`\`\`
-   - **Scene Duration Lock**: Always use \`const s0Frames = getSceneFrames(0, 180);\` for Scene 0, \`getSceneFrames(1, 180)\` for Scene 1, etc., so every scene's duration matches the real synthesized \`voice-i.mp3\` file on the Cloud 100% with zero audio clipping!
-   - **Word-to-Visual Trigger Lock**: Inside Scene \`i\`, use \`const cueFrame = getWordFrame(i, 'bùng nổ', 45);\` (or \`getWordProgress(i, 'từ đầu', 'từ cuối', frame)\`). Trigger your \`spring({ frame: frame - cueFrame, fps })\` or \`interpolate(frame, [cueFrame, cueFrame + 25], ...)\` at \`cueFrame\` so that **at the exact millisecond the narrator pronounces that keyword, the corresponding graphic/3D object/chart/SFX reacts on screen!**
-5. **Step 5 — 3-Layer Soundscape & Word-by-Word Karaoke Highlight Captions**:
-   - **Layer 1 - Voiceover**: Inside each Scene \`i\`, include \`<Audio src={staticFile('voice-0.mp3')} volume={1} />\` (for Scene 0), \`voice-1.mp3\` (for Scene 1), etc. (Cloud automatically masters voice clarity & loudness via FFmpeg).
-   - **Layer 2 - Multi-Layer BGM**: At the root of \`DynamicVideo\`, include \`<Audio src={staticFile('bgm.mp3')} volume={0.18} />\` (4-chord progression + bass pulse + arpeggio tailored to \`bgmMood\`).
-   - **Layer 3 - Synchronized SFX (\`@remotion/sfx\`)**: Trigger \`<Sequence from={cueFrame}><Audio src={whoosh} volume={0.3} /></Sequence>\` on transitions and visual reveals.
-   - **Word-by-Word Highlight Captions**: Place \`<WordHighlightCaptions sceneIndex={0} />\` (or build custom captions using \`getSceneCaptions(i)\` and \`createTikTokStyleCaptions\` from \`@remotion/captions\`) inside each scene so every spoken word lights up in real time as it is pronounced!
-6. **Step 6 — Visual Polish & Deterministic QA**:
-   - Use \`random('seed')\` from \`remotion\` instead of \`Math.random()\`.
-   - Always clamp \`interpolate()\` ranges (\`extrapolateLeft: 'clamp', extrapolateRight: 'clamp'\`).
-   - External images (\`https://image.pollinations.ai/prompt/{encoded_english_prompt}?width=1280&height=720&nologo=true\`, Unsplash, Wikimedia) are automatically pre-fetched and cached on the Cloud before rendering.
+   - On the Cloud, Python \`edge_tts\` + \`mutagen\` + \`npx remotion ffprobe\` measures the **exact millisecond duration** of every \`voice-i.mp3\` and every single word's \`WordBoundary\` timestamp, writing them into \`./audio-sync\`.
+   - You can either:
+     - **Option A (Continuous Global Canvas)**: Use \`<ContinuousAudioTrack bgmVolume={0.10} />\` and \`<WordHighlightCaptions />\` (with no \`sceneIndex\` prop!) at the root, and orchestrate camera movements & visual layers across the global timeline using \`getSegmentStartFrame(i)\`, \`getSceneFrames(i)\`, and \`getGlobalWordFrame(i, 'keyword')\`.
+     - **Option B (TransitionSeries / Sequence Flow)**: Use \`durationInFrames={getSceneFrames(i, fallback)}\` on every sequence so it is 100% locked to the real \`voice-i.mp3\` duration (never clipped, never out of sync!), with \`<Audio src={staticFile('voice-' + i + '.mp3')} volume={1} />\` and \`<WordHighlightCaptions sceneIndex={i} />\`.
+4. **Crystal-Clear Audio Mixing (Zero Audio Clutter / Noise)**:
+   - Keep background music subtle (\`volume={0.10}\` to \`0.12\` on \`<Audio src={staticFile('bgm.mp3')} />\`).
+   - Use \`@remotion/sfx\` (\`whoosh\`, \`ding\`, \`mouseClick\`, \`shutterModern\`) **sparingly and softly** (\`volume={0.14}\` to \`0.18\`), so sound effects never overpower or muddy the narrator's voice!
 
 ---
 
@@ -54,38 +55,20 @@ You have **100% creative freedom** with **ZERO rigid templates or fixed slide ma
    \`useCurrentFrame\`, \`useVideoConfig\`, \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`Loop\`, \`Freeze\`, \`interpolate\`, \`interpolateColors\`, \`spring\`, \`Easing\`, \`random\`, \`Audio\`, \`OffthreadVideo\`, \`Img\`, \`staticFile\`.
 2. **Audio-Visual Word Sync (\`./audio-sync\`)**:
    - \`getSceneFrames(sceneIndex: number, fallbackFrames?: number): number\`
+   - \`getSegmentStartFrame(sceneIndex: number, fallbackStartFrame?: number): number\`
    - \`getWordFrame(sceneIndex: number, keywordOrPhrase: string, fallbackFrame?: number): number\`
+   - \`getGlobalWordFrame(sceneIndex: number, keywordOrPhrase: string, fallbackGlobalFrame?: number): number\`
    - \`getWordProgress(sceneIndex: number, startKeyword: string, endKeyword: string, localFrame: number): number\`
-   - \`getSceneCaptions(sceneIndex: number): Caption[]\`
-   - \`<WordHighlightCaptions sceneIndex={number} highlightColor?: string activeBgColor?: string fontSize?: number bottomOffset?: number />\`
-   - \`audioTelemetry\`: \`{ fps, totalFrames, sceneFrames: number[], scenes: [{ sceneIndex, text, durationInFrames, words: [{ word, startMs, endMs, startFrame, endFrame }] }] }\`
-3. **Captions (\`@remotion/captions\`)**:
-   \`import { createTikTokStyleCaptions, Caption } from '@remotion/captions';\`
-4. **Audio Analysis & Spectrum Visualization (\`@remotion/media-utils\`)**:
-   \`import { useAudioData, visualizeAudio, visualizeAudioWaveform } from '@remotion/media-utils';\`
-5. **Transitions (\`@remotion/transitions\`)**:
-   \`TransitionSeries\`, \`linearTiming\`, \`springTiming\`, plus \`@remotion/transitions/fade\`, \`slide\`, \`wipe\`, \`flip\`, \`clock-wipe\`, \`iris\`.
-6. **Sound Effects (\`@remotion/sfx\`)**:
-   \`import { whoosh, whip, pageTurn, mouseClick, shutterModern, shutterOld, ding, vineBoom, windowsXpError } from '@remotion/sfx';\`
-7. **Cinematic Light Leaks (\`@remotion/light-leaks\`)**:
-   \`import { LightLeak } from '@remotion/light-leaks';\` (\`<LightLeak seed={1} hueShift={120} />\`)
-8. **2D Vector Shapes, SVG Paths & Text Boxes (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/rounded-text-box\`)**:
-   - \`Circle\`, \`Rect\`, \`Triangle\`, \`Star\`, \`Polygon\`, \`Ellipse\`, \`Heart\`, \`Pie\`, \`makeCircle\`, \`makeRect\`, \`makeStar\`, \`makeTriangle\`, \`makePolygon\`.
-   - \`evolvePath\`, \`interpolatePath\`, \`getLength\`, \`getPointAtLength\`, \`getTangentAtLength\`, \`getSubpaths\`.
-   - \`createRoundedTextBox\`.
-9. **3D WebGL Engine (\`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)**:
-   \`import { ThreeCanvas } from '@remotion/three';\` + full Three.js meshes, lights, shaders, geometries, and Drei helpers.
-10. **Motion Blur, Organic Noise & Style Transforms (\`@remotion/motion-blur\`, \`@remotion/noise\`, \`@remotion/animation-utils\`)**:
-    - \`Trail\`, \`CameraMotionBlur\` from \`@remotion/motion-blur\`.
-    - \`noise2D\`, \`noise3D\`, \`noise4D\` from \`@remotion/noise\`.
-    - \`makeTransform\`, \`scale\`, \`translate\`, \`rotate\`, \`interpolateStyles\` from \`@remotion/animation-utils\`.
-11. **Typography & Google Fonts (\`@remotion/google-fonts/*\`, \`@remotion/layout-utils\`)**:
-    - \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily } = loadFont('normal', { weights: ['400', '600', '700', '800'], subsets: ['vietnamese', 'latin'], ignoreTooManyRequestsWarning: true });\` (Also available: \`Inter\`, \`Montserrat\`, \`Roboto\`, \`PlayfairDisplay\`, \`SpaceGrotesk\`, \`JetBrainsMono\`).
-    - \`fitText\`, \`measureText\`, \`fillTextBox\` from \`@remotion/layout-utils\`.
-12. **Lottie & GIF (\`@remotion/lottie\`, \`@remotion/gif\`)**:
-    \`Lottie\`, \`Gif\`.
-13. **Vector Icons (\`lucide-react\`)**:
-    Import any icon from \`lucide-react\` (all imports are automatically guarded before bundling).
+   - \`<ContinuousAudioTrack bgmVolume?: number voiceVolume?: number />\`
+   - \`<WordHighlightCaptions sceneIndex?: number highlightColor?: string activeBgColor?: string fontSize?: number bottomOffset?: number />\`
+3. **Captions & Audio Spectrum (\`@remotion/captions\`, \`@remotion/media-utils\`)**:
+   \`createTikTokStyleCaptions\`, \`useAudioData\`, \`visualizeAudio\`, \`visualizeAudioWaveform\`.
+4. **Transitions, Light Leaks & SFX (\`@remotion/transitions\`, \`@remotion/light-leaks\`, \`@remotion/sfx\`)**:
+   \`TransitionSeries\`, \`linearTiming\`, \`springTiming\`, \`fade\`, \`slide\`, \`wipe\`, \`flip\`, \`clock-wipe\`, \`iris\`, \`LightLeak\`, \`whoosh\`, \`whip\`, \`pageTurn\`, \`mouseClick\`, \`shutterModern\`, \`ding\`.
+5. **2D Vector Shapes, SVG Paths & 3D WebGL (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)**:
+   \`Circle\`, \`Rect\`, \`Triangle\`, \`Star\`, \`Polygon\`, \`Ellipse\`, \`Heart\`, \`Pie\`, \`evolvePath\`, \`interpolatePath\`, \`getPointAtLength\`, \`ThreeCanvas\`.
+6. **Motion Blur, Organic Noise, Google Fonts & Icons (\`@remotion/motion-blur\`, \`@remotion/noise\`, \`@remotion/google-fonts/BeVietnamPro\`, \`@remotion/layout-utils\`, \`lucide-react\`)**:
+   \`Trail\`, \`CameraMotionBlur\`, \`noise2D\`, \`noise3D\`, \`loadFont\`, \`fitText\`, and 1,500+ \`lucide-react\` icons.
 `;
 
 function toBase64Utf8(str: string): string {

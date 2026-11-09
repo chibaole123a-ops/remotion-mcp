@@ -1,5 +1,13 @@
 import React, { useMemo } from 'react';
-import { useCurrentFrame, useVideoConfig, spring, interpolate } from 'remotion';
+import {
+  useCurrentFrame,
+  useVideoConfig,
+  spring,
+  interpolate,
+  Sequence,
+  Audio,
+  staticFile,
+} from 'remotion';
 import rawTelemetry from './audio-telemetry.json';
 
 export interface Caption {
@@ -32,6 +40,8 @@ export interface WordToken {
   confidence: number;
   startFrame: number;
   endFrame: number;
+  globalStartFrame?: number;
+  globalEndFrame?: number;
 }
 
 export interface SceneTelemetry {
@@ -48,14 +58,15 @@ export interface AudioTelemetryData {
   fps: number;
   totalFrames: number;
   sceneFrames: number[];
+  sceneStartFrames?: number[];
   scenes: SceneTelemetry[];
+  allWords?: WordToken[];
 }
 
 export const audioTelemetry: AudioTelemetryData = rawTelemetry as AudioTelemetryData;
 
 /**
  * Group word-level captions into short kinetic pages with individual word tokens (`fromMs`, `toMs`).
- * 100% compatible with `@remotion/captions` `createTikTokStyleCaptions` signature.
  */
 export function buildWordHighlightPages(
   captions: Caption[],
@@ -119,8 +130,8 @@ export function buildWordHighlightPages(
 }
 
 /**
- * Get the exact measured duration in frames for a given scene index (0-based),
- * locked 100% to the synthesized voiceover length on the Cloud.
+ * Get the exact measured duration in frames for a given segment/scene index (0-based),
+ * locked 100% to the real synthesized voiceover length on the Cloud.
  */
 export function getSceneFrames(sceneIndex: number, fallbackFrames = 150): number {
   const val = audioTelemetry?.sceneFrames?.[sceneIndex];
@@ -128,8 +139,17 @@ export function getSceneFrames(sceneIndex: number, fallbackFrames = 150): number
 }
 
 /**
+ * Get the exact global start frame of segment `sceneIndex` on the master timeline.
+ * Ideal for building a seamless, continuous 1-take camera flow without hard scene cuts!
+ */
+export function getSegmentStartFrame(sceneIndex: number, fallbackStartFrame = 0): number {
+  const scene = audioTelemetry?.scenes?.[sceneIndex];
+  if (scene && typeof scene.startFrame === 'number') return scene.startFrame;
+  return fallbackStartFrame;
+}
+
+/**
  * Find the exact local frame within `sceneIndex` when the narrator speaks `keywordOrPhrase`.
- * Enables 100% frame-exact synchronization: when the voice says X, the visual illustrates X!
  */
 export function getWordFrame(
   sceneIndex: number,
@@ -153,7 +173,6 @@ export function getWordFrame(
   const targetParts = target.split(/\s+/).filter(Boolean);
   const words = scene.words;
 
-  // Match multi-word phrase first
   if (targetParts.length > 1) {
     for (let i = 0; i <= words.length - targetParts.length; i++) {
       let matched = true;
@@ -167,10 +186,22 @@ export function getWordFrame(
     }
   }
 
-  // Match single word
   const firstTarget = targetParts[0];
   const found = words.find((w) => normalize(w.word).includes(firstTarget));
   return found ? found.startFrame : fallbackFrame;
+}
+
+/**
+ * Find the exact GLOBAL frame across the entire continuous video when `keywordOrPhrase` is spoken in `sceneIndex`.
+ */
+export function getGlobalWordFrame(
+  sceneIndex: number,
+  keywordOrPhrase: string,
+  fallbackGlobalFrame = 0
+): number {
+  const startOffset = getSegmentStartFrame(sceneIndex, 0);
+  const localF = getWordFrame(sceneIndex, keywordOrPhrase, -1);
+  return localF >= 0 ? startOffset + localF : fallbackGlobalFrame;
 }
 
 /**
@@ -193,7 +224,7 @@ export function getWordProgress(
 }
 
 /**
- * Get @remotion/captions compatible Caption[] array for `sceneIndex`.
+ * Get Caption[] array for `sceneIndex`.
  */
 export function getSceneCaptions(sceneIndex: number): Caption[] {
   const scene = audioTelemetry?.scenes?.[sceneIndex];
@@ -207,8 +238,34 @@ export function getSceneCaptions(sceneIndex: number): Caption[] {
   }));
 }
 
+/**
+ * Automatically plays all synthesized voiceover segments (`voice-0.mp3`, `voice-1.mp3`, ...)
+ * at their exact global start frames plus clean background music (`bgm.mp3`),
+ * enabling a single continuous visual timeline without needing to split into `<Series>`!
+ */
+export const ContinuousAudioTrack: React.FC<{ bgmVolume?: number; voiceVolume?: number }> = ({
+  bgmVolume = 0.1,
+  voiceVolume = 1.0,
+}) => {
+  const scenes = audioTelemetry?.scenes || [];
+  return (
+    <>
+      <Audio src={staticFile('bgm.mp3')} volume={bgmVolume} />
+      {scenes.map((s) => (
+        <Sequence
+          key={s.sceneIndex}
+          from={s.startFrame}
+          durationInFrames={s.durationInFrames}
+        >
+          <Audio src={staticFile(`voice-${s.sceneIndex}.mp3`)} volume={voiceVolume} />
+        </Sequence>
+      ))}
+    </>
+  );
+};
+
 export interface WordHighlightCaptionsProps {
-  sceneIndex: number;
+  sceneIndex?: number;
   highlightColor?: string;
   activeBgColor?: string;
   textColor?: string;
@@ -220,7 +277,7 @@ export interface WordHighlightCaptionsProps {
 
 /**
  * Automatic Word-by-Word Karaoke Highlight Captions powered by Edge-TTS WordBoundary.
- * Highlights each individual spoken word at the exact millisecond it is pronounced.
+ * If `sceneIndex` is omitted, it automatically tracks the active narration segment across the global timeline!
  */
 export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({
   sceneIndex,
@@ -234,9 +291,36 @@ export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const currentTimeMs = (frame / fps) * 1000;
 
-  const captions = useMemo(() => getSceneCaptions(sceneIndex), [sceneIndex]);
+  // Resolve active scene and local frame (works both inside a local <Sequence> or on the global timeline!)
+  const resolved = useMemo(() => {
+    const scenes = audioTelemetry?.scenes || [];
+    if (typeof sceneIndex === 'number') {
+      return {
+        targetSceneIndex: sceneIndex,
+        localFrame: frame,
+      };
+    }
+    const activeScene = scenes.find(
+      (s) => frame >= s.startFrame && frame < s.endFrame
+    );
+    if (!activeScene) {
+      return { targetSceneIndex: -1, localFrame: 0 };
+    }
+    return {
+      targetSceneIndex: activeScene.sceneIndex,
+      localFrame: frame - activeScene.startFrame,
+    };
+  }, [sceneIndex, frame]);
+
+  const currentTimeMs = (resolved.localFrame / fps) * 1000;
+  const captions = useMemo(
+    () =>
+      resolved.targetSceneIndex >= 0
+        ? getSceneCaptions(resolved.targetSceneIndex)
+        : [],
+    [resolved.targetSceneIndex]
+  );
 
   const pages = useMemo(
     () => buildWordHighlightPages(captions, combineTokensWithinMilliseconds),
@@ -247,7 +331,7 @@ export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({
 
   const activePage = pages.find((p: TikTokPage, idx: number) => {
     const nextPage = pages[idx + 1];
-    const pageEndMs = nextPage ? nextPage.startMs : p.startMs + p.durationMs + 400;
+    const pageEndMs = nextPage ? nextPage.startMs : p.startMs + p.durationMs + 350;
     return currentTimeMs >= p.startMs && currentTimeMs < pageEndMs;
   });
 
@@ -255,7 +339,7 @@ export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({
 
   const pageEnterFrame = (activePage.startMs / 1000) * fps;
   const pagePop = spring({
-    frame: Math.max(0, frame - pageEnterFrame),
+    frame: Math.max(0, resolved.localFrame - pageEnterFrame),
     fps,
     config: { damping: 14, stiffness: 180, mass: 0.6 },
   });

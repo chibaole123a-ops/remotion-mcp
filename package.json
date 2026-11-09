@@ -1,0 +1,51 @@
+{
+  "name": "remotion-mcp-cloud",
+  "version": "2.0.0",
+  "description": "Full Remotion Ecosystem MCP Server for Gemini Web on Hugging Face Spaces",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "tunnel": "tsx src/start-with-tunnel.ts",
+    "studio": "remotion studio src/remotion/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@react-three/drei": "^9.121.4",
+    "@react-three/fiber": "^8.17.12",
+    "@remotion/animation-utils": "4.0.286",
+    "@remotion/bundler": "4.0.286",
+    "@remotion/captions": "4.0.286",
+    "@remotion/cli": "4.0.286",
+    "@remotion/gif": "4.0.286",
+    "@remotion/google-fonts": "4.0.286",
+    "@remotion/layout-utils": "4.0.286",
+    "@remotion/lottie": "4.0.286",
+    "@remotion/media-utils": "4.0.286",
+    "@remotion/motion-blur": "4.0.286",
+    "@remotion/noise": "4.0.286",
+    "@remotion/paths": "4.0.286",
+    "@remotion/preload": "4.0.286",
+    "@remotion/renderer": "4.0.286",
+    "@remotion/rounded-text-box": "4.0.286",
+    "@remotion/shapes": "4.0.286",
+    "@remotion/three": "4.0.286",
+    "@remotion/transitions": "4.0.286",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "4.0.286",
+    "three": "^0.172.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.172.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

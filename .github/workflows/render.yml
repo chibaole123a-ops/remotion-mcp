@@ -1,0 +1,123 @@
+name: Render Remotion Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      jobId:
+        description: 'Unique Job ID'
+        required: true
+        type: string
+      title:
+        description: 'Video Title'
+        required: true
+        type: string
+      durationInFrames:
+        description: 'Duration in frames'
+        required: true
+        type: string
+      fps:
+        description: 'Frames per second'
+        required: true
+        type: string
+      width:
+        description: 'Video width'
+        required: true
+        type: string
+      height:
+        description: 'Video height'
+        required: true
+        type: string
+      tsxCodeBase64:
+        description: 'Base64 encoded DynamicVideo.tsx code'
+        required: true
+        type: string
+      callbackUrl:
+        description: 'MCP Server webhook callback URL'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 with npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies (Full Remotion Ecosystem)
+        run: npm install
+
+      - name: Cache Remotion Chrome Headless Shell
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.remotion
+          key: remotion-browser-${{ runner.os }}-4.0.286
+
+      - name: Ensure Remotion Browser
+        run: npx remotion browser ensure
+
+      - name: Prepare DynamicVideo.tsx and meta.json
+        env:
+          TSX_B64: ${{ inputs.tsxCodeBase64 }}
+          DURATION: ${{ inputs.durationInFrames }}
+          FPS: ${{ inputs.fps }}
+          WIDTH: ${{ inputs.width }}
+          HEIGHT: ${{ inputs.height }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const code = Buffer.from(process.env.TSX_B64, "base64").toString("utf-8");
+            fs.writeFileSync("src/remotion/DynamicVideo.tsx", code, "utf-8");
+            fs.writeFileSync("src/remotion/meta.json", JSON.stringify({
+              durationInFrames: Number(process.env.DURATION),
+              fps: Number(process.env.FPS),
+              width: Number(process.env.WIDTH),
+              height: Number(process.env.HEIGHT)
+            }, null, 2), "utf-8");
+          '
+
+      - name: Render Video with Remotion
+        run: |
+          mkdir -p outputs
+          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --gl=angle --concurrency=100%
+
+      - name: Publish Video to GitHub Release (Free Unlimited CDN Link)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="videos-store"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Rendered Videos Storage" --notes "Automated storage for Remotion MCP rendered MP4 files"
+          fi
+          gh release upload "$TAG" "outputs/video-${{ inputs.jobId }}.mp4" --clobber
+
+      - name: Notify MCP Server Callback on Success
+        if: success() && inputs.callbackUrl != ''
+        env:
+          CALLBACK_URL: ${{ inputs.callbackUrl }}
+          JOB_ID: ${{ inputs.jobId }}
+          REPO: ${{ github.repository }}
+        run: |
+          VIDEO_URL="https://github.com/${REPO}/releases/download/videos-store/video-${JOB_ID}.mp4"
+          curl -s -X POST "$CALLBACK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"jobId\": \"${JOB_ID}\", \"status\": \"completed\", \"videoUrl\": \"${VIDEO_URL}\"}" || true
+
+      - name: Notify MCP Server Callback on Failure
+        if: failure() && inputs.callbackUrl != ''
+        env:
+          CALLBACK_URL: ${{ inputs.callbackUrl }}
+          JOB_ID: ${{ inputs.jobId }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST "$CALLBACK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"jobId\": \"${JOB_ID}\", \"status\": \"failed\", \"error\": \"Render failed on GitHub Actions. Details: ${RUN_URL}\"}" || true

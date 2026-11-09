@@ -31,6 +31,10 @@ on:
         description: 'Base64 encoded DynamicVideo.tsx code'
         required: true
         type: string
+      audioConfigBase64:
+        description: 'Base64 encoded JSON for AI Voiceover scenes & BGM mood'
+        required: false
+        type: string
       callbackUrl:
         description: 'MCP Server webhook callback URL'
         required: false
@@ -60,11 +64,22 @@ jobs:
             node_modules
           key: remotion-deps-${{ runner.os }}-${{ hashFiles('package.json') }}
 
-      - name: Install dependencies (Full Remotion Ecosystem)
-        run: npm install --legacy-peer-deps
+      - name: Install dependencies (Full Remotion Ecosystem + Edge-TTS)
+        run: |
+          npm install --legacy-peer-deps
+          pip install edge-tts --quiet || pip3 install edge-tts --break-system-packages --quiet
 
       - name: Ensure Remotion Browser
         run: npx remotion browser ensure
+
+      - name: Generate AI Voiceover (Edge-TTS) & Cinematic Background Music (BGM)
+        env:
+          AUDIO_B64: ${{ inputs.audioConfigBase64 }}
+          DURATION: ${{ inputs.durationInFrames }}
+          FPS: ${{ inputs.fps }}
+        run: |
+          mkdir -p public
+          node scripts/generate-studio-audio.mjs
 
       - name: Prepare DynamicVideo.tsx and meta.json
         env:
@@ -78,8 +93,9 @@ jobs:
             const fs = require("fs");
             const code = Buffer.from(process.env.TSX_B64, "base64").toString("utf-8");
             fs.writeFileSync("src/remotion/DynamicVideo.tsx", code, "utf-8");
+            const prevMeta = fs.existsSync("src/remotion/meta.json") ? JSON.parse(fs.readFileSync("src/remotion/meta.json", "utf-8")) : {};
             fs.writeFileSync("src/remotion/meta.json", JSON.stringify({
-              durationInFrames: Number(process.env.DURATION),
+              durationInFrames: prevMeta.computedDurationInFrames || Number(process.env.DURATION),
               fps: Number(process.env.FPS),
               width: Number(process.env.WIDTH),
               height: Number(process.env.HEIGHT)
@@ -87,11 +103,34 @@ jobs:
           '
 
       - name: Render Video with Remotion
+        id: render_step
         run: |
           mkdir -p outputs
-          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --gl=swangle --concurrency=2 --timeout=60000
+          set +e
+          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --gl=swangle --concurrency=2 --timeout=60000 2>&1 | tee render.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "Render failed with exit code $EXIT_CODE"
+            tail -n 60 render.log > outputs/error-${{ inputs.jobId }}.txt
+            exit $EXIT_CODE
+          fi
+
+      - name: Upload Error Log on Failure (For Gemini Self-Healing Diagnostics)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="videos-store"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Rendered Videos Storage" --notes "Automated storage for Remotion MCP rendered MP4 files"
+          fi
+          if [ -f "outputs/error-${{ inputs.jobId }}.txt" ]; then
+            gh release upload "$TAG" "outputs/error-${{ inputs.jobId }}.txt" --clobber || true
+          fi
 
       - name: Publish Video to GitHub Release (Free Unlimited CDN Link)
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -100,26 +139,3 @@ jobs:
             gh release create "$TAG" --title "Rendered Videos Storage" --notes "Automated storage for Remotion MCP rendered MP4 files"
           fi
           gh release upload "$TAG" "outputs/video-${{ inputs.jobId }}.mp4" --clobber
-
-      - name: Notify MCP Server Callback on Success
-        if: success() && inputs.callbackUrl != ''
-        env:
-          CALLBACK_URL: ${{ inputs.callbackUrl }}
-          JOB_ID: ${{ inputs.jobId }}
-          REPO: ${{ github.repository }}
-        run: |
-          VIDEO_URL="https://github.com/${REPO}/releases/download/videos-store/video-${JOB_ID}.mp4"
-          curl -s -X POST "$CALLBACK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{\"jobId\": \"${JOB_ID}\", \"status\": \"completed\", \"videoUrl\": \"${VIDEO_URL}\"}" || true
-
-      - name: Notify MCP Server Callback on Failure
-        if: failure() && inputs.callbackUrl != ''
-        env:
-          CALLBACK_URL: ${{ inputs.callbackUrl }}
-          JOB_ID: ${{ inputs.jobId }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          curl -s -X POST "$CALLBACK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{\"jobId\": \"${JOB_ID}\", \"status\": \"failed\", \"error\": \"Render failed on GitHub Actions. Details: ${RUN_URL}\"}" || true

@@ -244,13 +244,11 @@ export function getSceneCaptions(sceneIndex: number): Caption[] {
  * enabling a single continuous visual timeline without needing to split into `<Series>`!
  */
 export const ContinuousAudioTrack: React.FC<{ bgmVolume?: number; voiceVolume?: number }> = ({
-  bgmVolume = 0.1,
   voiceVolume = 1.0,
 }) => {
   const scenes = audioTelemetry?.scenes || [];
   return (
     <>
-      <Audio src={staticFile('bgm.mp3')} volume={bgmVolume} />
       {scenes.map((s) => (
         <Sequence
           key={s.sceneIndex}

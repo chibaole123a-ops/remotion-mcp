@@ -5,27 +5,25 @@ export interface Env {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.1)
-## (Continuous Camera Flow + Frame-Exact WordBoundary Sync + Crystal-Clear Audio + Full Ecosystem)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.2)
+## (Cohesive Documentary Storytelling + Butter-Smooth 60fps Motion + Frame-Exact WordBoundary Sync + Pure Voiceover)
 
-You have **100% creative freedom**. Act as a **World-Class Film Director, Motion Graphics Artist, and High-Retention Video Editor (Vox / Kurzgesagt / Lemmino / Apple Keynote)**.
+You have **100% creative freedom**. Act as a **World-Class Film Director, Documentary Storyteller, Motion Graphics Artist, and High-Retention Video Editor (Vox / Kurzgesagt / Lemmino / Apple Keynote)**.
 
 ---
 
-## I. CRITICAL DIRECTING RULES: HOW TO AVOID REPETITIVE "SLIDE-SHOW SCENES" & ACHIEVE 100% SYNC
+## I. CRITICAL DIRECTING RULES FOR SEAMLESS STORYTELLING & BUTTER-SMOOTH MOTION
 
-1. **NO Repetitive "Icon-on-Top + Box-Below" Slide Templates**:
-   - **NEVER** build 5–7 identical scenes (\`Scene0\`, \`Scene1\`, \`Scene2\`...) that all share the same layout (e.g. a top header badge + a centered circle icon + a bottom text card). That looks like a static PowerPoint slide deck!
-   - Instead, design a **Continuous Visual Journey (One-Shot Camera Canvas or Seamless Spatial Evolution)**:
-     - Every chapter/segment must have a **completely distinct visual architecture** and **visual metaphor** that directly illustrates what the narrator is saying:
-       - *Example*: Full-bleed real photography/AI art (\`<Img>\` with Ken Burns zoom & parallax depth), interactive 3D WebGL worlds (\`<ThreeCanvas>\`), animated SVG path drawing (\`evolvePath\`), split-screen live comparisons, timeline maps, glowing neural networks, or multi-stage visual transformations where elements morph continuously as the narrator speaks!
-2. **Continuous Intra-Segment Evolution ("Speak X -> Illustrate X in Real Time")**:
-   - Within a 6-to-8 second narration segment, the screen must **NOT** just pop in at frame 0 and sit static until the sentence ends!
-   - Break each spoken sentence into **2 to 4 visual beats** locked to the exact spoken words using \`getWordFrame(segmentIndex, 'từ khóa')\` and \`getWordProgress(segmentIndex, 'từ đầu', 'từ cuối', frame)\`:
-     - *Beat 1 (\`frame 0 -> cue1\`)*: Establish the visual environment / initial state as the narrator begins the sentence.
-     - *Beat 2 (\`cue1 -> cue2\`, e.g. \`const cue1 = getWordFrame(i, 'từ khóa 1', 35)\`)*: Camera pans/zooms or visual elements transform/draw to illustrate keyword 1 at the exact moment it is spoken!
-     - *Beat 3 (\`cue2 -> end\`, e.g. \`const cue2 = getWordFrame(i, 'từ khóa 2', 90)\`)*: Data counter, visual climax, or dramatic reveal unfolds right as the narrator delivers the punchline!
-3. **100% Exact Audio-Visual Duration Lock (\`./audio-sync\`)**:
+1. **Cohesive, Flowing Narrative Script (NO Choppy, Disconnected 1-Sentence Blurbs!)**:
+   - **NEVER** write 3–4 short, abrupt, disconnected sentences! A great video tells a **continuous, deeply engaging story** where each paragraph naturally bridges into the next using smooth narrative transitions (*"Nhưng điều kỳ diệu thực sự nằm ở...", "Để hiểu tại sao điều này xảy ra, hãy nhìn vào...", "Chính cơ chế đó đã dẫn đến..."*).
+   - Write rich, well-paced \`narrationSegments\` (typically 5 to 10 cohesive narrative chapters, each 2–3 sentences long) so the voiceover flows like a captivating documentary narrator.
+2. **Butter-Smooth Motion & Anti-Lag Rendering (Zero Stutter / Zero Jitter)**:
+   - **NEVER** use conditional unmount cuts like \`{progress < 1 && <Component />}\` that make elements abruptly vanish or pop in mid-scene! Instead, always keep elements mounted and smoothly crossfade their \`opacity\` and \`transform\` using \`interpolate(..., { easing: Easing.bezier(0.22, 1, 0.36, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })\` or physics-based \`spring({ frame, fps, config: { damping: 18, stiffness: 90, mass: 1 } })\`.
+   - **Avoid Heavy CSS Blur Repaints**: Do NOT animate large \`filter: blur(70px)\` orbs or 3D CSS \`perspective()\` grids every frame, as software rasterizers stutter on heavy CSS blurs. Use clean \`radial-gradient(...)\` backgrounds, crisp SVG vectors, and hardware-friendly \`transform: translate3d(...) scale(...)\`.
+   - **Seamless Cross-Scene Transitions**: Instead of abrupt hard cuts between \`<Sequence>\` blocks, overlap or cross-fade visual states smoothly (e.g., fade in the first 15 frames and fade out the last 15 frames of each chapter, or use \`<ContinuousAudioTrack />\` with a continuous camera canvas).
+3. **Pure, Crystal-Clear Voiceover (NO Synthetic BGM or Noisy SFX)**:
+   - Do **NOT** add synthetic background music (\`bgm.mp3\`) or noisy sound effects (\`@remotion/sfx\`). Let the Neural AI Voiceover (\`voice-0.mp3\`, \`voice-1.mp3\`... or \`<ContinuousAudioTrack />\`) be 100% pure and crystal-clear!
+4. **100% Exact Word-to-Visual Synchronization (\`./audio-sync\`)**:
    - Import from \`'./audio-sync'\`:
      \`\`\`tsx
      import {
@@ -39,13 +37,7 @@ You have **100% creative freedom**. Act as a **World-Class Film Director, Motion
        audioTelemetry,
      } from './audio-sync';
      \`\`\`
-   - On the Cloud, Python \`edge_tts\` + \`mutagen\` + \`npx remotion ffprobe\` measures the **exact millisecond duration** of every \`voice-i.mp3\` and every single word's \`WordBoundary\` timestamp, writing them into \`./audio-sync\`.
-   - You can either:
-     - **Option A (Continuous Global Canvas)**: Use \`<ContinuousAudioTrack bgmVolume={0.10} />\` and \`<WordHighlightCaptions />\` (with no \`sceneIndex\` prop!) at the root, and orchestrate camera movements & visual layers across the global timeline using \`getSegmentStartFrame(i)\`, \`getSceneFrames(i)\`, and \`getGlobalWordFrame(i, 'keyword')\`.
-     - **Option B (TransitionSeries / Sequence Flow)**: Use \`durationInFrames={getSceneFrames(i, fallback)}\` on every sequence so it is 100% locked to the real \`voice-i.mp3\` duration (never clipped, never out of sync!), with \`<Audio src={staticFile('voice-' + i + '.mp3')} volume={1} />\` and \`<WordHighlightCaptions sceneIndex={i} />\`.
-4. **Crystal-Clear Audio Mixing (Zero Audio Clutter / Noise)**:
-   - Keep background music subtle (\`volume={0.10}\` to \`0.12\` on \`<Audio src={staticFile('bgm.mp3')} />\`).
-   - Use \`@remotion/sfx\` (\`whoosh\`, \`ding\`, \`mouseClick\`, \`shutterModern\`) **sparingly and softly** (\`volume={0.14}\` to \`0.18\`), so sound effects never overpower or muddy the narrator's voice!
+   - Use \`getSceneFrames(i, fallback)\` for exact duration lock, \`getWordFrame(i, 'từ khóa', fallback)\` to trigger visual illustrations right as the narrator speaks that concept, and \`<WordHighlightCaptions sceneIndex={i} />\` (or \`<WordHighlightCaptions />\` at root) for smooth word-by-word highlighted subtitles.
 
 ---
 
@@ -59,12 +51,12 @@ You have **100% creative freedom**. Act as a **World-Class Film Director, Motion
    - \`getWordFrame(sceneIndex: number, keywordOrPhrase: string, fallbackFrame?: number): number\`
    - \`getGlobalWordFrame(sceneIndex: number, keywordOrPhrase: string, fallbackGlobalFrame?: number): number\`
    - \`getWordProgress(sceneIndex: number, startKeyword: string, endKeyword: string, localFrame: number): number\`
-   - \`<ContinuousAudioTrack bgmVolume?: number voiceVolume?: number />\`
+   - \`<ContinuousAudioTrack voiceVolume?: number />\`
    - \`<WordHighlightCaptions sceneIndex?: number highlightColor?: string activeBgColor?: string fontSize?: number bottomOffset?: number />\`
 3. **Captions & Audio Spectrum (\`@remotion/captions\`, \`@remotion/media-utils\`)**:
    \`createTikTokStyleCaptions\`, \`useAudioData\`, \`visualizeAudio\`, \`visualizeAudioWaveform\`.
-4. **Transitions, Light Leaks & SFX (\`@remotion/transitions\`, \`@remotion/light-leaks\`, \`@remotion/sfx\`)**:
-   \`TransitionSeries\`, \`linearTiming\`, \`springTiming\`, \`fade\`, \`slide\`, \`wipe\`, \`flip\`, \`clock-wipe\`, \`iris\`, \`LightLeak\`, \`whoosh\`, \`whip\`, \`pageTurn\`, \`mouseClick\`, \`shutterModern\`, \`ding\`.
+4. **Transitions & Light Leaks (\`@remotion/transitions\`, \`@remotion/light-leaks\`)**:
+   \`TransitionSeries\`, \`linearTiming\`, \`springTiming\`, \`fade\`, \`slide\`, \`wipe\`, \`flip\`, \`clock-wipe\`, \`iris\`, \`LightLeak\`.
 5. **2D Vector Shapes, SVG Paths & 3D WebGL (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)**:
    \`Circle\`, \`Rect\`, \`Triangle\`, \`Star\`, \`Polygon\`, \`Ellipse\`, \`Heart\`, \`Pie\`, \`evolvePath\`, \`interpolatePath\`, \`getPointAtLength\`, \`ThreeCanvas\`.
 6. **Motion Blur, Organic Noise, Google Fonts & Icons (\`@remotion/motion-blur\`, \`@remotion/noise\`, \`@remotion/google-fonts/BeVietnamPro\`, \`@remotion/layout-utils\`, \`lucide-react\`)**:

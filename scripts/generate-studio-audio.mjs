@@ -8,17 +8,16 @@ const defaultDurationFrames = Number(process.env.DURATION || 600);
 fs.mkdirSync('public', { recursive: true });
 fs.mkdirSync('src/remotion/public', { recursive: true });
 
-// Pure, Warm Low-Frequency Cinematic Ambient Pad (110Hz - 330Hz)
-// Engineered to sit gently underneath human speech (1kHz - 4kHz) with ZERO high-frequency buzz or noise!
-function generateCleanWarmPadWav(filePath, durationSec, mood) {
-  const sampleRate = 22050;
-  const numChannels = 2;
-  const numSamples = Math.floor(sampleRate * durationSec);
+// Generate a pure 100% SILENT WAV file (0 amplitude) so if any component references bgm.mp3 or an unused voice-X.mp3,
+// it never throws a 404 error and produces ZERO synthetic sound or noise!
+function generateSilentAudioFile(filePath, durationSec = 1) {
+  const sampleRate = 8000;
+  const numChannels = 1;
+  const numSamples = Math.max(800, Math.floor(sampleRate * durationSec));
   const bytesPerSample = 2;
   const dataSize = numSamples * numChannels * bytesPerSample;
-  const buffer = Buffer.alloc(44 + dataSize);
+  const buffer = Buffer.alloc(44 + dataSize); // Buffer.alloc is zero-filled (100% digital silence)
 
-  // RIFF WAVE Header
   buffer.write('RIFF', 0);
   buffer.writeUInt32LE(36 + dataSize, 4);
   buffer.write('WAVE', 8);
@@ -33,103 +32,7 @@ function generateCleanWarmPadWav(filePath, durationSec, mood) {
   buffer.write('data', 36);
   buffer.writeUInt32LE(dataSize, 40);
 
-  // Warm, low-register chords (strictly below 330Hz so it never clashes with voiceover)
-  const progressions = {
-    'epic-space': [
-      [110.0, 164.81, 220.0, 261.63], // Am
-      [87.31, 130.81, 174.61, 220.0], // F
-      [130.81, 164.81, 196.0, 261.63], // C
-      [98.0, 146.83, 196.0, 246.94], // G
-    ],
-    'cyber-tech': [
-      [110.0, 164.81, 220.0, 246.94], // Am9
-      [87.31, 130.81, 174.61, 207.65], // Fm/Ab
-      [98.0, 146.83, 196.0, 220.0], // G6
-      [82.41, 123.47, 164.81, 196.0], // Em
-    ],
-    'warm-inspiring': [
-      [130.81, 164.81, 196.0, 246.94], // Cmaj7
-      [98.0, 146.83, 196.0, 246.94], // G
-      [110.0, 164.81, 220.0, 261.63], // Am
-      [87.31, 130.81, 174.61, 220.0], // F
-    ],
-    'mystery-deep': [
-      [73.42, 110.0, 146.83, 174.61], // Dm
-      [65.41, 98.0, 130.81, 164.81], // C
-      [58.27, 87.31, 116.54, 146.83], // Bb
-      [55.0, 82.41, 110.0, 138.59], // A
-    ],
-    'upbeat-energetic': [
-      [130.81, 164.81, 196.0, 261.63], // C
-      [98.0, 146.83, 196.0, 246.94], // G
-      [110.0, 164.81, 220.0, 261.63], // Am
-      [87.31, 130.81, 174.61, 220.0], // F
-    ],
-  };
-
-  const chords = progressions[mood] || progressions['epic-space'];
-  const chordDurationSec = 6.0; // Very slow, seamless 6-second chord transitions
-
-  let offset = 44;
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    const fadeIn = Math.min(1, t / 2.5);
-    const fadeOut = Math.min(1, (durationSec - t) / 2.5);
-    const masterEnv = Math.max(0, Math.min(1, fadeIn * fadeOut));
-
-    const pos = t / chordDurationSec;
-    const idx1 = Math.floor(pos) % chords.length;
-    const idx2 = (idx1 + 1) % chords.length;
-    const frac = pos - Math.floor(pos);
-    // Smooth cosine crossfade over the last 2 seconds of each chord
-    const blend = frac > 0.65 ? 0.5 - 0.5 * Math.cos(Math.PI * ((frac - 0.65) / 0.35)) : 0;
-
-    const c1 = chords[idx1];
-    const c2 = chords[idx2];
-
-    const wave1 =
-      0.34 * Math.sin(2 * Math.PI * c1[0] * t) +
-      0.28 * Math.sin(2 * Math.PI * c1[1] * t) +
-      0.22 * Math.sin(2 * Math.PI * c1[2] * t) +
-      0.16 * Math.sin(2 * Math.PI * c1[3] * t);
-
-    const wave2 =
-      0.34 * Math.sin(2 * Math.PI * c2[0] * t) +
-      0.28 * Math.sin(2 * Math.PI * c2[1] * t) +
-      0.22 * Math.sin(2 * Math.PI * c2[2] * t) +
-      0.16 * Math.sin(2 * Math.PI * c2[3] * t);
-
-    const combined = wave1 * (1 - blend) + wave2 * blend;
-
-    // Gentle stereo breathing LFO
-    const lfoL = 0.8 + 0.2 * Math.sin(2 * Math.PI * 0.12 * t);
-    const lfoR = 0.8 + 0.2 * Math.cos(2 * Math.PI * 0.15 * t);
-
-    // Keep amplitude subtle (0.26) so voiceover is 100% crystal clear
-    const sampleL = Math.max(-1, Math.min(1, combined * lfoL * masterEnv * 0.26));
-    const sampleR = Math.max(-1, Math.min(1, combined * lfoR * masterEnv * 0.26));
-
-    buffer.writeInt16LE(Math.floor(sampleL * 32767), offset);
-    buffer.writeInt16LE(Math.floor(sampleR * 32767), offset + 2);
-    offset += 4;
-  }
-
   fs.writeFileSync(filePath, buffer);
-}
-
-// Convert WAV to MP3 using Remotion's bundled ffmpeg (never fails even if system ffmpeg is missing!)
-function writeCleanBgmFile(outMp3Path, durationSec, mood) {
-  const tmpWav = `${outMp3Path}.tmp.wav`;
-  generateCleanWarmPadWav(tmpWav, durationSec, mood);
-  try {
-    execSync(
-      `npx remotion ffmpeg -y -loglevel error -i "${tmpWav}" -codec:a libmp3lame -qscale:a 3 "${outMp3Path}"`,
-      { stdio: 'pipe' }
-    );
-    fs.unlinkSync(tmpWav);
-  } catch {
-    fs.renameSync(tmpWav, outMp3Path);
-  }
 }
 
 // Fallback proportional syllable/word splitter when raw text needs word-level timestamps
@@ -140,8 +43,8 @@ function buildProportionalWords(text, totalDurationMs, fpsVal) {
     .filter(Boolean);
   if (rawTokens.length === 0) return [];
 
-  const startPadMs = 60;
-  const usableMs = Math.max(300, totalDurationMs - startPadMs - 100);
+  const startPadMs = 50;
+  const usableMs = Math.max(300, totalDurationMs - startPadMs - 80);
   const weights = rawTokens.map((w) => {
     const cleanLen = w.replace(/[^\p{L}\p{N}]/gu, '').length || 1;
     const pauseBonus = /[,.;:!?]$/.test(w) ? 2.0 : 0;
@@ -168,7 +71,7 @@ function buildProportionalWords(text, totalDurationMs, fpsVal) {
   });
 }
 
-// Write Python helper script that calls edge_tts.Communicate AND measures exact MP3 duration via mutagen / WordBoundary!
+// Python helper script that calls edge_tts.Communicate AND measures exact MP3 duration via mutagen / WordBoundary
 const pyScriptPath = 'scripts/_edge_word_tts.py';
 fs.writeFileSync(
   pyScriptPath,
@@ -207,7 +110,6 @@ async def main():
                         "endMs": end_ms
                     })
 
-    # Measure exact MP3 duration via mutagen if available
     exact_dur_ms = max_end_ms
     try:
         from mutagen.mp3 import MP3
@@ -228,7 +130,6 @@ asyncio.run(main())
   'utf-8'
 );
 
-// Measure audio duration in seconds via Python/Edge-TTS metadata, Remotion ffprobe, or MP3 file size (24kbps = 3000 bytes/sec)
 function resolveExactAudioDurationSec(filePath, pyReportedDurationMs) {
   if (typeof pyReportedDurationMs === 'number' && pyReportedDurationMs > 300) {
     return pyReportedDurationMs / 1000;
@@ -242,7 +143,6 @@ function resolveExactAudioDurationSec(filePath, pyReportedDurationMs) {
     if (Number.isFinite(val) && val > 0.2) return val;
   } catch {}
 
-  // Fallback: Edge-TTS outputs 24kHz 48kbps CBR MP3 (exactly 6000 bytes per second!)
   try {
     const stat = fs.statSync(filePath);
     if (stat.size > 1000) {
@@ -253,7 +153,6 @@ function resolveExactAudioDurationSec(filePath, pyReportedDurationMs) {
   return 4.5;
 }
 
-// Normalize raw boundary events into guaranteed Word-by-Word tokens matching original punctuation
 function normalizeWordBoundaries(originalText, rawBoundaries, actualDurationMs, fpsVal) {
   const originalTokens = originalText
     .trim()
@@ -263,7 +162,6 @@ function normalizeWordBoundaries(originalText, rawBoundaries, actualDurationMs, 
 
   const wordEvents = (rawBoundaries || []).filter((b) => b.type === 'WordBoundary');
 
-  // If Edge-TTS emitted individual WordBoundary events for words
   if (wordEvents.length >= Math.max(1, Math.floor(originalTokens.length * 0.5))) {
     const expanded = [];
     for (const ev of wordEvents) {
@@ -317,7 +215,6 @@ function normalizeWordBoundaries(originalText, rawBoundaries, actualDurationMs, 
 let config = {
   voice: 'vi-VN-NamMinhNeural',
   rate: '+5%',
-  bgmMood: 'epic-space',
   narrationSegments: [],
 };
 
@@ -336,6 +233,10 @@ const rate = config.rate || '+5%';
 const scenesTelemetry = [];
 let cumulativeFrames = 0;
 
+// 1. Always create a 100% silent placeholder for bgm.mp3 (no synthetic background sound!)
+generateSilentAudioFile('public/bgm.mp3', 1);
+fs.copyFileSync('public/bgm.mp3', 'src/remotion/public/bgm.mp3');
+
 for (let i = 0; i < Math.max(segments.length, 15); i++) {
   const seg = segments[i];
   const text = typeof seg === 'string' ? seg : seg?.text || '';
@@ -344,7 +245,7 @@ for (let i = 0; i < Math.max(segments.length, 15); i++) {
   const rawJsonFile = `public/raw-words-${i}.json`;
 
   if (!text.trim()) {
-    writeCleanBgmFile(outFile, 1, 'epic-space');
+    generateSilentAudioFile(outFile, 0.5);
     fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
     continue;
   }
@@ -378,11 +279,10 @@ for (let i = 0; i < Math.max(segments.length, 15); i++) {
 
     const audioDurSec = resolveExactAudioDurationSec(outFile, pyDurationMs);
     const audioDurMs = Math.round(audioDurSec * 1000);
-    // Add 0.45s natural breathing pause after speech finishes
-    const sceneDurationFrames = Math.ceil((audioDurSec + 0.45) * fps);
+    // Tight, natural 0.25s pause between paragraphs so the story flows seamlessly
+    const sceneDurationFrames = Math.ceil((audioDurSec + 0.25) * fps);
     const words = normalizeWordBoundaries(text.trim(), rawBoundaries, audioDurMs, fps);
 
-    // Save per-scene @remotion/captions JSON
     fs.writeFileSync(`public/captions-${i}.json`, JSON.stringify(words, null, 2), 'utf-8');
     fs.copyFileSync(`public/captions-${i}.json`, `src/remotion/public/captions-${i}.json`);
 
@@ -406,14 +306,14 @@ for (let i = 0; i < Math.max(segments.length, 15); i++) {
     );
   } catch (err) {
     console.warn(`Edge-TTS fallback for ${outFile}:`, err);
-    writeCleanBgmFile(outFile, 3, 'epic-space');
+    generateSilentAudioFile(outFile, 2);
     fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
-    const fallbackFrames = Math.ceil(3.5 * fps);
-    const words = buildProportionalWords(text.trim(), 3000, fps);
+    const fallbackFrames = Math.ceil(3.0 * fps);
+    const words = buildProportionalWords(text.trim(), 2800, fps);
     scenesTelemetry.push({
       sceneIndex: i,
       text: text.trim(),
-      audioDurationSec: 3,
+      audioDurationSec: 2.8,
       durationInFrames: fallbackFrames,
       startFrame: cumulativeFrames,
       endFrame: cumulativeFrames + fallbackFrames,
@@ -435,20 +335,7 @@ if (fs.existsSync(pyScriptPath)) {
 
 const computedDurationInFrames =
   scenesTelemetry.length > 0 ? cumulativeFrames : defaultDurationFrames;
-const bgmDurationSeconds = Math.max(10, Math.ceil(computedDurationInFrames / fps) + 4);
 
-// 2. Generate Clean Warm Ambient Pad BGM (Zero high-frequency noise)
-try {
-  writeCleanBgmFile('public/bgm.mp3', bgmDurationSeconds, config.bgmMood || 'epic-space');
-  fs.copyFileSync('public/bgm.mp3', 'src/remotion/public/bgm.mp3');
-  console.log(
-    `✅ Generated Clean Warm Pad BGM (${config.bgmMood}) at public/bgm.mp3 (${bgmDurationSeconds}s)`
-  );
-} catch (err) {
-  console.error('Failed to generate BGM:', err);
-}
-
-// 3. Write complete Ground-Truth Audio & Word Telemetry JSON (including global timeline offsets)
 const allGlobalWords = scenesTelemetry.flatMap((s) => s.words);
 const telemetryPayload = {
   fps,
@@ -471,7 +358,6 @@ fs.writeFileSync(
 );
 fs.copyFileSync('public/audio-telemetry.json', 'src/remotion/public/audio-telemetry.json');
 
-// 4. Update src/remotion/meta.json with exact total frames
 try {
   const prevMeta = fs.existsSync('src/remotion/meta.json')
     ? JSON.parse(fs.readFileSync('src/remotion/meta.json', 'utf-8'))

@@ -506,17 +506,26 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const jobId = String(args.jobId || '');
         const start = Date.now();
         let ready = false;
+        let workflowInfo: any = null;
 
-        while (Date.now() - start < 18000) {
+        while (Date.now() - start < 15000) {
           ready = await isVideoReadyOnGitHub(env, jobId);
           if (ready) break;
+          workflowInfo = await inspectGitHubWorkflowRun(env, jobId);
+          if (workflowInfo?.conclusion === 'failure' || workflowInfo?.conclusion === 'cancelled') {
+            break;
+          }
           await new Promise((r) => setTimeout(r, 3000));
         }
 
         const watchPageUrl = `${baseUrl}/watch/${jobId}${secretQuery}`;
         const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretQuery}`;
         const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
-        const workflowInfo = !ready ? await inspectGitHubWorkflowRun(env, jobId) : undefined;
+        if (!ready && !workflowInfo) {
+          workflowInfo = await inspectGitHubWorkflowRun(env, jobId);
+        }
+
+        const activeStep = workflowInfo?.steps?.find((s: any) => s.status === 'in_progress')?.name;
 
         return {
           jsonrpc: '2.0',
@@ -533,6 +542,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       : workflowInfo?.conclusion === 'failure'
                       ? 'failed_on_github_actions'
                       : 'rendering_on_github_actions',
+                    currentCloudStep: activeStep || workflowInfo?.status,
                     watchPageUrl,
                     streamUrl,
                     videoUrl,
@@ -540,8 +550,8 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     message: ready
                       ? 'Video is completed and ready to watch inline or download!'
                       : workflowInfo?.conclusion === 'failure'
-                      ? 'The render job failed on GitHub Actions. Check cloudRunnerDiagnostics.steps to see which step failed, fix the tsxCode, and call render_remotion_video again.'
-                      : 'Still rendering on GitHub Actions Cloud. You can call check_render_status again or open watchPageUrl.',
+                      ? 'CRITICAL: The render job FAILED on GitHub Actions. Do NOT poll check_render_status anymore for this jobId. Inspect cloudRunnerDiagnostics.steps, fix the bug in your tsxCode, and call render_remotion_video with a new fixed version immediately!'
+                      : `Job is actively running on GitHub Actions Cloud (current step: "${activeStep || 'rendering'}"). IMPORTANT FOR GEMINI: Do NOT loop check_render_status repeatedly if this is a long video — present watchPageUrl and videoUrl to the user now so they don't have to wait in chat; the watchPageUrl automatically tracks live progress and plays the video as soon as it finishes!`,
                   },
                   null,
                   2
@@ -650,6 +660,36 @@ export default {
       const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
       if (!ready) {
+        const wf = await inspectGitHubWorkflowRun(env, jobId);
+        const isFailed = wf?.conclusion === 'failure' || wf?.conclusion === 'cancelled';
+        const activeStep = wf?.steps?.find((s: any) => s.status === 'in_progress')?.name || 'Đang xử lý khung hình...';
+
+        if (isFailed) {
+          return new Response(
+            `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Render Thất Bại (#${jobId})</title>
+  <style>
+    body { background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
+    .card { background: #1e1b2e; border: 1px solid #ef4444; padding: 28px; border-radius: 14px; max-width: 560px; }
+    h2 { color: #f87171; margin-top: 0; }
+    a { color: #38bdf8; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>⚠️ Bản render #${jobId} gặp lỗi trên Cloud</h2>
+    <p>Tiến trình đã tự động dừng (không lặp vô hạn). Hãy bảo Gemini kiểm tra lỗi và gửi bản render mới.</p>
+    <p><a href="${wf?.htmlUrl || `https://github.com/${repo}/actions`}" target="_blank">Xem chi tiết nhật ký lỗi trên GitHub Actions ↗</a></p>
+  </div>
+</body>
+</html>`,
+            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
+        }
+
         return new Response(
           `<!DOCTYPE html>
 <html lang="vi">
@@ -661,14 +701,16 @@ export default {
     body { background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
     .loader { width: 48px; height: 48px; border: 5px solid #1e293b; border-bottom-color: #38bdf8; border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite; margin-bottom: 20px; }
     @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .step-badge { background: #1e293b; border: 1px solid #334155; color: #38bdf8; padding: 8px 16px; border-radius: 999px; font-weight: 600; margin: 10px 0; display: inline-block; }
     a { color: #38bdf8; }
   </style>
 </head>
 <body>
   <span class="loader"></span>
   <h2>⏳ Đang render video trên GitHub Actions Cloud (16GB RAM)...</h2>
-  <p>Mã công việc: <strong>#${jobId}</strong> — Trang này tự động kiểm tra mỗi 12 giây và phát video ngay khi hoàn tất!</p>
-  <p><a href="https://github.com/${repo}/actions" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
+  <div class="step-badge">⚡ Bước hiện tại: ${activeStep}</div>
+  <p>Mã công việc: <strong>#${jobId}</strong> — Trang này tự động kiểm tra mỗi 12 giây (hỗ trợ cả video dài) và sẽ tự phát video ngay khi hoàn tất!</p>
+  <p><a href="${wf?.htmlUrl || `https://github.com/${repo}/actions`}" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
 </body>
 </html>`,
           { headers: { 'Content-Type': 'text/html; charset=utf-8' } }

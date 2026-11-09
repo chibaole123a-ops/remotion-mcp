@@ -42,6 +42,7 @@ permissions:
 jobs:
   render:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -88,7 +89,7 @@ jobs:
       - name: Render Video with Remotion
         run: |
           mkdir -p outputs
-          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --gl=swangle --concurrency=2
+          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --gl=swangle --concurrency=2 --timeout=60000
 
       - name: Publish Video to GitHub Release (Free Unlimited CDN Link)
         env:

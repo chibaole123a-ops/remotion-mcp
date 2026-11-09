@@ -5,14 +5,32 @@ export interface Env {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 (LATEST) — CREATIVE STUDIO & FULL ECOSYSTEM REFERENCE
+# REMOTION v4.0.541 — MASTER CREATIVE DIRECTOR, VIRAL CONTENT CREATOR & FULL ECOSYSTEM REFERENCE
 
-You have **100% creative autonomy** as a master Motion Director, Cinematographer, and Creative Technologist.
-Adapt your visual style, color theory, pacing, spatial composition, typography, and motion choreography dynamically to fit the unique mood, brand, and narrative of each user request — never rely on rigid or repetitive templates.
+You have **100% creative autonomy**. When the user gives you a topic (even a single short phrase), do NOT jump straight into writing short, generic code.
+First, think deeply as a **World-Class Film Director, High-Retention Video Editor, and Viral Content Strategist (YouTube / TikTok / Reels / Documentary)**.
 
 ---
 
-## I. INSTALLED PACKAGES & EXACT API SIGNATURES (Remotion v4.0.541)
+## I. CREATIVE DIRECTOR & CONTENT CREATOR MINDSET (ADAPTIVE & UNRESTRICTED)
+
+### 1. Story-First Duration & Multi-Chapter Depth (No Artificial Short Limits!)
+- **Let the Story Dictate the Duration**: Never default to a short 5–12s clip unless the user explicitly asks for a brief bumper/intro. When given a rich topic (e.g., space exploration, history, AI, finance, science, storytelling, brand documentary), design a **complete, deeply satisfying narrative journey** with as many acts, chapters, and scenes as the story truly deserves.
+- **Smart Scalable Code Architecture for Long Videos**: To build rich multi-chapter videos (whether 30s, 60s, 2 minutes, or longer with 8–20+ scenes) cleanly within a single file, combine bespoke hero scenes with **data-driven scene arrays and modular visual engines** (where each chapter object defines its own title, narrative beats, metrics, color accent, visual archetype, and duration) rendered through \`<TransitionSeries>\` or \`<Series>\`.
+
+### 2. Audience Retention Psychology & Viral Storytelling
+- **The 0–3s Pattern Interrupt (The Hook)**: Immediately capture visual and auditory attention on Frame 0. Open a **Curiosity Gap (Open Loop)** — a compelling question, mind-blowing stat, or dramatic visual reveal that compels the viewer to keep watching.
+- **The Heartbeat Pacing Technique**: Alternate naturally between high-energy kinetic sequences (fast visual shifts, bold numbers, snappy spring reveals) and atmospheric cinematic moments (deep space/3D vistas, smooth camera drift, emotional quotes).
+- **Visual Micro-Shifts**: Keep the screen alive. Introduce subtle camera motion (slow dolly zoom, parallax pan, \`noise2D\` organic float), secondary callouts, progress indicators, or dynamic visual payoffs every few seconds so the viewer's eye is perpetually engaged.
+- **Seamless Loop / Strong Payoff**: End with an unforgettable climax, actionable takeaway, or a seamless visual/narrative loop back to the opening hook to maximize rewatch rate and channel growth.
+
+### 3. Platform & Channel Awareness
+- **Vertical Short-Form (\`1080x1920\` TikTok / Reels / Shorts)**: Keep key typography and focal visuals away from platform UI dead-zones (right-side action buttons and bottom caption area). Use bold keyword highlighting (contrasting color/scale on trigger words) and punchy pacing.
+- **Widescreen Long-Form / Documentary (\`1920x1080\` or \`3840x2160\` YouTube)**: Use cinematic chapter cards, rich data visualizations (animated timelines, evolving SVG paths, gauges, comparison grids, 3D models), and layered atmospheric depth (inspired by Kurzgesagt, Vox, Lemmino, Apple, MagnatesMedia).
+
+---
+
+## II. INSTALLED PACKAGES & EXACT API SIGNATURES (Remotion v4.0.541)
 
 ### 1. Core Frame & Physics Engine (\`remotion\`)
 - \`useCurrentFrame()\`, \`useVideoConfig()\` -> \`{ width, height, fps, durationInFrames }\`
@@ -36,18 +54,17 @@ Adapt your visual style, color theory, pacing, spatial composition, typography, 
 - Note: Total duration of a \`TransitionSeries\` equals the sum of sequence durations minus the sum of transition durations.
 
 ### 3. Built-in Sound Effects — Zero External Assets Needed (\`@remotion/sfx\`)
-- \`import { whoosh, whip, pageTurn, switchSfx, mouseClick, shutterModern, shutterOld, ding, vineBoom, windowsXpError } from '@remotion/sfx';\`
-  *(Note: standard exports include \`whoosh\`, \`whip\`, \`pageTurn\`, \`mouseClick\`, \`shutterModern\`, \`shutterOld\`, \`ding\`, \`vineBoom\`, \`windowsXpError\`)*
-- Usage: Wrap in \`<Sequence from={triggerFrame}><Audio src={whoosh} volume={0.35} /></Sequence>\` to synchronize audio with transitions, UI pops, reveals, and impacts.
+- \`import { whoosh, whip, pageTurn, mouseClick, shutterModern, shutterOld, ding, vineBoom, windowsXpError } from '@remotion/sfx';\`
+- Usage: Wrap in \`<Sequence from={triggerFrame}><Audio src={whoosh} volume={0.35} /></Sequence>\` to synchronize audio with scene transitions, chapter reveals, data pops, and dramatic impacts.
 
 ### 4. Cinematic Light Leaks (\`@remotion/light-leaks\`)
 - \`import { LightLeak } from '@remotion/light-leaks';\`
-- Usage: \`<LightLeak seed={1} hueShift={120} durationInFrames={45} />\` (Great inside \`TransitionSeries.Overlay\` or layered with \`mixBlendMode: 'screen'\`).
+- Usage: \`<LightLeak seed={1} hueShift={120} durationInFrames={45} />\` (Supported on Cloud via \`--gl=swangle\`).
 
 ### 5. 2D Vector Shapes, SVG Path Evolution & Rounded Text (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/rounded-text-box\`)
 - \`import { Circle, Rect, Triangle, Star, Polygon, Ellipse, Heart, Pie } from '@remotion/shapes';\`
 - \`import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath } from '@remotion/paths';\`
-  - \`const strokeProps = evolvePath(progress0to1, svgPathString);\` -> spread \`{...strokeProps}\` onto an \`<svg><path /></svg>\` for self-drawing line animations.
+  - \`const strokeProps = evolvePath(progress0to1, svgPathString);\` -> spread \`{...strokeProps}\` onto an \`<svg><path /></svg>\` for self-drawing trajectories, constellations, charts, and timelines.
 - \`import { createRoundedTextBox } from '@remotion/rounded-text-box';\`
 
 ### 6. 3D WebGL & Three.js (\`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)
@@ -56,37 +73,29 @@ Adapt your visual style, color theory, pacing, spatial composition, typography, 
 - Always pass \`width={width} height={height}\` from \`useVideoConfig()\` to \`<ThreeCanvas width={width} height={height}>\`. Drive 3D object rotations/positions deterministically using \`useCurrentFrame()\`.
 
 ### 7. Organic Noise, Motion Blur & Transform Helpers (\`@remotion/noise\`, \`@remotion/motion-blur\`, \`@remotion/animation-utils\`)
-- \`import { noise2D, noise3D, noise4D } from '@remotion/noise';\` -> Use for organic camera shake, floating elements, wave fields, and natural movement.
+- \`import { noise2D, noise3D, noise4D } from '@remotion/noise';\` -> Use for organic camera drift, floating space/particles, wave fields, and natural movement.
 - \`import { Trail, CameraMotionBlur } from '@remotion/motion-blur';\`
 - \`import { makeTransform, scale, translate, rotate, skew } from '@remotion/animation-utils';\`
 
 ### 8. Typography, Google Fonts & Layout Measurement (\`@remotion/google-fonts\`, \`@remotion/layout-utils\`)
-- Any Google Font can be loaded:
-  - \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily } = loadFont();\` (Best for Vietnamese diacritics)
-  - Other popular fonts: \`@remotion/google-fonts/Inter\`, \`@remotion/google-fonts/Montserrat\`, \`@remotion/google-fonts/PlayfairDisplay\`, \`@remotion/google-fonts/SpaceGrotesk\`, \`@remotion/google-fonts/JetBrainsMono\`, \`@remotion/google-fonts/PlusJakartaSans\`.
+- Load fonts with clean weight subsets to optimize loading speed:
+  - \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily } = loadFont('normal', { weights: ['400', '600', '700', '800'], subsets: ['vietnamese', 'latin'], ignoreTooManyRequestsWarning: true });\`
+  - Other fonts: \`@remotion/google-fonts/Inter\`, \`@remotion/google-fonts/Montserrat\`, \`@remotion/google-fonts/PlayfairDisplay\`, \`@remotion/google-fonts/SpaceGrotesk\`, \`@remotion/google-fonts/JetBrainsMono\`, \`@remotion/google-fonts/PlusJakartaSans\`.
 - \`import { fitText, measureText, fillTextBox } from '@remotion/layout-utils';\`
 
 ### 9. Vector Icons (\`lucide-react\`)
-- \`import { Sparkles, Rocket, Zap, Globe, Shield, Cpu, Layers, TrendingUp, CheckCircle2, ArrowRight, Play, Star, Award, Flame, Heart, Code2, BarChart3, Lock, Smartphone, Cloud } from 'lucide-react';\`
+- \`import { Sparkles, Rocket, Zap, Globe, Shield, Cpu, Layers, TrendingUp, CheckCircle2, ArrowRight, Play, Star, Award, Flame, Heart, Code2, BarChart3, Lock, Smartphone, Cloud, Compass, Orbit, Atom, Eye, Brain, Telescope } from 'lucide-react';\`
 
 ### 10. Captions, Media Utils, Rive, Lottie & Skia
 - \`@remotion/captions\`, \`@remotion/media-utils\`, \`@remotion/lottie\`, \`@remotion/rive\`, \`@remotion/gif\`, \`@remotion/skia\`
 
 ---
 
-## II. DETERMINISTIC ENGINE TRUTHS (CRITICAL FOR CLOUD PARALLEL RENDERING)
+## III. DETERMINISTIC ENGINE TRUTHS (CRITICAL FOR CLOUD PARALLEL RENDERING)
 1. **Export Requirement**: Your code MUST export \`export const DynamicVideo: React.FC = () => { ... };\`.
-2. **Frame-Driven Only**: Never use CSS \`transition\`, CSS \`animation\`, \`@keyframes\`, \`setTimeout\`, or \`requestAnimationFrame\`. Because GitHub Actions renders frames in parallel across multiple CPU threads, non-frame-driven animations will flicker or fail.
-3. **Deterministic Randomness**: Never use \`Math.random()\` inside render logic; always use \`random('unique-seed-' + index)\` from \`remotion\`.
-4. **Safe Interpolation**: Always clamp \`interpolate()\` ranges (\`extrapolateLeft: 'clamp', extrapolateRight: 'clamp'\`) and ensure \`inputRange\` is strictly monotonically increasing (e.g. \`[0, 30]\`).
-
----
-
-## III. ELEVATING CREATIVE & CINEMATIC QUALITY (GUIDELINES FOR YOUR INTELLIGENCE)
-- **Visual Richness & Depth**: Combine foreground, midground, and background elements thoughtfully. Experiment with lighting, atmospheric gradients, subtle grid/dot textures, glass/matte surfaces, SVG geometry, or 3D space depending on the story.
-- **Choreographed Motion**: Stagger element entrances by a few frames so the viewer's eye is guided naturally across the composition. Combine \`spring()\` physics for snappy focal points with continuous subtle camera drift or \`noise2D\` float so scenes feel alive.
-- **Audio-Visual Harmony**: Enhance visual transitions and key accents with \`@remotion/sfx\` (\`<Audio src={whoosh} volume={0.3} />\`, \`ding\`, \`mouseClick\`, \`whip\`) timed via \`<Sequence from={...}>\`.
-- **Legibility & Framing**: Respect composition safe areas, maintain clear typographic hierarchy, and use Vietnamese-ready fonts (like \`BeVietnamPro\`, \`Montserrat\`, or \`PlusJakartaSans\`) when rendering Vietnamese text.
+2. **Frame-Driven Only**: Never use CSS \`transition\`, CSS \`animation\`, \`@keyframes\`, \`setTimeout\`, or \`requestAnimationFrame\`.
+3. **Deterministic Randomness**: Never use \`Math.random()\`; always use \`random('unique-seed-' + index)\` from \`remotion\`.
+4. **Safe Interpolation**: Always clamp \`interpolate()\` ranges (\`extrapolateLeft: 'clamp', extrapolateRight: 'clamp'\`) with strictly increasing \`inputRange\`.
 `;
 
 function toBase64Utf8(str: string): string {
@@ -233,7 +242,7 @@ const TOOLS = [
   {
     name: 'get_remotion_ecosystem_guide',
     description:
-      'Get the complete Remotion v4.0.541 API reference, installed package signatures (@remotion/transitions, @remotion/sfx, @remotion/light-leaks, @remotion/shapes, @remotion/paths, @remotion/three, @remotion/noise, @remotion/motion-blur, @remotion/google-fonts, lucide-react), and creative cinematography guidelines.',
+      'Get the complete Remotion v4.0.541 API reference, Creative Director & Viral Content Creator mindset (storytelling, retention pacing, multi-chapter architecture), and installed package signatures.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -241,8 +250,8 @@ const TOOLS = [
   },
   {
     name: 'render_remotion_video',
-    description: `Render a custom Remotion video on GitHub Actions Cloud (4 vCPU, 16GB RAM, Remotion v4.0.541 full ecosystem).
-You have complete creative freedom to design unique layouts, narratives, 2D/3D visuals, kinetic typography, and synchronized @remotion/sfx audio.
+    description: `Render a custom Remotion video on GitHub Actions Cloud (4 vCPU, 16GB RAM, Remotion v4.0.541 full ecosystem, WebGL2 swangle enabled).
+Think as a Master Creative Director & Content Creator: decide the narrative arc, chapter count, visual style, and durationInFrames freely based on the depth of the topic so the story feels complete and deeply engaging.
 ${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
@@ -250,7 +259,6 @@ ${ECOSYSTEM_DOCS}`,
         title: {
           type: 'string',
           description: 'Title of the video project',
-          default: 'Remotion Studio Video',
         },
         tsxCode: {
           type: 'string',
@@ -259,32 +267,32 @@ ${ECOSYSTEM_DOCS}`,
         },
         durationInFrames: {
           type: 'number',
-          description: 'Total frames (e.g., 150 = 5s at 30fps, 300 = 10s at 30fps, up to 36000)',
-          default: 150,
+          description:
+            'Total frames of the video (`seconds * fps`). Determined freely by you (the Director) to match the full narrative arc, chapter count, and emotional pacing of the story (supports up to 36000 frames).',
         },
         fps: {
           type: 'number',
-          description: 'Frames per second (24 for cinematic, 30 for standard, 60 for ultra-smooth)',
+          description: 'Frames per second (24 for cinematic film, 30 for standard, 60 for ultra-smooth)',
           default: 30,
         },
         width: {
           type: 'number',
-          description: 'Video width in pixels (e.g. 1920 for 16:9, 1080 for 9:16 vertical, 3840 for 4K)',
+          description: 'Video width in pixels (1920 for 16:9 YouTube, 1080 for 9:16 TikTok/Shorts, 3840 for 4K)',
           default: 1920,
         },
         height: {
           type: 'number',
-          description: 'Video height in pixels (e.g. 1080 for 16:9, 1920 for 9:16 vertical, 2160 for 4K)',
+          description: 'Video height in pixels (1080 for 16:9 YouTube, 1920 for 9:16 TikTok/Shorts, 2160 for 4K)',
           default: 1080,
         },
       },
-      required: ['tsxCode'],
+      required: ['tsxCode', 'durationInFrames'],
     },
   },
   {
     name: 'render_batch_videos',
     description:
-      'Dispatch up to 20 creative Remotion videos in parallel to GitHub Actions Cloud (each video runs on its own dedicated 4 vCPU, 16GB RAM Cloud runner simultaneously).',
+      'Dispatch up to 20 creative Remotion videos in parallel to GitHub Actions Cloud (each video runs on its own dedicated 4 vCPU, 16GB RAM Cloud runner simultaneously). Ideal for multi-episode series or channel batch production.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -295,12 +303,15 @@ ${ECOSYSTEM_DOCS}`,
             properties: {
               title: { type: 'string' },
               tsxCode: { type: 'string' },
-              durationInFrames: { type: 'number', default: 150 },
+              durationInFrames: {
+                type: 'number',
+                description: 'Total frames determined by the narrative depth of this episode/video.',
+              },
               fps: { type: 'number', default: 30 },
               width: { type: 'number', default: 1920 },
               height: { type: 'number', default: 1080 },
             },
-            required: ['title', 'tsxCode'],
+            required: ['title', 'tsxCode', 'durationInFrames'],
           },
         },
       },
@@ -337,7 +348,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         },
         serverInfo: {
           name: 'remotion-cloudflare-github-mcp',
-          version: '2.2.0',
+          version: '3.0.0',
         },
       },
     };
@@ -395,7 +406,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         const jobId = randomJobId();
         const title = args.title || 'Remotion Video';
-        const durationInFrames = Number(args.durationInFrames || 150);
+        const durationInFrames = Number(args.durationInFrames || 600);
         const fps = Number(args.fps || 30);
         const width = Number(args.width || 1920);
         const height = Number(args.height || 1080);
@@ -427,7 +438,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     status: 'dispatched_to_github_actions_cloud',
                     jobId,
                     title,
-                    specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames)`,
+                    specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames / ${(durationInFrames / fps).toFixed(1)}s)`,
                     watchPageUrl,
                     streamUrl,
                     directDownloadUrl: videoUrl,
@@ -455,7 +466,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
             jobId,
             v.title || 'Batch Video',
             v.tsxCode,
-            Number(v.durationInFrames || 150),
+            Number(v.durationInFrames || 600),
             Number(v.fps || 30),
             Number(v.width || 1920),
             Number(v.height || 1080)
@@ -719,7 +730,7 @@ export default {
         }
       }
 
-      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '2.2.0' }), {
+      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '3.0.0' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -728,7 +739,7 @@ export default {
     return new Response(
       JSON.stringify({
         status: 'online_24_7',
-        version: '2.2.0 (Creative Autonomy + Full Remotion 4.0.541 API Reference)',
+        version: '3.0.0 (Creative Director & Channel Growth Intelligence + Remotion 4.0.541)',
         platform: 'Cloudflare Workers + GitHub Actions (16GB RAM Cloud)',
         repository: repo,
         security: env.MCP_SECRET ? 'PROTECTED 🔒' : 'OPEN',

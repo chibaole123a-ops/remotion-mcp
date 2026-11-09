@@ -107,7 +107,7 @@ jobs:
         run: |
           mkdir -p outputs
           set +e
-          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --gl=swangle --concurrency=2 --timeout=60000 2>&1 | tee render.log
+          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --public-dir=public --gl=swangle --concurrency=2 --timeout=60000 2>&1 | tee render.log
           EXIT_CODE=${PIPESTATUS[0]}
           set -e
           if [ $EXIT_CODE -ne 0 ]; then

@@ -46,20 +46,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 22 with npm cache
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
-      - name: Install dependencies (Full Remotion Ecosystem)
-        run: npm install
-
-      - name: Cache Remotion Chrome Headless Shell
+      - name: Cache node_modules and Remotion Browser
         uses: actions/cache@v4
         with:
-          path: node_modules/.remotion
-          key: remotion-browser-${{ runner.os }}-4.0.286
+          path: |
+            ~/.npm
+            node_modules
+          key: remotion-deps-${{ runner.os }}-${{ hashFiles('package.json') }}
+
+      - name: Install dependencies (Full Remotion Ecosystem)
+        run: npm install --legacy-peer-deps
 
       - name: Ensure Remotion Browser
         run: npx remotion browser ensure

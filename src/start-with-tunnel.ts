@@ -18,6 +18,7 @@ if (!process.env.MCP_SECRET) {
 
 async function main() {
   const { startApp } = await import('./server.js');
+  startApp();
   const port = Number(process.env.PORT || 3456);
 
   console.log('⏳ Đang khởi tạo đường hầm HTTPS bảo mật (Cloudflare Tunnel)...');

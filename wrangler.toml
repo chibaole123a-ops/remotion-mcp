@@ -1,0 +1,6 @@
+name = "remotion-mcp"
+main = "src/cloudflare-worker.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+GITHUB_REPO = "chibaole123a-ops/remotion-mcp"

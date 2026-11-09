@@ -5,17 +5,88 @@ export interface Env {
 }
 
 const ECOSYSTEM_DOCS = `
-INSTALLED REMOTION v4.0.541 (LATEST) FULL ECOSYSTEM ON GITHUB ACTIONS CLOUD (4 vCPU, 16GB RAM):
-1. Core: 'remotion' (AbsoluteFill, Sequence, Series, Loop, Freeze, Audio, OffthreadVideo, Img, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring, Easing, random)
-2. Transitions: '@remotion/transitions' (TransitionSeries, linearTiming, springTiming) + presentations: '@remotion/transitions/fade', '@remotion/transitions/slide', '@remotion/transitions/wipe', '@remotion/transitions/flip', '@remotion/transitions/clock-wipe', '@remotion/transitions/iris'
-3. Light Leaks & Cinematic Overlays: '@remotion/light-leaks' (LightLeak)
-4. Built-in Sound Effects (SFX - No external audio file needed!): '@remotion/sfx' (whoosh, whip, pageTurn, switch, mouseClick, shutterModern, shutterOld, ding,vineBoom, windowsXpError) -> use with <Audio src={whoosh} />!
-5. 2D Shapes, SVG & Skia: '@remotion/shapes' (Circle, Rect, Triangle, Star, Polygon, Ellipse, Heart, Pie), '@remotion/paths' (evolvePath, getLength, interpolatePath), '@remotion/rounded-text-box' (createRoundedTextBox), '@remotion/skia' (SkiaCanvas)
-6. 3D Graphics: '@remotion/three' (ThreeCanvas) + 'three' + '@react-three/fiber' + '@react-three/drei'
-7. Effects & Motion: '@remotion/motion-blur' (Trail, CameraMotionBlur), '@remotion/noise' (noise2D, noise3D, noise4D), '@remotion/animation-utils' (makeTransform, scale, translate, rotate)
-8. Typography & Fonts: '@remotion/google-fonts/BeVietnamPro', '@remotion/google-fonts/Inter', '@remotion/google-fonts/Montserrat', '@remotion/google-fonts/Roboto', '@remotion/google-fonts/PlayfairDisplay', '@remotion/layout-utils' (fitText, measureText, fillTextBox)
-9. Media, Captions, Rive & Lottie: '@remotion/captions', '@remotion/media-utils', '@remotion/gif' (Gif), '@remotion/lottie' (Lottie), '@remotion/rive' (RemotionRiveCanvas)
-10. Icons: 'lucide-react' (Sparkles, Zap, Rocket, Check, Star, Play, Globe, Shield, Cpu, Layers, etc.)
+# REMOTION v4.0.541 (LATEST) — CREATIVE STUDIO & FULL ECOSYSTEM REFERENCE
+
+You have **100% creative autonomy** as a master Motion Director, Cinematographer, and Creative Technologist.
+Adapt your visual style, color theory, pacing, spatial composition, typography, and motion choreography dynamically to fit the unique mood, brand, and narrative of each user request — never rely on rigid or repetitive templates.
+
+---
+
+## I. INSTALLED PACKAGES & EXACT API SIGNATURES (Remotion v4.0.541)
+
+### 1. Core Frame & Physics Engine (\`remotion\`)
+- \`useCurrentFrame()\`, \`useVideoConfig()\` -> \`{ width, height, fps, durationInFrames }\`
+- \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`Loop\`, \`Freeze\`, \`Still\`
+- \`interpolate(input, inputRange, outputRange, { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing })\`
+- \`interpolateColors(input, inputRange, colorOutputRange)\`
+- \`spring({ frame, fps, from, to, durationInFrames, delay, config: { damping, stiffness, mass, overshootClamping } })\`
+- \`Easing\` (\`Easing.bezier\`, \`Easing.inOut\`, \`Easing.out\`, \`Easing.cubic\`, \`Easing.exp\`, \`Easing.sin\`)
+- \`random(seedStringOrNumber)\` -> Deterministic pseudo-random \`[0, 1)\` (ALWAYS use this instead of \`Math.random()\`)
+- \`Audio\`, \`OffthreadVideo\`, \`Img\`
+
+### 2. Scene Transitions (\`@remotion/transitions\`)
+- \`import { TransitionSeries, linearTiming, springTiming } from '@remotion/transitions';\`
+- Presentations:
+  - \`import { fade } from '@remotion/transitions/fade';\`
+  - \`import { slide } from '@remotion/transitions/slide';\` // \`slide({ direction: 'from-left' | 'from-right' | 'from-top' | 'from-bottom' })\`
+  - \`import { wipe } from '@remotion/transitions/wipe';\`
+  - \`import { flip } from '@remotion/transitions/flip';\`
+  - \`import { clockWipe } from '@remotion/transitions/clock-wipe';\` // \`clockWipe({ width, height })\`
+  - \`import { iris } from '@remotion/transitions/iris';\` // \`iris({ width, height })\`
+- Note: Total duration of a \`TransitionSeries\` equals the sum of sequence durations minus the sum of transition durations.
+
+### 3. Built-in Sound Effects — Zero External Assets Needed (\`@remotion/sfx\`)
+- \`import { whoosh, whip, pageTurn, switchSfx, mouseClick, shutterModern, shutterOld, ding, vineBoom, windowsXpError } from '@remotion/sfx';\`
+  *(Note: standard exports include \`whoosh\`, \`whip\`, \`pageTurn\`, \`mouseClick\`, \`shutterModern\`, \`shutterOld\`, \`ding\`, \`vineBoom\`, \`windowsXpError\`)*
+- Usage: Wrap in \`<Sequence from={triggerFrame}><Audio src={whoosh} volume={0.35} /></Sequence>\` to synchronize audio with transitions, UI pops, reveals, and impacts.
+
+### 4. Cinematic Light Leaks (\`@remotion/light-leaks\`)
+- \`import { LightLeak } from '@remotion/light-leaks';\`
+- Usage: \`<LightLeak seed={1} hueShift={120} durationInFrames={45} />\` (Great inside \`TransitionSeries.Overlay\` or layered with \`mixBlendMode: 'screen'\`).
+
+### 5. 2D Vector Shapes, SVG Path Evolution & Rounded Text (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/rounded-text-box\`)
+- \`import { Circle, Rect, Triangle, Star, Polygon, Ellipse, Heart, Pie } from '@remotion/shapes';\`
+- \`import { evolvePath, getLength, getPointAtLength, getTangentAtLength, interpolatePath } from '@remotion/paths';\`
+  - \`const strokeProps = evolvePath(progress0to1, svgPathString);\` -> spread \`{...strokeProps}\` onto an \`<svg><path /></svg>\` for self-drawing line animations.
+- \`import { createRoundedTextBox } from '@remotion/rounded-text-box';\`
+
+### 6. 3D WebGL & Three.js (\`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)
+- \`import { ThreeCanvas } from '@remotion/three';\`
+- \`import * as THREE from 'three';\`
+- Always pass \`width={width} height={height}\` from \`useVideoConfig()\` to \`<ThreeCanvas width={width} height={height}>\`. Drive 3D object rotations/positions deterministically using \`useCurrentFrame()\`.
+
+### 7. Organic Noise, Motion Blur & Transform Helpers (\`@remotion/noise\`, \`@remotion/motion-blur\`, \`@remotion/animation-utils\`)
+- \`import { noise2D, noise3D, noise4D } from '@remotion/noise';\` -> Use for organic camera shake, floating elements, wave fields, and natural movement.
+- \`import { Trail, CameraMotionBlur } from '@remotion/motion-blur';\`
+- \`import { makeTransform, scale, translate, rotate, skew } from '@remotion/animation-utils';\`
+
+### 8. Typography, Google Fonts & Layout Measurement (\`@remotion/google-fonts\`, \`@remotion/layout-utils\`)
+- Any Google Font can be loaded:
+  - \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily } = loadFont();\` (Best for Vietnamese diacritics)
+  - Other popular fonts: \`@remotion/google-fonts/Inter\`, \`@remotion/google-fonts/Montserrat\`, \`@remotion/google-fonts/PlayfairDisplay\`, \`@remotion/google-fonts/SpaceGrotesk\`, \`@remotion/google-fonts/JetBrainsMono\`, \`@remotion/google-fonts/PlusJakartaSans\`.
+- \`import { fitText, measureText, fillTextBox } from '@remotion/layout-utils';\`
+
+### 9. Vector Icons (\`lucide-react\`)
+- \`import { Sparkles, Rocket, Zap, Globe, Shield, Cpu, Layers, TrendingUp, CheckCircle2, ArrowRight, Play, Star, Award, Flame, Heart, Code2, BarChart3, Lock, Smartphone, Cloud } from 'lucide-react';\`
+
+### 10. Captions, Media Utils, Rive, Lottie & Skia
+- \`@remotion/captions\`, \`@remotion/media-utils\`, \`@remotion/lottie\`, \`@remotion/rive\`, \`@remotion/gif\`, \`@remotion/skia\`
+
+---
+
+## II. DETERMINISTIC ENGINE TRUTHS (CRITICAL FOR CLOUD PARALLEL RENDERING)
+1. **Export Requirement**: Your code MUST export \`export const DynamicVideo: React.FC = () => { ... };\`.
+2. **Frame-Driven Only**: Never use CSS \`transition\`, CSS \`animation\`, \`@keyframes\`, \`setTimeout\`, or \`requestAnimationFrame\`. Because GitHub Actions renders frames in parallel across multiple CPU threads, non-frame-driven animations will flicker or fail.
+3. **Deterministic Randomness**: Never use \`Math.random()\` inside render logic; always use \`random('unique-seed-' + index)\` from \`remotion\`.
+4. **Safe Interpolation**: Always clamp \`interpolate()\` ranges (\`extrapolateLeft: 'clamp', extrapolateRight: 'clamp'\`) and ensure \`inputRange\` is strictly monotonically increasing (e.g. \`[0, 30]\`).
+
+---
+
+## III. ELEVATING CREATIVE & CINEMATIC QUALITY (GUIDELINES FOR YOUR INTELLIGENCE)
+- **Visual Richness & Depth**: Combine foreground, midground, and background elements thoughtfully. Experiment with lighting, atmospheric gradients, subtle grid/dot textures, glass/matte surfaces, SVG geometry, or 3D space depending on the story.
+- **Choreographed Motion**: Stagger element entrances by a few frames so the viewer's eye is guided naturally across the composition. Combine \`spring()\` physics for snappy focal points with continuous subtle camera drift or \`noise2D\` float so scenes feel alive.
+- **Audio-Visual Harmony**: Enhance visual transitions and key accents with \`@remotion/sfx\` (\`<Audio src={whoosh} volume={0.3} />\`, \`ding\`, \`mouseClick\`, \`whip\`) timed via \`<Sequence from={...}>\`.
+- **Legibility & Framing**: Respect composition safe areas, maintain clear typographic hierarchy, and use Vietnamese-ready fonts (like \`BeVietnamPro\`, \`Montserrat\`, or \`PlusJakartaSans\`) when rendering Vietnamese text.
 `;
 
 function toBase64Utf8(str: string): string {
@@ -29,6 +100,22 @@ function toBase64Utf8(str: string): string {
 
 function randomJobId(): string {
   return crypto.randomUUID().slice(0, 8);
+}
+
+// Lightweight non-restrictive pre-flight check to catch fatal engine mistakes early
+function validateTsxCode(tsxCode: string): string[] {
+  const warnings: string[] = [];
+  if (!/export\s+(const|function)\s+DynamicVideo/.test(tsxCode)) {
+    warnings.push(
+      'CRITICAL: Code must export `export const DynamicVideo: React.FC = () => { ... }` or `export function DynamicVideo()`.'
+    );
+  }
+  if (/Math\.random\s*\(/.test(tsxCode)) {
+    warnings.push(
+      'NOTE: Detected `Math.random()`. Prefer `random("seed")` from "remotion" so parallel multi-core rendering stays 100% deterministic.'
+    );
+  }
+  return warnings;
 }
 
 async function dispatchGitHubRender(
@@ -94,11 +181,59 @@ async function isVideoReadyOnGitHub(env: Env, jobId: string): Promise<boolean> {
   }
 }
 
+// Inspect latest GitHub Actions workflow runs to give Gemini real-time step progress or compiler error feedback
+async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
+  const repo = env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
+  try {
+    const runsRes = await fetch(
+      `https://api.github.com/repos/${repo}/actions/workflows/render.yml/runs?per_page=5`,
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+          'User-Agent': 'Remotion-Cloudflare-MCP-Worker',
+        },
+      }
+    );
+    if (!runsRes.ok) return null;
+    const runsData: any = await runsRes.json();
+    const runs: any[] = runsData?.workflow_runs || [];
+    if (runs.length === 0) return null;
+
+    const latestRun = runs[0];
+    const jobsRes = await fetch(latestRun.jobs_url, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+        'User-Agent': 'Remotion-Cloudflare-MCP-Worker',
+      },
+    });
+    const jobsData: any = jobsRes.ok ? await jobsRes.json() : null;
+    const ghJob = jobsData?.jobs?.[0];
+
+    const steps = (ghJob?.steps || []).map((s: any) => ({
+      name: s.name,
+      status: s.status,
+      conclusion: s.conclusion,
+    }));
+
+    return {
+      runId: latestRun.id,
+      status: latestRun.status,
+      conclusion: latestRun.conclusion,
+      htmlUrl: latestRun.html_url,
+      steps,
+    };
+  } catch {
+    return null;
+  }
+}
+
 const TOOLS = [
   {
     name: 'get_remotion_ecosystem_guide',
     description:
-      'Get documentation for all installed @remotion/* packages available on the GitHub Actions 16GB RAM Cloud renderer.',
+      'Get the complete Remotion v4.0.541 API reference, installed package signatures (@remotion/transitions, @remotion/sfx, @remotion/light-leaks, @remotion/shapes, @remotion/paths, @remotion/three, @remotion/noise, @remotion/motion-blur, @remotion/google-fonts, lucide-react), and creative cinematography guidelines.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -106,23 +241,42 @@ const TOOLS = [
   },
   {
     name: 'render_remotion_video',
-    description: `Dispatch a Remotion video render job to GitHub Actions Cloud (4 vCPU, 16GB RAM, supports long videos & full @remotion/* ecosystem).\n${ECOSYSTEM_DOCS}\nRules for tsxCode:\n- Must export: \`export const DynamicVideo: React.FC = () => { ... }\`\n- After calling this tool, present watchPageUrl to the user or call check_render_status with the returned jobId.`,
+    description: `Render a custom Remotion video on GitHub Actions Cloud (4 vCPU, 16GB RAM, Remotion v4.0.541 full ecosystem).
+You have complete creative freedom to design unique layouts, narratives, 2D/3D visuals, kinetic typography, and synchronized @remotion/sfx audio.
+${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Title of the video', default: 'Remotion Video' },
+        title: {
+          type: 'string',
+          description: 'Title of the video project',
+          default: 'Remotion Studio Video',
+        },
         tsxCode: {
           type: 'string',
-          description: 'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC`',
+          description:
+            'Complete TypeScript/React code for DynamicVideo.tsx exporting `export const DynamicVideo: React.FC = () => { ... }`',
         },
         durationInFrames: {
           type: 'number',
-          description: 'Total frames (e.g. 150 = 5s at 30fps, 1800 = 60s at 30fps)',
+          description: 'Total frames (e.g., 150 = 5s at 30fps, 300 = 10s at 30fps, up to 36000)',
           default: 150,
         },
-        fps: { type: 'number', default: 30 },
-        width: { type: 'number', default: 1920 },
-        height: { type: 'number', default: 1080 },
+        fps: {
+          type: 'number',
+          description: 'Frames per second (24 for cinematic, 30 for standard, 60 for ultra-smooth)',
+          default: 30,
+        },
+        width: {
+          type: 'number',
+          description: 'Video width in pixels (e.g. 1920 for 16:9, 1080 for 9:16 vertical, 3840 for 4K)',
+          default: 1920,
+        },
+        height: {
+          type: 'number',
+          description: 'Video height in pixels (e.g. 1080 for 16:9, 1920 for 9:16 vertical, 2160 for 4K)',
+          default: 1080,
+        },
       },
       required: ['tsxCode'],
     },
@@ -130,7 +284,7 @@ const TOOLS = [
   {
     name: 'render_batch_videos',
     description:
-      'Dispatch up to 20 Remotion videos simultaneously to GitHub Actions (runs on up to 20 parallel 16GB RAM Cloud machines at once!).',
+      'Dispatch up to 20 creative Remotion videos in parallel to GitHub Actions Cloud (each video runs on its own dedicated 4 vCPU, 16GB RAM Cloud runner simultaneously).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -155,7 +309,8 @@ const TOOLS = [
   },
   {
     name: 'check_render_status',
-    description: 'Check if a GitHub Actions render job has finished and get the final MP4 link.',
+    description:
+      'Check if a rendered video is ready on the Cloud, and inspect real-time GitHub Actions step progress or build diagnostics.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -182,7 +337,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         },
         serverInfo: {
           name: 'remotion-cloudflare-github-mcp',
-          version: '2.0.0',
+          version: '2.2.0',
         },
       },
     };
@@ -220,6 +375,24 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
       }
 
       if (toolName === 'render_remotion_video') {
+        const tsxCode = String(args.tsxCode || '');
+        const warnings = validateTsxCode(tsxCode);
+        if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
+          return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call render_remotion_video again.`,
+                },
+              ],
+            },
+          };
+        }
+
         const jobId = randomJobId();
         const title = args.title || 'Remotion Video';
         const durationInFrames = Number(args.durationInFrames || 150);
@@ -231,7 +404,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           env,
           jobId,
           title,
-          args.tsxCode,
+          tsxCode,
           durationInFrames,
           fps,
           width,
@@ -239,6 +412,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         );
 
         const watchPageUrl = `${baseUrl}/watch/${jobId}${secretQuery}`;
+        const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretQuery}`;
         const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
         return {
@@ -253,10 +427,13 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     status: 'dispatched_to_github_actions_cloud',
                     jobId,
                     title,
+                    specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames)`,
                     watchPageUrl,
+                    streamUrl,
                     directDownloadUrl: videoUrl,
+                    notes: warnings.length > 0 ? warnings : undefined,
                     message:
-                      'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Share watchPageUrl with the user right away (it auto-refreshes and plays when done), or call check_render_status with jobId.',
+                      'Render job dispatched to GitHub Actions Cloud (16GB RAM, Remotion v4.0.541)! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
                   },
                   null,
                   2
@@ -287,6 +464,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
             jobId,
             title: v.title,
             watchPageUrl: `${baseUrl}/watch/${jobId}${secretQuery}`,
+            streamUrl: `${baseUrl}/video/${jobId}.mp4${secretQuery}`,
             directDownloadUrl: `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`,
           });
         }
@@ -318,14 +496,16 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const start = Date.now();
         let ready = false;
 
-        while (Date.now() - start < 20000) {
+        while (Date.now() - start < 18000) {
           ready = await isVideoReadyOnGitHub(env, jobId);
           if (ready) break;
           await new Promise((r) => setTimeout(r, 3000));
         }
 
         const watchPageUrl = `${baseUrl}/watch/${jobId}${secretQuery}`;
+        const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretQuery}`;
         const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
+        const workflowInfo = !ready ? await inspectGitHubWorkflowRun(env, jobId) : undefined;
 
         return {
           jsonrpc: '2.0',
@@ -337,11 +517,19 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 text: JSON.stringify(
                   {
                     jobId,
-                    status: ready ? 'completed' : 'rendering_on_github_actions',
+                    status: ready
+                      ? 'completed'
+                      : workflowInfo?.conclusion === 'failure'
+                      ? 'failed_on_github_actions'
+                      : 'rendering_on_github_actions',
                     watchPageUrl,
+                    streamUrl,
                     videoUrl,
+                    cloudRunnerDiagnostics: workflowInfo,
                     message: ready
-                      ? 'Video is completed and ready to watch/download!'
+                      ? 'Video is completed and ready to watch inline or download!'
+                      : workflowInfo?.conclusion === 'failure'
+                      ? 'The render job failed on GitHub Actions. Check cloudRunnerDiagnostics.steps to see which step failed, fix the tsxCode, and call render_remotion_video again.'
                       : 'Still rendering on GitHub Actions Cloud. You can call check_render_status again or open watchPageUrl.',
                   },
                   null,
@@ -531,7 +719,7 @@ export default {
         }
       }
 
-      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http' }), {
+      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '2.2.0' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -540,6 +728,7 @@ export default {
     return new Response(
       JSON.stringify({
         status: 'online_24_7',
+        version: '2.2.0 (Creative Autonomy + Full Remotion 4.0.541 API Reference)',
         platform: 'Cloudflare Workers + GitHub Actions (16GB RAM Cloud)',
         repository: repo,
         security: env.MCP_SECRET ? 'PROTECTED 🔒' : 'OPEN',

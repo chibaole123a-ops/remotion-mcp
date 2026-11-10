@@ -1,82 +1,85 @@
-# 🎬 BẢN THIẾT KẾ CHỐT NÂNG CẤP HỆ THỐNG (FINAL UPGRADE SPECIFICATION v5.3)
+# 🎬 BẢN THIẾT KẾ CHỐT NÂNG CẤP HỆ THỐNG (FINAL UPGRADE SPECIFICATION v5.4)
 
-> **Trạng thái:** ✅ ĐÃ TRIỂN KHAI & ĐỐI CHIẾU HOÀN TẤT 100% (v5.3.0)  
+> **Trạng thái:** ✅ ĐÃ TRIỂN KHAI & ĐỐI CHIẾU HOÀN TẤT 100% (v5.4.0)  
 > **Mục tiêu Tối thượng:**  
-> 1. **Tự do Sáng tạo 100% (Zero Templates / Zero Rigid Matrices):** Không đóng khung Gemini vào bất kỳ mẫu slide hay template cố định nào. Khai mở toàn bộ sức mạnh của 26+ gói `@remotion/*`, Three.js 3D, SVG Path, Audio Spectrum, D3 và Lucide Icons.  
-> 2. **Đồng bộ Tuyệt đối 3 Tầng (Macro-Sync + Micro-Sync + Flow-Sync):** Giọng đọc nói tới đâu — Hình ảnh minh họa, Nhịp chuyển cảnh và Phụ đề Karaoke khớp chính xác tới từng mili-giây mà không bao giờ bị trôi lệch (Zero-Drift).  
-> 3. **Giọng đọc Thuần khiết 100% (Pure Neural Voiceover):** Loại bỏ hoàn toàn âm thanh nền tự tạo (`bgm.mp3` tĩnh lặng tuyệt đối) và tiếng động SFX gây nhiễu.  
-> 4. **Mượt mà 60fps & Chống Giật Lag (Zero Unmount Pop-out / Zero Heavy Blur Lag):** Loại bỏ hiện tượng biến mất vật thể đột ngột và nghẽn CPU do `filter: blur()` lớn.
+> 1. **Tự do Sáng tạo 100% (Zero Templates / Zero Rigid Matrices):** Không đóng khung Gemini vào bất kỳ mẫu slide hay template cố định nào. Khai mở toàn bộ sức mạnh của 26+ gói `@remotion/*`, Three.js 3D, SVG Path, Audio Spectrum, D3, Lucide Icons, và **Tư liệu Ảnh/Video Thực tế (Mixed-Media Documentary)**.  
+> 2. **Tìm kiếm Đa nguồn Mở & "Đôi Mắt Kiểm Duyệt Trực Tiếp" (Multimodal Vision Media Search):** Cung cấp công cụ `search_visual_media` quét đồng thời 45+ kho dữ liệu mở toàn cầu (Openverse, Wikimedia Commons, Wikipedia REST, Internet Archive `.mp4` Videos...) và **trả về trực tiếp Hình ảnh thật + Khung hình Video thật (`type: "image"` Base64)** ngay trong luồng MCP để Gemini **nhìn tận mắt bằng Vision**, chấm điểm độ khớp với kịch bản và căn chỉnh bố cục trước khi viết code!  
+> 3. **Đồng bộ Tuyệt đối 3 Tầng (Macro-Sync + Micro-Sync + Flow-Sync):** Giọng đọc nói tới đâu — Hình ảnh minh họa, Ảnh/Video thực tế, Nhịp chuyển cảnh và Phụ đề Karaoke khớp chính xác tới từng mili-giây mà không bao giờ bị trôi lệch (Zero-Drift).  
+> 4. **Giọng đọc Thuần khiết 100% & Chống Giật Lag 60fps:** Loại bỏ hoàn toàn âm thanh nền tự tạo (`bgm.mp3` tĩnh lặng tuyệt đối), tải trước toàn bộ Ảnh & Video `.mp4` về ổ cứng SSD của Cloud (`prepare-render.mjs`) trước khi kết xuất.
 
 ---
 
-## I. KIẾN TRÚC ĐỒNG BỘ 3 TẦNG CHUẨN EDITOR CHUYÊN NGHIỆP (3-LAYER ZERO-DRIFT SYNC)
+## I. KIẾN TRÚC TÌM KIẾM ĐA NGUỒN & KIỂM DUYỆT TRỰC TIẾP BẰNG ĐÔI MẮT GEMINI (`search_visual_media`)
 
-### 1. Tầng 1 — Đồng bộ Khung Thời Gian Tổng & Từng Phân Cảnh (Macro-Sync)
-- Trên GitHub Actions (`scripts/generate-studio-audio.mjs`), hệ thống thu âm giọng đọc AI bằng `edge_tts.Communicate(..., boundary="WordBoundary")` và đo độ dài thực tế chính xác đến từng phần nghìn giây bằng **`mutagen.mp3`** (kèm dự phòng `npx remotion ffprobe` và kích thước byte CBR).
-- Mỗi phân cảnh `sceneIndex` có mốc bắt đầu thực tế `getSegmentStartFrame(i)` và độ dài thực tế `getSceneFrames(i)` (đã cộng `0.40s` nhịp nghỉ lấy hơi tự nhiên).
+### 1. Tìm Kiếm Mở Đa Nguồn Theo Ngữ Cảnh Từng Câu Kịch Bản (Federated Multi-Source Search)
+Khi Gemini gọi `search_visual_media({ sceneQueries })`, mỗi truy vấn gắn trực tiếp với `sceneIndex`, `spokenSentence` (câu đang nói trong kịch bản), và `searchQuery` (từ khóa tìm kiếm). Hệ thống truy vấn song song qua các nguồn mở lớn nhất thế giới (không phụ thuộc vào 1 nguồn cố định):
+- **Openverse API (WordPress/CreativeCommons Federated Index):** Quét hơn 800 triệu hình ảnh thực tế từ 45+ nguồn toàn cầu (NASA, Smithsonian, Flickr, Europeana, Rawpixel, Bảo tàng Quốc gia...).
+- **Wikimedia Commons API & Wikipedia REST Media:** Kho ảnh tư liệu lịch sử, khoa học, công nghệ, bản đồ, chân dung và video thực tế (`.webm` / `.mp4`).
+- **Internet Archive (`archive.org` Advanced Search & Metadata API):** Kho lưu trữ hàng triệu **video quay thực tế (`.mp4`)**, phim tài liệu lịch sử, khoa học, vũ trụ kèm khung hình trích xuất thực tế.
+- *(Hỗ trợ tự động cả kho B-Roll Điện ảnh Pexels HD/4K nếu có `PEXELS_API_KEY` trong môi trường).*
 
-### 2. Tầng 2 — Đồng bộ Chuyển Cảnh Mượt Không Lệch Tiếng (Flow-Sync: `<SyncedScene>`)
-- **Giải quyết lỗ hổng lệch thời gian của `TransitionSeries`:** Nếu dùng `TransitionSeries` chồng lấp 20 frames mỗi cảnh, hình ảnh các cảnh sau sẽ bị kéo sớm hơn giọng đọc (trôi lệch lũy kế).
-- **Giải pháp `<SyncedScene sceneIndex={i}>` trong `src/remotion/audio-sync.tsx`:**
-  - Tự động đọc `getSegmentStartFrame(i)` và `getSceneFrames(i)` để đặt `<Sequence>` đúng 100% vào khung thời gian giọng đọc thực tế của cảnh `i` (Zero-Drift).
-  - Tự động áp dụng hiệu ứng **Smooth Envelope Transition** (mờ dần + trượt/phóng nhẹ camera ở `enterFrames` đầu và `exitFrames` cuối trong khoảng nghỉ lấy hơi của giọng đọc) để chuyển giao mượt mà giữa các cảnh mà không làm lệch dù chỉ 1 frame âm thanh!
+### 2. Kiểm Tra Link Sống (`200 OK`) & Trả Về Hình Ảnh Thực Tế Qua Giao Thức Multimodal MCP (`type: "image"`)
+- Thay vì chỉ trả về đường link chữ (text) khiến Gemini phải "đoán mò" xem bức ảnh hay đoạn video trông như thế nào, Cloudflare Worker tự động:
+  1. Tải trực tiếp bản xem trước (Preview Image của bức ảnh, hoặc **Video Keyframe Still / Khung hình trích xuất thật của đoạn video `.mp4`**).
+  2. Kiểm tra `HTTP 200 OK`, xác thực đúng định dạng `image/*` và dung lượng hợp lệ.
+  3. Mã hóa sang Base64 và trả về trong mảng `content` của MCP dưới dạng khối **`{ type: "image", data: "<base64>", mimeType: "image/jpeg" }`** đi kèm khối **`{ type: "text" }`** chứa URL gốc độ phân giải cao (`1280px–1920px` hoặc `.mp4`), kích thước, tiêu đề và câu thoại cần minh họa.
+- **Cách Gemini sử dụng "Đôi Mắt" (Multimodal Vision):**
+  - Gemini **nhìn thấy trực tiếp bức ảnh và khung hình video thật** ngay trong cửa sổ suy luận.
+  - Tự loại bỏ các ảnh không đúng ý câu thoại, ảnh chứa chữ rác/biểu đồ rối, hoặc ảnh mờ.
+  - Quan sát vị trí vật thể chính (bên trái, bên phải hay ở giữa) và tông màu sáng/tối của bức ảnh thật để đặt khung chữ chú thích, đường vẽ SVG (`evolvePath`) và hiệu ứng Ken Burns Zoom không bao giờ đè lên chủ thể quan trọng!
 
-### 3. Tầng 3 — Đồng bộ Từ Khóa Tới Hành Động & Nhịp Bồi Đắp (Micro-Sync: Word-to-Action)
-- **Nâng cấp `analyze_narration_timeline` thành "Bảng Điều Phối Đạo Diễn" (Director's Sync Sheet):**
-  - Tự động tách các từ thực tế có trong từng câu `narrationSegments[i]`, chia sẵn thành **3–4 Nhịp Thị Giác (Visual Beats: Đầu câu -> Giữa câu -> Cao trào -> Kết câu)** kèm từ khóa neo (`anchorKeyword`) có thật 100% trong câu và đoạn code mẫu `getWordProgress(i, "từ_khóa")`.
-  - Nhờ đó Gemini không bao giờ truyền sai từ khóa không có trong lời thoại.
-- **Nâng cấp `src/remotion/audio-sync.tsx`:**
-  - `getWordFrame(sceneIndex, keywordOrPhrase, fallbackFrame)`: Hỗ trợ so khớp cụm từ tiếng Việt, bỏ dấu câu, kèm cơ chế đối chiếu không dấu (accent-insensitive fallback) để luôn tìm trúng từ trong câu.
-  - `getWordTrigger(sceneIndex, keywordOrPhrase, localFrame, durationFrames, fallbackRatio)`: Trả về tiến độ `0 -> 1` mượt mà (với `Easing.bezier(0.22, 1, 0.36, 1)`) bắt đầu ngay tại đúng frame giọng đọc phát âm `keywordOrPhrase`! Nếu từ khóa dự phòng được kích hoạt, tự động neo theo tỷ lệ thực tế của mảng từ trong câu (`getBeatFrame`) chứ không nhảy về số frame cố định vô nghĩa.
-  - `getBeatFrame(sceneIndex, beatIndex, totalBeats)`: Chia đều mốc frame dựa trên danh sách các từ thực tế được phát âm trong cảnh `sceneIndex`.
-
----
-
-## II. THỨ TỰ 7 BƯỚC TẠO VIDEO CHUẨN EDITOR CHUYÊN NGHIỆP (BEFORE & AFTER WORKFLOW)
-
-### Giai đoạn A — Trên Gemini (Đạo diễn & Dựng cảnh)
-1. **Bước 1 — Đọc Hồ sơ Kỹ thuật (`get_remotion_ecosystem_guide`)**: Nạp API 26+ thư viện Remotion v4.0.541 và bộ công cụ `./audio-sync`.
-2. **Bước 2 — Viết Kịch bản Tự sự Liền mạch Trước (Narration First / Radio Edit)**:
-   - Viết xong toàn bộ `narrationSegments` trước khi viết code hình ảnh.
-   - Mỗi phân đoạn dài **2–3 câu hoàn chỉnh (30–55 từ, ~8–14 giây)**, có câu cầu nối chuyển ý tự nhiên (Narrative Bridges), tuyệt đối không viết 1 câu cụt lủn rời rạc.
-3. **Bước 3 — Chạy `analyze_narration_timeline` Để Lấy Bảng Từ Khóa Có Thật**:
-   - Nhận về thời lượng ước tính (`totalFrames`, `sceneFrames`) và danh sách `suggestedVisualBeats` chứa các từ khóa có thật trong từng câu nói.
-4. **Bước 4 — Viết Code `DynamicVideo.tsx` Theo Khung Đồng Bộ & Gửi Render (`render_remotion_video`)**:
-   - Đặt lớp nền chung xuyên suốt (Shared Spatial Canvas) + `<ContinuousAudioTrack />` + `<WordHighlightCaptions />`.
-   - Bọc mỗi phân cảnh bằng **`<SyncedScene sceneIndex={i}>`**.
-   - Bên trong mỗi cảnh, dùng **`getWordTrigger(i, "từ_khóa", frame)`** hoặc **`getWordProgress(i, "từ_A", "từ_B", frame)`** lấy từ Bước 3 để bồi đắp (Progressive Build-up) các lớp hình ảnh khớp 100% với lời nói.
-   - Giữ các phần tử trên màn hình đến hết cảnh (không dùng `{progress < 1 && <Comp />}` làm biến mất đột ngột) và không dùng `filter: blur()` lớn gây giật lag.
-
-### Giai đoạn B — Trên Đám Mây GitHub Actions (Thu âm thực tế & Khớp mili-giây)
-5. **Bước 5 — Thu âm `edge-tts` & Đo đạc Mili-giây Thực tế (`scripts/generate-studio-audio.mjs`)**:
-   - Tạo `public/voice-${i}.mp3` trong trẻo (không nhạc nền tự tạo), trích xuất `WordBoundary` của từng từ và đo độ dài chuẩn bằng `mutagen.mp3` -> Ghi vào `src/remotion/audio-telemetry.json` và `src/remotion/meta.json`.
-6. **Bước 6 — Kiểm tra An toàn Tài nguyên (`scripts/prepare-render.mjs`)**:
-   - Tải trước ảnh ngoài (Pre-fetch URLs), bảo vệ import icon `lucide-react`, khóa cứng tổng số frames theo `computedDurationInFrames`.
-7. **Bước 7 — Kết xuất H.264 Chất lượng Cao (`npx remotion render`)**:
-   - `<SyncedScene>`, `getWordTrigger`, `getWordFrame`, `<WordHighlightCaptions>` tự động đọc dữ liệu thật từ `audio-telemetry.json` để khớp từng frame âm thanh và hình ảnh, xuất file MP4 lên kho lưu trữ.
+### 3. Tải Trước Cả Ảnh Lẫn Video Thực Tế (`.mp4`/`.webm`) Về Ổ Cứng SSD Trên Cloud (`scripts/prepare-render.mjs`)
+- Trước khi `npx remotion render` chạy, `scripts/prepare-render.mjs` quét toàn bộ `DynamicVideo.tsx`:
+  - Tự động tải trước mọi URL ảnh bên ngoài về `public/cached-img-${k}.jpg` và viết lại thành `staticFile('cached-img-${k}.jpg')`.
+  - **MỚI:** Tự động tải trước mọi URL video thực tế (`.mp4`, `.webm`, `.mov`) về `public/cached-vid-${k}.mp4` và viết lại thành `staticFile('cached-vid-${k}.mp4')` (nếu link video ngoài bị lỗi mạng đột xuất, tự động chuyển đổi an toàn để không bao giờ làm gãy bản dựng).
 
 ---
 
-## III. DANH SÁCH ĐỐI CHIẾU TRIỂN KHAI (IMPLEMENTATION CHECKLIST v5.3)
+## II. KIẾN TRÚC ĐỒNG BỘ 3 TẦNG CHUẨN EDITOR CHUYÊN NGHIỆP (3-LAYER ZERO-DRIFT SYNC)
 
-### 1. Engine Âm thanh Thuần khiết & Đo đạc Chính xác (`scripts/generate-studio-audio.mjs`)
-- [x] Thu âm giọng đọc bằng Python `edge_tts.Communicate(..., boundary="WordBoundary")` + đo độ dài thực tế bằng **`mutagen.mp3`** + fallback `npx remotion ffprobe` + CBR byte-size.
-- [x] Loại bỏ hoàn toàn nhạc nền tự tạo (`public/bgm.mp3` là file im lặng tuyệt đối 100%) theo yêu cầu người dùng.
-- [x] Xuất đầy đủ `sceneFrames`, `sceneStartFrames`, `computedDurationInFrames`, và `scenes[i].words` vào `src/remotion/audio-telemetry.json`, `public/audio-telemetry.json` và `src/remotion/meta.json`.
+1. **Tầng 1 — Macro-Sync (Khớp Thời Lượng Thực Tế):**
+   - Đo độ dài thực tế đến từng mili-giây của mỗi file `public/voice-${i}.mp3` bằng **`mutagen.mp3`** + `WordBoundary` trong `scripts/generate-studio-audio.mjs`.
+2. **Tầng 2 — Flow-Sync (`<SyncedScene sceneIndex={i}>`):**
+   - Khóa cứng điểm bắt đầu (`getSegmentStartFrame(i)`) và độ dài (`getSceneFrames(i)`) theo đúng file âm thanh thật, đồng thời tạo hiệu ứng chuyển giao mượt mà (Smooth Crossfade + Camera Glide) ở đầu và cuối cảnh mà không làm trôi lệch thời gian.
+3. **Tầng 3 — Micro-Sync (`getWordTrigger` & `analyze_narration_timeline`):**
+   - `analyze_narration_timeline` trích xuất sẵn các từ khóa có thật trong từng câu nói (`suggestedVisualBeats`).
+   - `getWordTrigger(sceneIndex, keyword, frame)` kích hoạt hiệu ứng hình ảnh, nhãn chú thích hoặc phóng to bức ảnh/video thực tế **đúng vào mili-giây giọng đọc phát âm từ khóa đó**.
 
-### 2. Module Đồng bộ 3 Tầng (`src/remotion/audio-sync.tsx`)
-- [x] `getSceneFrames(sceneIndex, fallback)` & `getSegmentStartFrame(sceneIndex, fallback)`.
-- [x] `getWordFrame(sceneIndex, keywordOrPhrase, fallbackFrame)`: Nâng cấp bộ dò cụm từ thông minh (hỗ trợ cả có dấu & không dấu tiếng Việt, tự động đối chiếu từ gần nhất).
-- [x] `getBeatFrame(sceneIndex, beatIndex, totalBeats)`: Lấy frame chuẩn theo vị trí nhịp từ thực tế trong câu.
-- [x] `getWordTrigger(sceneIndex, keywordOrPhrase, localFrame, durationFrames, fallbackBeatRatio)`: Hàm kích hoạt hiệu ứng mượt mà (`0 -> 1` với `Easing.bezier`) ngay tại thời điểm phát âm từ khóa.
-- [x] `getWordProgress(sceneIndex, startKeyword, endKeyword, currentLocalFrame)`: Nội suy tiến độ `0 -> 1` giữa 2 mốc từ khóa.
-- [x] `<SyncedScene sceneIndex={i}>`: Component khung cảnh tự động khóa cứng vào `startFrame` và `durationInFrames` của giọng đọc thực tế + tự động tạo hiệu ứng chuyển giao mượt mà (Smooth Crossfade + Subtle Camera Flow) ở đầu và cuối cảnh mà không làm lệch thời gian.
-- [x] `<ContinuousAudioTrack />` & `<WordHighlightCaptions />`: Phát toàn bộ giọng đọc liền mạch và hiển thị phụ đề Karaoke từng từ.
+---
 
-### 3. Nâng cấp Công cụ Phân tích & Hướng dẫn Đạo diễn (`src/cloudflare-worker.ts` & `src/server.ts`)
-- [x] Nâng cấp `buildNarrationTimelineAnalysis` (`analyze_narration_timeline`):
-  - Tự động trích xuất **`suggestedVisualBeats`** (chia câu thoại thành 3–4 nhịp Đầu – Giữa – Cao trào – Kết với từ khóa thực tế có trong câu và gợi ý mã lệnh `getWordTrigger(i, "từ_khóa", frame)`).
-  - Cảnh báo nếu phân đoạn quá ngắn (< 18 từ) để nhắc Gemini viết lời bình sâu sắc, liền mạch hơn.
-- [x] Cập nhật `ECOSYSTEM_DOCS` v5.3 đồng bộ trên cả `src/cloudflare-worker.ts` và `src/server.ts`:
-  - Quy trình chuẩn 4 bước cho Gemini: **Bước 1: Đọc Docs -> Bước 2: Viết kịch bản liền mạch -> Bước 3: Gọi `analyze_narration_timeline` lấy từ khóa thật -> Bước 4: Dựng cảnh với `<SyncedScene>` + `getWordTrigger` / `getWordProgress`**.
-  - Cấm dùng âm thanh nền tự tạo (`bgm.mp3` / `@remotion/sfx`), cấm unmount đột ngột `{progress < 1 && ...}`, cấm dùng `filter: blur()` lớn gây giật lag.
+## III. THỨ TỰ 8 BƯỚC TẠO VIDEO CHUẨN EDITOR CHUYÊN NGHIỆP (BEFORE & AFTER WORKFLOW)
+
+### Giai đoạn A — Trên Gemini (Lên Kịch bản -> Đo Nhịp -> Xem & Chọn Media Thật -> Dựng Cảnh)
+1. **Bước 1 — Đọc Hồ sơ Kỹ thuật (`get_remotion_ecosystem_guide`)**.
+2. **Bước 2 — Viết Kịch bản Tự sự Liền mạch Trước (Narration First)**:
+   - Mỗi đoạn `narrationSegments[i]` dài 2–3 câu hoàn chỉnh (30–55 từ) có câu cầu nối chuyển ý tự nhiên.
+3. **Bước 3 — Chạy `analyze_narration_timeline` Để Lấy Bảng Từ Khóa Có Thật (`suggestedVisualBeats`)**.
+4. **Bước 4 — Chạy `search_visual_media` Để Tìm & Tận Mắt Nhìn Duyệt Ảnh/Video Thực Tế (Multimodal Vision Inspection)**:
+   - Truyền câu thoại và từ khóa tìm kiếm của các cảnh cần tư liệu thực tế.
+   - **Nhìn trực tiếp** các bức ảnh và khung hình video trả về trong kết quả MCP (`type: "image"`), chọn đúng URL có hình ảnh khớp nhất với câu thoại và bố cục đẹp nhất.
+5. **Bước 5 — Viết Code `DynamicVideo.tsx` Kết Hợp Mixed-Media + Đồng Bộ Từ Khóa & Gửi Render (`render_remotion_video`)**:
+   - Bọc mỗi cảnh trong `<SyncedScene sceneIndex={i}>`.
+   - Kết hợp Ảnh thực tế (`<Img>`) / Video thực tế (`<OffthreadVideo muted />`) đã nhìn duyệt ở Bước 4 với hiệu ứng Ken Burns Zoom nhẹ + Đồ họa Vector/Chú thích bung ra đúng từ khóa qua `getWordTrigger(i, "từ_khóa", frame)`.
+
+### Giai đoạn B — Trên Đám Mây GitHub Actions (Thu âm thực tế -> Tải trước Ảnh/Video -> Xuất MP4)
+6. **Bước 6 — Thu âm `edge-tts` & Đo đạc Mili-giây Từng Từ (`scripts/generate-studio-audio.mjs`)**.
+7. **Bước 7 — Tải trước Ảnh & Video Thực Tế về SSD + Kiểm tra Icon (`scripts/prepare-render.mjs`)**.
+8. **Bước 8 — Kết xuất H.264 Chất lượng Cao (`npx remotion render --crf=18`)**.
+
+---
+
+## IV. DANH SÁCH ĐỐI CHIẾU TRIỂN KHAI (IMPLEMENTATION CHECKLIST v5.4)
+
+### 1. Công cụ Tìm kiếm Đa nguồn & Hiển thị Trực tiếp Media (`src/cloudflare-worker.ts` & `src/server.ts`)
+- [x] Bổ sung MCP Tool mới **`search_visual_media`**:
+  - Quét đa nguồn mở: **Openverse API (45+ nguồn toàn cầu)** + **Wikimedia Commons Image & Video API** + **Wikipedia REST API** + **Internet Archive (`.mp4` Video Search)** (+ hỗ trợ `PEXELS_API_KEY` nếu có).
+  - Tự động tải ảnh preview / khung hình video thật (`fetch` với kiểm tra `200 OK` và `image/*`), chuyển sang Base64 và trả về trực tiếp qua khối MCP **`{ type: "image", data, mimeType }`** để Gemini nhìn thấy tận mắt bằng Vision.
+  - Đặt câu thoại `spokenSentence` ngay cạnh từng bức ảnh để Gemini đối chiếu trực tiếp bằng mắt xem bức ảnh/video có đúng ngữ cảnh kịch bản hay không.
+
+### 2. Tiền xử lý Tải trước Ảnh & Video Thực tế (`scripts/prepare-render.mjs`)
+- [x] Tự động tải trước mọi URL ảnh bên ngoài về `public/cached-img-${k}.jpg`.
+- [x] Tự động tải trước mọi URL video thực tế (`.mp4`, `.webm`, `.mov`) về `public/cached-vid-${k}.mp4` để `<OffthreadVideo>` chạy trực tiếp từ ổ cứng SSD local với tốc độ tối đa và mượt 60fps.
+
+### 3. Module Đồng bộ 3 Tầng & Kịch bản Đạo diễn (`src/remotion/audio-sync.tsx` & `ECOSYSTEM_DOCS` v5.4)
+- [x] `<SyncedScene sceneIndex={i}>`, `getWordTrigger`, `getWordProgress`, `getWordFrame`, `getBeatFrame`, `<ContinuousAudioTrack />`, `<WordHighlightCaptions />`.
+- [x] Cập nhật `ECOSYSTEM_DOCS` v5.4 hướng dẫn quy trình 5 bước trên Gemini (Narrative -> Analyze Timeline -> Search & Visually Inspect Real Photos/Videos -> Mixed-Media SyncedScene Code -> Render).

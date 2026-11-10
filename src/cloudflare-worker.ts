@@ -2,17 +2,18 @@ export interface Env {
   GITHUB_TOKEN: string;
   GITHUB_REPO: string;
   MCP_SECRET: string;
+  PEXELS_API_KEY?: string;
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.3)
-## (3-Layer Zero-Drift Audio-Visual Sync + Progressive Visual Build-Up + Pure Voiceover + 60fps Anti-Lag)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.4)
+## (Multimodal Vision Media Search + 3-Layer Zero-Drift Sync + Progressive Build-Up + Pure Voiceover + 60fps Anti-Lag)
 
 You have **100% creative freedom**. Act as a **World-Class Film Director, Documentary Storyteller, Motion Graphics Artist, and High-Retention Video Editor (Vox / Kurzgesagt / Johnny Harris / Lemmino)**.
 
 ---
 
-## I. MANDATORY 4-STEP ORDER OF OPERATIONS (BEFORE & AFTER WORKFLOW)
+## I. MANDATORY 5-STEP ORDER OF OPERATIONS (BEFORE & AFTER WORKFLOW)
 
 Always execute video creation in this exact order:
 
@@ -26,7 +27,15 @@ Always execute video creation in this exact order:
 - It returns the exact estimated frame durations AND \`suggestedVisualBeats\` containing **real anchor keywords extracted directly from each sentence** along with ready-to-paste \`getWordTrigger(sceneIndex, "keyword", frame)\` snippets.
 - **ONLY pass keywords that actually exist in \`narrationSegments[i]\`** into \`getWordTrigger\` / \`getWordFrame\` / \`getWordProgress\`!
 
-### STEP 3: Build \`DynamicVideo.tsx\` Using Zero-Drift \`<SyncedScene>\` & Progressive Word Beats
+### STEP 3: Run \`search_visual_media\` to Find & VISUALLY INSPECT Real Photos & Videos (Mixed-Media)
+- When your story mentions real-world history, science, space, nature, people, hardware, architecture, or geography, call \`search_visual_media\` with \`sceneQueries\` (passing the \`sceneIndex\`, \`spokenSentence\`, and an English \`searchQuery\` for maximum global archive coverage).
+- The tool searches across **45+ global open archives** (Openverse, NASA, Smithsonian, Wikimedia Commons, Wikipedia REST, Internet Archive \`.mp4\` Videos) and **returns actual live preview images & video keyframes (\`type: "image"\`) directly to your eyes**!
+- **Look directly at each returned image/video keyframe**:
+  - Verify that the visual subject genuinely matches \`spokenSentence\` (reject irrelevant diagrams or noisy images).
+  - Note where the focal subject sits (left, center, right) so your typography/SVG callouts complement the photo/video without covering the main subject!
+  - Embed verified photos with \`<Img src="URL" />\` and verified \`.mp4/.webm\` videos with \`<OffthreadVideo src="URL" muted />\` (the Cloud runner automatically pre-fetches and caches them onto local SSD before rendering!).
+
+### STEP 4: Build \`DynamicVideo.tsx\` Using Zero-Drift \`<SyncedScene>\` & Progressive Word Beats
 1. **Shared Spatial Canvas + Pure Audio + Karaoke Captions at Root**:
    - Render a continuous ambient canvas background at the root of \`DynamicVideo\`, plus \`<ContinuousAudioTrack />\` and \`<WordHighlightCaptions />\`.
    - Do **NOT** use \`bgm.mp3\` or \`@remotion/sfx\` (keep 100% pure, crystal-clear voiceover!).
@@ -35,11 +44,11 @@ Always execute video creation in this exact order:
    - \`<SyncedScene>\` automatically locks 100% to the real measured MP3 start frame & duration on the Cloud AND applies a smooth cross-dissolve + subtle camera glide at the start/end of the chapter!
 3. **Progressive Intra-Scene Choreography via \`getWordTrigger\` (3–4 Beats per Chapter)**:
    - Inside each chapter, use \`const frame = useCurrentFrame();\` and trigger 3 to 4 progressive visual beats tied to the real spoken keywords from Step 2:
-     - **Beat 1 (Start of sentence)**: Primary visual anchor enters smoothly.
-     - **Beat 2 (\`const beat2 = getWordTrigger(i, "từ_khóa_giữa_câu", frame)\`)**: Secondary diagram / data connections / labels expand out while Beat 1 stays visible on screen!
+     - **Beat 1 (Start of sentence)**: Primary visual anchor (e.g., real archival photo/video with gentle Ken Burns zoom or 3D/SVG centerpiece) enters smoothly.
+     - **Beat 2 (\`const beat2 = getWordTrigger(i, "từ_khóa_giữa_câu", frame)\`)**: Secondary diagram / SVG path callout (\`evolvePath\`) / data connections expand out while Beat 1 stays visible on screen!
      - **Beat 3 (\`const beat3 = getWordTrigger(i, "từ_khóa_cao_trào", frame)\`)**: Highlight / metric callout / camera focus triggers right as the narrator says the climax keyword.
 
-### STEP 4: Anti-Lag & Persistence Quality Control (Zero Jitter / Zero Pop-out)
+### STEP 5: Anti-Lag & Persistence Quality Control (Zero Jitter / Zero Pop-out)
 - **NEVER** unmount elements mid-scene with \`{progress < 1 && <Component />}\`! Keep all visual beats mounted until the end of the scene and control visibility smoothly via \`opacity\` and \`transform\`.
 - **NEVER** use heavy \`filter: blur(60px)\` or large animated CSS blurs (which lag software rendering). Use clean \`radial-gradient(...)\` glows, crisp SVG vectors, and \`transform: translate3d(...) scale(...)\`.
 
@@ -423,6 +432,353 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
   }
 }
 
+interface MediaCandidate {
+  title: string;
+  embedUrl: string;
+  previewImageUrl: string;
+  mediaType: 'image' | 'video';
+  source: string;
+  width?: number;
+  height?: number;
+  description?: string;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function fetchImagePreviewBase64(
+  imageUrl: string,
+  timeoutMs = 3500
+): Promise<{ data: string; mimeType: string } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(imageUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8',
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (!ct.startsWith('image/') || ct.includes('svg')) return null;
+
+    const ab = await res.arrayBuffer();
+    if (ab.byteLength < 800 || ab.byteLength > 950 * 1024) return null;
+
+    const mimeType = ct.includes('png')
+      ? 'image/png'
+      : ct.includes('webp')
+      ? 'image/webp'
+      : 'image/jpeg';
+    return {
+      data: arrayBufferToBase64(ab),
+      mimeType,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function searchOpenverseImages(query: string, limit = 3): Promise<MediaCandidate[]> {
+  try {
+    const url = `https://api.openverse.org/v1/images/?q=${encodeURIComponent(
+      query
+    )}&page_size=${limit * 2}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker/5.4' },
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const results: any[] = data?.results || [];
+    const out: MediaCandidate[] = [];
+
+    for (const item of results) {
+      if (!item?.url || !item?.thumbnail) continue;
+      if (/\.svg(\?|$)/i.test(item.url)) continue;
+      out.push({
+        title: String(item.title || query).slice(0, 120),
+        embedUrl: item.url,
+        previewImageUrl: item.thumbnail || item.url,
+        mediaType: 'image',
+        source: `Openverse (${item.source || 'global-archive'})`,
+        width: item.width,
+        height: item.height,
+        description: item.creator ? `Creator: ${item.creator}` : undefined,
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function searchWikimediaMedia(
+  query: string,
+  wantVideo: boolean,
+  limit = 3
+): Promise<MediaCandidate[]> {
+  try {
+    const filetypeFilter = wantVideo ? 'filetype:video' : 'filetype:bitmap';
+    const gsrsearch = `${query} ${filetypeFilter}`;
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
+      gsrsearch
+    )}&gsrnamespace=6&gsrlimit=${
+      limit * 2
+    }&prop=imageinfo&iiprop=url|dimensions|mime|extmetadata&iiurlwidth=640&format=json&origin=*`;
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker/5.4 (https://github.com/chibaole123a-ops/remotion-mcp)' },
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const pages = Object.values(data?.query?.pages || {}) as any[];
+    const out: MediaCandidate[] = [];
+
+    for (const p of pages) {
+      const ii = p?.imageinfo?.[0];
+      if (!ii?.url) continue;
+      const mime = String(ii.mime || '').toLowerCase();
+      const isVid = mime.includes('video') || /\.(webm|mp4|ogv)$/i.test(ii.url);
+      if (wantVideo && !isVid) continue;
+      if (!wantVideo && (isVid || mime.includes('svg') || mime.includes('tiff'))) continue;
+
+      const rawTitle = String(p.title || '')
+        .replace(/^File:/i, '')
+        .replace(/\.[^.]+$/, '');
+      const descHtml = ii?.extmetadata?.ImageDescription?.value || '';
+      const cleanDesc = String(descHtml)
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+
+      out.push({
+        title: rawTitle,
+        embedUrl: isVid ? ii.url : ii.thumburl || ii.url,
+        previewImageUrl: ii.thumburl || ii.url,
+        mediaType: isVid ? 'video' : 'image',
+        source: 'Wikimedia Commons',
+        width: ii.width,
+        height: ii.height,
+        description: cleanDesc || undefined,
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function searchInternetArchiveVideos(query: string, limit = 2): Promise<MediaCandidate[]> {
+  try {
+    const q = `(${query}) AND mediatype:(movies) AND format:(MPEG4)`;
+    const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(
+      q
+    )}&fl[]=identifier,title,description&rows=${limit * 2}&page=1&output=json`;
+
+    const res = await fetch(searchUrl, {
+      headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker/5.4' },
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const docs: any[] = data?.response?.docs || [];
+    const out: MediaCandidate[] = [];
+
+    for (const doc of docs) {
+      const id = doc?.identifier;
+      if (!id) continue;
+      try {
+        const metaRes = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
+          headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker/5.4' },
+        });
+        if (!metaRes.ok) continue;
+        const meta: any = await metaRes.json();
+        const files: any[] = meta?.files || [];
+        const mp4File = files.find(
+          (f) =>
+            typeof f.name === 'string' &&
+            f.name.endsWith('.mp4') &&
+            !f.name.includes('_ia') &&
+            Number(f.size || 0) < 45 * 1024 * 1024
+        );
+        if (!mp4File) continue;
+
+        const embedUrl = `https://archive.org/download/${encodeURIComponent(id)}/${encodeURIComponent(
+          mp4File.name
+        )}`;
+        const previewImageUrl = `https://archive.org/services/img/${encodeURIComponent(id)}`;
+        out.push({
+          title: String(doc.title || id).slice(0, 120),
+          embedUrl,
+          previewImageUrl,
+          mediaType: 'video',
+          source: 'Internet Archive (.mp4 Video)',
+          description: String(doc.description || '').slice(0, 160) || undefined,
+        });
+        if (out.length >= limit) break;
+      } catch {
+        continue;
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function searchPexelsMedia(
+  apiKey: string,
+  query: string,
+  wantVideo: boolean,
+  limit = 2
+): Promise<MediaCandidate[]> {
+  if (!apiKey) return [];
+  try {
+    const endpoint = wantVideo
+      ? `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${limit}`
+      : `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${limit}`;
+    const res = await fetch(endpoint, {
+      headers: { Authorization: apiKey },
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const out: MediaCandidate[] = [];
+
+    if (wantVideo) {
+      for (const v of data?.videos || []) {
+        const hdFile =
+          (v.video_files || []).find((f: any) => f.quality === 'hd' && f.file_type === 'video/mp4') ||
+          (v.video_files || [])[0];
+        if (!hdFile?.link || !v.image) continue;
+        out.push({
+          title: `Pexels HD B-Roll #${v.id} (${query})`,
+          embedUrl: hdFile.link,
+          previewImageUrl: v.image,
+          mediaType: 'video',
+          source: 'Pexels HD Video',
+          width: hdFile.width,
+          height: hdFile.height,
+        });
+      }
+    } else {
+      for (const p of data?.photos || []) {
+        if (!p?.src?.large2x && !p?.src?.large) continue;
+        out.push({
+          title: String(p.alt || query).slice(0, 120),
+          embedUrl: p.src.large2x || p.src.large,
+          previewImageUrl: p.src.medium || p.src.small,
+          mediaType: 'image',
+          source: 'Pexels Photography',
+          width: p.width,
+          height: p.height,
+        });
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function executeMultimodalMediaSearch(env: Env, sceneQueries: any[]) {
+  const contentBlocks: any[] = [];
+  const safeQueries = Array.isArray(sceneQueries) ? sceneQueries.slice(0, 6) : [];
+
+  contentBlocks.push({
+    type: 'text',
+    text: `🔍 MULTIMODAL VISION MEDIA SEARCH RESULTS (${safeQueries.length} scene queries):\nLook directly at the live preview images/keyframes below. Verify that each visual genuinely matches your spoken script before embedding its \`embedUrl\` into \`<Img src="..." />\` or \`<OffthreadVideo src="..." muted />\`.`,
+  });
+
+  for (const sq of safeQueries) {
+    const sceneIndex = Number(sq.sceneIndex ?? 0);
+    const spokenSentence = String(sq.spokenSentence || '').trim();
+    const searchQuery = String(sq.searchQuery || '').trim();
+    const mediaTypePref = String(sq.mediaType || 'any').toLowerCase();
+    const maxResults = Math.min(3, Math.max(1, Number(sq.maxResults || 2)));
+
+    if (!searchQuery) continue;
+
+    const wantVideo = mediaTypePref === 'video' || mediaTypePref === 'any';
+    const wantImage = mediaTypePref === 'image' || mediaTypePref === 'any';
+
+    const parallelTasks: Promise<MediaCandidate[]>[] = [];
+    if (env.PEXELS_API_KEY) {
+      if (wantImage) parallelTasks.push(searchPexelsMedia(env.PEXELS_API_KEY, searchQuery, false, 2));
+      if (wantVideo) parallelTasks.push(searchPexelsMedia(env.PEXELS_API_KEY, searchQuery, true, 2));
+    }
+    if (wantImage) {
+      parallelTasks.push(searchWikimediaMedia(searchQuery, false, 2));
+      parallelTasks.push(searchOpenverseImages(searchQuery, 2));
+    }
+    if (wantVideo) {
+      parallelTasks.push(searchWikimediaMedia(searchQuery, true, 2));
+      parallelTasks.push(searchInternetArchiveVideos(searchQuery, 1));
+    }
+
+    const nestedCandidates = await Promise.all(parallelTasks);
+    const allCandidates = nestedCandidates.flat();
+
+    const verifiedForScene: { candidate: MediaCandidate; preview: { data: string; mimeType: string } }[] = [];
+    for (const cand of allCandidates) {
+      if (verifiedForScene.length >= maxResults) break;
+      const preview = await fetchImagePreviewBase64(cand.previewImageUrl);
+      if (preview) {
+        verifiedForScene.push({ candidate: cand, preview });
+      }
+    }
+
+    if (verifiedForScene.length === 0) {
+      contentBlocks.push({
+        type: 'text',
+        text: `\n--- [Scene ${sceneIndex}] Query: "${searchQuery}" ---\nSpoken Script: "${spokenSentence}"\nNo verified live preview matched this exact query. Use bespoke Remotion 3D/SVG/Data choreography for this scene or refine the English search query.`,
+      });
+      continue;
+    }
+
+    for (let k = 0; k < verifiedForScene.length; k++) {
+      const { candidate, preview } = verifiedForScene[k];
+      const tagSnippet =
+        candidate.mediaType === 'video'
+          ? `<OffthreadVideo src="${candidate.embedUrl}" muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />`
+          : `<Img src="${candidate.embedUrl}" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />`;
+
+      contentBlocks.push({
+        type: 'text',
+        text: `\n=== [Scene ${sceneIndex} — Candidate #${k + 1} (${candidate.mediaType.toUpperCase()})] ===
+• Spoken Script Context: "${spokenSentence}"
+• Title: ${candidate.title}
+• Source: ${candidate.source}${candidate.width ? ` (${candidate.width}x${candidate.height})` : ''}
+${candidate.description ? `• Description: ${candidate.description}\n` : ''}• Embed URL (auto-cached to local SSD on Cloud): ${candidate.embedUrl}
+• Remotion JSX Snippet: \`${tagSnippet}\`
+👇 LIVE VISUAL PREVIEW BELOW (Inspect with your eyes to confirm relevance & subject placement):`,
+      });
+
+      contentBlocks.push({
+        type: 'image',
+        data: preview.data,
+        mimeType: preview.mimeType,
+      });
+    }
+  }
+
+  return contentBlocks;
+}
+
 const TOOLS = [
   {
     name: 'get_remotion_ecosystem_guide',
@@ -457,6 +813,50 @@ const TOOLS = [
         },
       },
       required: ['narrationSegments'],
+    },
+  },
+  {
+    name: 'search_visual_media',
+    description:
+      'Step 3 (Multimodal Vision Media Search): Search across 45+ open global archives (Openverse, NASA, Smithsonian, Wikimedia Commons, Wikipedia REST, Internet Archive .mp4 Videos) for real archival photos and real B-roll videos matching your script scenes. Returns actual LIVE IMAGE & VIDEO KEYFRAME PREVIEWS (`type: "image"`) directly to your eyes so you can visually inspect and verify relevance & layout before embedding into `<Img>` or `<OffthreadVideo>`!',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sceneQueries: {
+          type: 'array',
+          description: 'List of scene-bound media queries (up to 6 scenes per call).',
+          items: {
+            type: 'object',
+            properties: {
+              sceneIndex: {
+                type: 'number',
+                description: '0-based index of the narration segment this media will illustrate.',
+              },
+              spokenSentence: {
+                type: 'string',
+                description: 'The exact spoken narration sentence/paragraph for this scene (used to cross-check visual context).',
+              },
+              searchQuery: {
+                type: 'string',
+                description: 'Specific English search keywords describing the real-world subject (e.g., "Hubble Space Telescope deep field", "IBM 704 mainframe computer 1956", "human brain neuron microscopy").',
+              },
+              mediaType: {
+                type: 'string',
+                enum: ['any', 'image', 'video'],
+                default: 'any',
+                description: 'Whether to search for real photos ("image"), real video clips ("video"), or both ("any").',
+              },
+              maxResults: {
+                type: 'number',
+                default: 2,
+                description: 'Max verified visual candidates to preview for this scene (1 to 3).',
+              },
+            },
+            required: ['sceneIndex', 'spokenSentence', 'searchQuery'],
+          },
+        },
+      },
+      required: ['sceneQueries'],
     },
   },
   {
@@ -643,6 +1043,18 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 text: JSON.stringify(analysis, null, 2),
               },
             ],
+          },
+        };
+      }
+
+      if (toolName === 'search_visual_media') {
+        const sceneQueries = Array.isArray(args.sceneQueries) ? args.sceneQueries : [];
+        const contentBlocks = await executeMultimodalMediaSearch(env, sceneQueries);
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: contentBlocks,
           },
         };
       }

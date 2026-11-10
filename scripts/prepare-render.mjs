@@ -36,7 +36,7 @@ function writeFallbackSvg(filePath, index) {
   fs.writeFileSync(filePath, svg, 'utf-8');
 }
 
-async function fetchWithTimeout(url, timeoutMs = 15000) {
+async function fetchWithTimeout(url, timeoutMs = 15000, acceptHeader = 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8') {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -44,63 +44,112 @@ async function fetchWithTimeout(url, timeoutMs = 15000) {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        Accept: acceptHeader,
       },
       redirect: 'follow',
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const arrayBuffer = await res.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    return {
+      buffer: Buffer.from(arrayBuffer),
+      contentType: (res.headers.get('content-type') || '').toLowerCase(),
+    };
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function prefetchExternalImages(code) {
-  // Match direct http/https image URLs inside string literals (e.g. Pollinations, Unsplash, Picsum, Wikimedia, etc.)
-  const urlRegex = /(['"`])(https?:\/\/(?:image\.pollinations\.ai\/[^\s'"`]+|images\.unsplash\.com\/[^\s'"`]+|picsum\.photos\/[^\s'"`]+|upload\.wikimedia\.org\/[^\s'"`]+|[^\s'"`]+\.(?:png|jpg|jpeg|webp|gif)(?:\?[^\s'"`]*)?))\1/gi;
-
-  const matches = [...code.matchAll(urlRegex)];
-  if (matches.length === 0) return code;
-
-  // Ensure staticFile is imported from 'remotion' if we rewrite URLs to staticFile(...)
+async function prefetchExternalMedia(code) {
   let updatedCode = code;
-  const uniqueUrls = [...new Set(matches.map((m) => m[2]))];
+
+  // 1. Pre-fetch external video URLs (.mp4, .webm, .mov, .ogv) so <OffthreadVideo> plays from local SSD at 60fps
+  const videoUrlRegex = /(['"`])(https?:\/\/[^\s'"`]+\.(?:mp4|webm|mov|ogv)(?:\?[^\s'"`]*)?)\1/gi;
+  const videoMatches = [...updatedCode.matchAll(videoUrlRegex)];
+  const uniqueVideoUrls = [...new Set(videoMatches.map((m) => m[2]))];
   const urlToLocalFile = new Map();
 
-  await Promise.all(
-    uniqueUrls.map(async (url, idx) => {
-      let fileName = `cached-img-${idx}.jpg`;
-      let outPath = `public/${fileName}`;
-      try {
-        let buf;
+  if (uniqueVideoUrls.length > 0) {
+    await Promise.all(
+      uniqueVideoUrls.map(async (url, idx) => {
+        const extMatch = url.match(/\.(mp4|webm|mov|ogv)(?:\?|$)/i);
+        const ext = extMatch ? extMatch[1].toLowerCase() : 'mp4';
+        const fileName = `cached-vid-${idx}.${ext}`;
+        const outPath = `public/${fileName}`;
         try {
-          buf = await fetchWithTimeout(url, 14000);
-        } catch {
-          // Retry once
-          buf = await fetchWithTimeout(url, 14000);
+          const { buffer, contentType } = await fetchWithTimeout(url, 25000, 'video/*,*/*;q=0.8');
+          if (buffer && buffer.length > 4096 && !contentType.includes('text/html')) {
+            fs.writeFileSync(outPath, buffer);
+            fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
+            urlToLocalFile.set(url, fileName);
+            console.log(
+              `🎞️ Pre-fetched external video [${idx}]: ${url.slice(0, 70)}... -> ${fileName} (${(
+                buffer.length /
+                (1024 * 1024)
+              ).toFixed(2)} MB)`
+            );
+            return;
+          }
+        } catch (err) {
+          console.warn(`⚠️ Video pre-fetch warning for ${url.slice(0, 60)}:`, err?.message || err);
         }
-        if (buf && buf.length > 256) {
-          fs.writeFileSync(outPath, buf);
-          fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
-          urlToLocalFile.set(url, fileName);
-          console.log(`🖼️ Pre-fetched external image [${idx}]: ${url.slice(0, 70)}... -> ${fileName}`);
-          return;
-        }
-      } catch (err) {
-        console.warn(`⚠️ Image pre-fetch fallback for ${url.slice(0, 60)}:`, err?.message || err);
-      }
-      // Fallback to sleek SVG so Remotion never hangs or shows a broken image
-      fileName = `cached-img-${idx}.svg`;
-      outPath = `public/${fileName}`;
-      writeFallbackSvg(outPath, idx);
-      fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
-      urlToLocalFile.set(url, fileName);
-    })
+      })
+    );
+  }
+
+  // 2. Pre-fetch external image URLs (Wikimedia, Openverse, Liveflickr, NASA, Unsplash, Pollinations, etc.)
+  const imageUrlRegex = /(['"`])(https?:\/\/(?:image\.pollinations\.ai\/[^\s'"`]+|images\.unsplash\.com\/[^\s'"`]+|picsum\.photos\/[^\s'"`]+|upload\.wikimedia\.org\/[^\s'"`]+|live\.staticflickr\.com\/[^\s'"`]+|[^\s'"`]+\.(?:png|jpg|jpeg|webp|gif|svg)(?:\?[^\s'"`]*)?))\1/gi;
+  const imageMatches = [...updatedCode.matchAll(imageUrlRegex)];
+  const uniqueImageUrls = [...new Set(imageMatches.map((m) => m[2]))].filter(
+    (u) => !urlToLocalFile.has(u) && !/\.(?:mp4|webm|mov|ogv)(?:\?|$)/i.test(u)
   );
 
-  // Replace literal URLs with staticFile('cached-img-X.ext') if staticFile is imported, or keep if inside template
+  if (uniqueImageUrls.length > 0) {
+    await Promise.all(
+      uniqueImageUrls.map(async (url, idx) => {
+        let fileName = `cached-img-${idx}.jpg`;
+        let outPath = `public/${fileName}`;
+        try {
+          let resObj;
+          try {
+            resObj = await fetchWithTimeout(url, 14000);
+          } catch {
+            resObj = await fetchWithTimeout(url, 14000);
+          }
+          if (
+            resObj &&
+            resObj.buffer &&
+            resObj.buffer.length > 256 &&
+            !resObj.contentType.includes('text/html')
+          ) {
+            if (resObj.contentType.includes('svg')) {
+              fileName = `cached-img-${idx}.svg`;
+              outPath = `public/${fileName}`;
+            } else if (resObj.contentType.includes('png')) {
+              fileName = `cached-img-${idx}.png`;
+              outPath = `public/${fileName}`;
+            }
+            fs.writeFileSync(outPath, resObj.buffer);
+            fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
+            urlToLocalFile.set(url, fileName);
+            console.log(`🖼️ Pre-fetched external image [${idx}]: ${url.slice(0, 70)}... -> ${fileName}`);
+            return;
+          }
+        } catch (err) {
+          console.warn(`⚠️ Image pre-fetch fallback for ${url.slice(0, 60)}:`, err?.message || err);
+        }
+        // Fallback to sleek SVG so Remotion never hangs or shows a broken image
+        fileName = `cached-img-${idx}.svg`;
+        outPath = `public/${fileName}`;
+        writeFallbackSvg(outPath, idx);
+        fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
+        urlToLocalFile.set(url, fileName);
+      })
+    );
+  }
+
+  if (urlToLocalFile.size === 0) return updatedCode;
+
   const hasStaticFileImport = /import\s+\{[^}]*\bstaticFile\b[^}]*\}\s+from\s+['"]remotion['"]/.test(
     updatedCode
   );
@@ -109,7 +158,13 @@ async function prefetchExternalImages(code) {
   }
   const fnName = hasStaticFileImport ? 'staticFile' : '__remotionStaticFile';
 
-  updatedCode = updatedCode.replace(urlRegex, (fullMatch, quote, url) => {
+  updatedCode = updatedCode.replace(videoUrlRegex, (fullMatch, quote, url) => {
+    const localFile = urlToLocalFile.get(url);
+    if (!localFile) return fullMatch;
+    return `${fnName}('${localFile}')`;
+  });
+
+  updatedCode = updatedCode.replace(imageUrlRegex, (fullMatch, quote, url) => {
     const localFile = urlToLocalFile.get(url);
     if (!localFile) return fullMatch;
     return `${fnName}('${localFile}')`;
@@ -165,7 +220,7 @@ async function main() {
     : fs.readFileSync('src/remotion/DynamicVideo.tsx', 'utf-8');
 
   code = await sanitizeLucideImports(code);
-  code = await prefetchExternalImages(code);
+  code = await prefetchExternalMedia(code);
 
   fs.writeFileSync('src/remotion/DynamicVideo.tsx', code, 'utf-8');
 

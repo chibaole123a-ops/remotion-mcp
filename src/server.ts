@@ -364,17 +364,303 @@ async function inspectGitHubWorkflowRun(jobId: string) {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.3)
-## (3-Layer Zero-Drift Audio-Visual Sync + Progressive Visual Build-Up + Pure Voiceover + 60fps Anti-Lag)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.4)
+## (Multimodal Vision Media Search + 3-Layer Zero-Drift Audio-Visual Sync + Progressive Visual Build-Up + Pure Voiceover + 60fps Anti-Lag)
 
-1. Mandatory 4-Step Before & After Order of Operations:
+1. Mandatory 5-Step Before & After Order of Operations:
    - STEP 1: Write cohesive narrative paragraphs (2-3 sentences / 30-55 words per segment with narrative bridges, NEVER choppy 1-sentence blurbs).
    - STEP 2: Run \`analyze_narration_timeline\` BEFORE writing \`tsxCode\` to get \`suggestedVisualBeats\` with real spoken anchor keywords.
-   - STEP 3: Wrap each chapter in \`<SyncedScene sceneIndex={i}>\` (Zero-Drift Flow-Sync), place \`<ContinuousAudioTrack />\` + \`<WordHighlightCaptions />\` at root, and trigger progressive visual beats via \`getWordTrigger(i, "keyword", frame)\`.
-   - STEP 4: Never unmount elements mid-scene (\`{progress < 1 && <Comp />}\`), never use heavy \`filter: blur()\`, and never add \`bgm.mp3\` or \`@remotion/sfx\`.
+   - STEP 3: Run \`search_visual_media\` to search 45+ open global archives and VISUALLY INSPECT real photos & video keyframes (\`type: "image"\`) with your eyes before embedding via \`<Img>\` or \`<OffthreadVideo muted />\`.
+   - STEP 4: Wrap each chapter in \`<SyncedScene sceneIndex={i}>\` (Zero-Drift Flow-Sync), place \`<ContinuousAudioTrack />\` + \`<WordHighlightCaptions />\` at root, and trigger progressive visual beats via \`getWordTrigger(i, "keyword", frame)\`.
+   - STEP 5: Never unmount elements mid-scene (\`{progress < 1 && <Comp />}\`), never use heavy \`filter: blur()\`, and never add \`bgm.mp3\` or \`@remotion/sfx\`.
 2. 3-Layer Zero-Drift Audio-Visual Sync (\`./audio-sync\`):
    - \`import { SyncedScene, getWordTrigger, getWordProgress, getWordFrame, getBeatFrame, getSceneFrames, getSegmentStartFrame, ContinuousAudioTrack, WordHighlightCaptions, audioTelemetry } from './audio-sync';\`
 `;
+
+interface MediaCandidate {
+  title: string;
+  embedUrl: string;
+  previewImageUrl: string;
+  mediaType: 'image' | 'video';
+  source: string;
+  width?: number;
+  height?: number;
+  description?: string;
+}
+
+async function fetchImagePreviewBase64(
+  imageUrl: string,
+  timeoutMs = 3500
+): Promise<{ data: string; mimeType: string } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(imageUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        Accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8',
+      },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (!ct.startsWith('image/') || ct.includes('svg')) return null;
+
+    const ab = await res.arrayBuffer();
+    if (ab.byteLength < 800 || ab.byteLength > 950 * 1024) return null;
+
+    const mimeType = ct.includes('png')
+      ? 'image/png'
+      : ct.includes('webp')
+      ? 'image/webp'
+      : 'image/jpeg';
+    return {
+      data: Buffer.from(ab).toString('base64'),
+      mimeType,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function searchOpenverseImages(query: string, limit = 3): Promise<MediaCandidate[]> {
+  try {
+    const url = `https://api.openverse.org/v1/images/?q=${encodeURIComponent(
+      query
+    )}&page_size=${limit * 2}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Remotion-Cloud-MCP-Server/5.4' },
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const results: any[] = data?.results || [];
+    const out: MediaCandidate[] = [];
+
+    for (const item of results) {
+      if (!item?.url || !item?.thumbnail) continue;
+      if (/\.svg(\?|$)/i.test(item.url)) continue;
+      out.push({
+        title: String(item.title || query).slice(0, 120),
+        embedUrl: item.url,
+        previewImageUrl: item.thumbnail || item.url,
+        mediaType: 'image',
+        source: `Openverse (${item.source || 'global-archive'})`,
+        width: item.width,
+        height: item.height,
+        description: item.creator ? `Creator: ${item.creator}` : undefined,
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function searchWikimediaMedia(
+  query: string,
+  wantVideo: boolean,
+  limit = 3
+): Promise<MediaCandidate[]> {
+  try {
+    const filetypeFilter = wantVideo ? 'filetype:video' : 'filetype:bitmap';
+    const gsrsearch = `${query} ${filetypeFilter}`;
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
+      gsrsearch
+    )}&gsrnamespace=6&gsrlimit=${
+      limit * 2
+    }&prop=imageinfo&iiprop=url|dimensions|mime|extmetadata&iiurlwidth=640&format=json&origin=*`;
+
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Remotion-Cloud-MCP-Server/5.4 (https://github.com/chibaole123a-ops/remotion-mcp)',
+      },
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const pages = Object.values(data?.query?.pages || {}) as any[];
+    const out: MediaCandidate[] = [];
+
+    for (const p of pages) {
+      const ii = p?.imageinfo?.[0];
+      if (!ii?.url) continue;
+      const mime = String(ii.mime || '').toLowerCase();
+      const isVid = mime.includes('video') || /\.(webm|mp4|ogv)$/i.test(ii.url);
+      if (wantVideo && !isVid) continue;
+      if (!wantVideo && (isVid || mime.includes('svg') || mime.includes('tiff'))) continue;
+
+      const rawTitle = String(p.title || '')
+        .replace(/^File:/i, '')
+        .replace(/\.[^.]+$/, '');
+      const descHtml = ii?.extmetadata?.ImageDescription?.value || '';
+      const cleanDesc = String(descHtml)
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+
+      out.push({
+        title: rawTitle,
+        embedUrl: isVid ? ii.url : ii.thumburl || ii.url,
+        previewImageUrl: ii.thumburl || ii.url,
+        mediaType: isVid ? 'video' : 'image',
+        source: 'Wikimedia Commons',
+        width: ii.width,
+        height: ii.height,
+        description: cleanDesc || undefined,
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function searchInternetArchiveVideos(query: string, limit = 2): Promise<MediaCandidate[]> {
+  try {
+    const q = `(${query}) AND mediatype:(movies) AND format:(MPEG4)`;
+    const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(
+      q
+    )}&fl[]=identifier,title,description&rows=${limit * 2}&page=1&output=json`;
+
+    const res = await fetch(searchUrl, {
+      headers: { 'User-Agent': 'Remotion-Cloud-MCP-Server/5.4' },
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const docs: any[] = data?.response?.docs || [];
+    const out: MediaCandidate[] = [];
+
+    for (const doc of docs) {
+      const id = doc?.identifier;
+      if (!id) continue;
+      try {
+        const metaRes = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
+          headers: { 'User-Agent': 'Remotion-Cloud-MCP-Server/5.4' },
+        });
+        if (!metaRes.ok) continue;
+        const meta: any = await metaRes.json();
+        const files: any[] = meta?.files || [];
+        const mp4File = files.find(
+          (f) =>
+            typeof f.name === 'string' &&
+            f.name.endsWith('.mp4') &&
+            !f.name.includes('_ia') &&
+            Number(f.size || 0) < 45 * 1024 * 1024
+        );
+        if (!mp4File) continue;
+
+        const embedUrl = `https://archive.org/download/${encodeURIComponent(
+          id
+        )}/${encodeURIComponent(mp4File.name)}`;
+        const previewImageUrl = `https://archive.org/services/img/${encodeURIComponent(id)}`;
+        out.push({
+          title: String(doc.title || id).slice(0, 120),
+          embedUrl,
+          previewImageUrl,
+          mediaType: 'video',
+          source: 'Internet Archive (.mp4 Video)',
+          description: String(doc.description || '').slice(0, 160) || undefined,
+        });
+        if (out.length >= limit) break;
+      } catch {
+        continue;
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+async function executeMultimodalMediaSearch(sceneQueries: any[]) {
+  const contentBlocks: any[] = [];
+  const safeQueries = Array.isArray(sceneQueries) ? sceneQueries.slice(0, 6) : [];
+
+  contentBlocks.push({
+    type: 'text',
+    text: `🔍 MULTIMODAL VISION MEDIA SEARCH RESULTS (${safeQueries.length} scene queries):\nLook directly at the live preview images/keyframes below. Verify that each visual genuinely matches your spoken script before embedding its \`embedUrl\` into \`<Img src="..." />\` or \`<OffthreadVideo src="..." muted />\`.`,
+  });
+
+  for (const sq of safeQueries) {
+    const sceneIndex = Number(sq.sceneIndex ?? 0);
+    const spokenSentence = String(sq.spokenSentence || '').trim();
+    const searchQuery = String(sq.searchQuery || '').trim();
+    const mediaTypePref = String(sq.mediaType || 'any').toLowerCase();
+    const maxResults = Math.min(3, Math.max(1, Number(sq.maxResults || 2)));
+
+    if (!searchQuery) continue;
+
+    const wantVideo = mediaTypePref === 'video' || mediaTypePref === 'any';
+    const wantImage = mediaTypePref === 'image' || mediaTypePref === 'any';
+
+    const parallelTasks: Promise<MediaCandidate[]>[] = [];
+    if (wantImage) {
+      parallelTasks.push(searchWikimediaMedia(searchQuery, false, 2));
+      parallelTasks.push(searchOpenverseImages(searchQuery, 2));
+    }
+    if (wantVideo) {
+      parallelTasks.push(searchWikimediaMedia(searchQuery, true, 2));
+      parallelTasks.push(searchInternetArchiveVideos(searchQuery, 1));
+    }
+
+    const nestedCandidates = await Promise.all(parallelTasks);
+    const allCandidates = nestedCandidates.flat();
+
+    const verifiedForScene: {
+      candidate: MediaCandidate;
+      preview: { data: string; mimeType: string };
+    }[] = [];
+    for (const cand of allCandidates) {
+      if (verifiedForScene.length >= maxResults) break;
+      const preview = await fetchImagePreviewBase64(cand.previewImageUrl);
+      if (preview) {
+        verifiedForScene.push({ candidate: cand, preview });
+      }
+    }
+
+    if (verifiedForScene.length === 0) {
+      contentBlocks.push({
+        type: 'text',
+        text: `\n--- [Scene ${sceneIndex}] Query: "${searchQuery}" ---\nSpoken Script: "${spokenSentence}"\nNo verified live preview matched this exact query. Use bespoke Remotion 3D/SVG/Data choreography for this scene or refine the English search query.`,
+      });
+      continue;
+    }
+
+    for (let k = 0; k < verifiedForScene.length; k++) {
+      const { candidate, preview } = verifiedForScene[k];
+      const tagSnippet =
+        candidate.mediaType === 'video'
+          ? `<OffthreadVideo src="${candidate.embedUrl}" muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />`
+          : `<Img src="${candidate.embedUrl}" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />`;
+
+      contentBlocks.push({
+        type: 'text',
+        text: `\n=== [Scene ${sceneIndex} — Candidate #${k + 1} (${candidate.mediaType.toUpperCase()})] ===
+• Spoken Script Context: "${spokenSentence}"
+• Title: ${candidate.title}
+• Source: ${candidate.source}${candidate.width ? ` (${candidate.width}x${candidate.height})` : ''}
+${candidate.description ? `• Description: ${candidate.description}\n` : ''}• Embed URL (auto-cached to local SSD on Cloud): ${candidate.embedUrl}
+• Remotion JSX Snippet: \`${tagSnippet}\`
+👇 LIVE VISUAL PREVIEW BELOW (Inspect with your eyes to confirm relevance & subject placement):`,
+      });
+
+      contentBlocks.push({
+        type: 'image',
+        data: preview.data,
+        mimeType: preview.mimeType,
+      });
+    }
+  }
+
+  return contentBlocks;
+}
 
 function createMcpServerInstance(baseUrl: string) {
   const server = new McpServer({
@@ -405,6 +691,28 @@ function createMcpServerInstance(baseUrl: string) {
       const analysis = buildNarrationTimelineAnalysis(narrationSegments, fps);
       return {
         content: [{ type: 'text', text: JSON.stringify(analysis, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    'search_visual_media',
+    'Step 3 (Multimodal Vision Media Search): Search across 45+ open global archives (Openverse, NASA, Smithsonian, Wikimedia Commons, Internet Archive .mp4 Videos) for real photos and real B-roll videos matching your script scenes. Returns actual LIVE IMAGE & VIDEO KEYFRAME PREVIEWS (`type: "image"`) directly to your eyes!',
+    {
+      sceneQueries: z.array(
+        z.object({
+          sceneIndex: z.number().int().default(0),
+          spokenSentence: z.string(),
+          searchQuery: z.string(),
+          mediaType: z.enum(['any', 'image', 'video']).default('any'),
+          maxResults: z.number().int().min(1).max(3).default(2),
+        })
+      ),
+    },
+    async ({ sceneQueries }) => {
+      const contentBlocks = await executeMultimodalMediaSearch(sceneQueries);
+      return {
+        content: contentBlocks as any,
       };
     }
   );

@@ -1,12 +1,15 @@
 {
   "name": "remotion-mcp-cloud",
-  "version": "5.0.0",
-  "description": "Open Creative AI Video Studio v5.0 (Frame-Exact WordBoundary Sync + Word-Highlight Captions + Multi-Layer BGM + Full Remotion 4.0.541) on Cloudflare & GitHub Actions",
+  "version": "5.5.0",
+  "description": "Open Creative AI Video Studio v5.5 (Director Storyboard Framework + Multimodal Vision Media Search + Frame-Exact WordBoundary Sync + Full Remotion 4.0.541) on Cloudflare & GitHub Actions",
   "type": "module",
   "scripts": {
-    "start": "tsx src/server.ts",
-    "tunnel": "tsx src/start-with-tunnel.ts",
-    "studio": "remotion studio src/remotion/index.ts"
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "studio": "remotion studio src/remotion/index.ts",
+    "typecheck": "tsc --noEmit",
+    "server": "tsx src/server.ts",
+    "tunnel": "tsx src/start-with-tunnel.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
@@ -37,6 +40,7 @@
     "@remotion/three": "4.0.541",
     "@remotion/transitions": "4.0.541",
     "@remotion/zod-types": "4.0.541",
+    "cloudflared": "^0.7.3",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "lucide-react": "^0.475.0",

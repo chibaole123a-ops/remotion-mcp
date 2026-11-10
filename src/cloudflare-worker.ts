@@ -1122,7 +1122,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         },
         serverInfo: {
           name: 'remotion-cloudflare-github-mcp',
-          version: '5.0.0',
+          version: '5.5.0',
         },
       },
     };
@@ -1726,7 +1726,7 @@ export default {
         }
       }
 
-      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '5.0.0' }), {
+      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '5.5.0' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -1736,7 +1736,7 @@ export default {
       JSON.stringify({
         status: 'online_24_7',
         version:
-          '5.0.0 (Open Creative AI Studio: Frame-Exact WordBoundary Sync + Word-Highlight Captions + Multi-Layer BGM + Full Remotion 4.0.541)',
+          '5.5.0 (Open Creative AI Studio: Frame-Exact WordBoundary Sync + Word-Highlight Captions + Director Storyboard + Full Remotion 4.0.541)',
         platform: 'Cloudflare Workers + GitHub Actions (16GB RAM Cloud)',
         repository: repo,
         security: env.MCP_SECRET ? 'PROTECTED 🔒' : 'OPEN',

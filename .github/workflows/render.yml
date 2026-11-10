@@ -57,12 +57,13 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Cache node_modules and Remotion Browser
+      - name: Cache node_modules, Remotion Browser and Python pip
         uses: actions/cache@v4
         with:
           path: |
             ~/.npm
             ~/.cache/remotion
+            ~/.cache/pip
             node_modules
           key: remotion-deps-${{ runner.os }}-${{ hashFiles('package.json') }}
 

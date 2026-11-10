@@ -10,6 +10,7 @@ const PORT = Number(process.env.PORT || 3456);
 const MCP_SECRET = process.env.MCP_SECRET || '';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
 const GITHUB_REPO = process.env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
+const PEXELS_API_KEY = process.env.PEXELS_API_KEY || '';
 
 function getPublicBaseUrl(req?: express.Request): string {
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '');
@@ -670,6 +671,60 @@ async function searchInternetArchiveVideos(query: string, limit = 2): Promise<Me
   }
 }
 
+async function searchPexelsMedia(
+  apiKey: string,
+  query: string,
+  wantVideo: boolean,
+  limit = 2
+): Promise<MediaCandidate[]> {
+  if (!apiKey) return [];
+  try {
+    const endpoint = wantVideo
+      ? `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${limit}`
+      : `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${limit}`;
+    const res = await fetch(endpoint, {
+      headers: { Authorization: apiKey },
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const out: MediaCandidate[] = [];
+
+    if (wantVideo) {
+      for (const v of data?.videos || []) {
+        const hdFile =
+          (v.video_files || []).find((f: any) => f.quality === 'hd' && f.file_type === 'video/mp4') ||
+          (v.video_files || [])[0];
+        if (!hdFile?.link || !v.image) continue;
+        out.push({
+          title: `Pexels HD B-Roll #${v.id} (${query})`,
+          embedUrl: hdFile.link,
+          previewImageUrl: v.image,
+          mediaType: 'video',
+          source: 'Pexels HD Video',
+          width: hdFile.width,
+          height: hdFile.height,
+        });
+      }
+    } else {
+      for (const p of data?.photos || []) {
+        if (!p?.src?.large2x && !p?.src?.large) continue;
+        out.push({
+          title: String(p.alt || query).slice(0, 120),
+          embedUrl: p.src.large2x || p.src.large,
+          previewImageUrl: p.src.medium || p.src.small,
+          mediaType: 'image',
+          source: 'Pexels Photography',
+          width: p.width,
+          height: p.height,
+        });
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 async function executeMultimodalMediaSearch(sceneQueries: any[]) {
   const contentBlocks: any[] = [];
   const safeQueries = Array.isArray(sceneQueries) ? sceneQueries.slice(0, 6) : [];
@@ -692,6 +747,10 @@ async function executeMultimodalMediaSearch(sceneQueries: any[]) {
     const wantImage = mediaTypePref === 'image' || mediaTypePref === 'any';
 
     const parallelTasks: Promise<MediaCandidate[]>[] = [];
+    if (PEXELS_API_KEY) {
+      if (wantImage) parallelTasks.push(searchPexelsMedia(PEXELS_API_KEY, searchQuery, false, 2));
+      if (wantVideo) parallelTasks.push(searchPexelsMedia(PEXELS_API_KEY, searchQuery, true, 2));
+    }
     if (wantImage) {
       parallelTasks.push(searchWikimediaMedia(searchQuery, false, 2));
       parallelTasks.push(searchOpenverseImages(searchQuery, 2));
@@ -756,7 +815,7 @@ ${candidate.description ? `• Description: ${candidate.description}\n` : ''}•
 function createMcpServerInstance(baseUrl: string) {
   const server = new McpServer({
     name: 'remotion-cloud-github-actions',
-    version: '5.0.0',
+    version: '5.5.0',
   });
 
   server.tool(
@@ -1395,7 +1454,7 @@ export function startApp() {
     res.json({
       status: 'online',
       version:
-        '5.0.0 (Open Creative AI Studio: Frame-Exact WordBoundary Sync + Word-Highlight Captions + Multi-Layer BGM + Full Remotion 4.0.541)',
+        '5.5.0 (Open Creative AI Studio: Frame-Exact WordBoundary Sync + Word-Highlight Captions + Director Storyboard + Full Remotion 4.0.541)',
       mode: 'GitHub Actions Cloud Renderer (4 vCPU, 16GB RAM x 20 parallel jobs)',
       repository: GITHUB_REPO,
       mcpEndpoint: `${baseUrl}/mcp${MCP_SECRET ? '/<YOUR_SECRET>' : ''}`,
@@ -1403,7 +1462,7 @@ export function startApp() {
   });
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ Remotion Cloud Coordinator MCP v5.0.0 listening on port ${PORT}`);
+    console.log(`✅ Remotion Cloud Coordinator MCP v5.5.0 listening on port ${PORT}`);
   });
 }
 

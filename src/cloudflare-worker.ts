@@ -310,50 +310,24 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
 
 const TOOLS = [
   {
-    name: 'get_remotion_ecosystem_guide',
-    description:
-      'Get the complete Remotion v4.0.541 Open Creative Studio guide (Three.js 3D, Shapes, Paths, Transitions, Fonts, Noise, Captions, Animation utils).',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'preview_remotion_frame',
-    description:
-      'Fast Still Preview: Capture a single high-res static PNG frame (via `npx remotion still`) on Cloud. USE ONLY WHEN the user explicitly asks to preview, inspect a frame, or check the layout before rendering. Do NOT use this tool if the user asks to create or make a video (use render_remotion_video directly instead).\nIMPORTANT FORMATTING RULES:\n1. NEVER print or paste raw tsxCode into chat.\n2. When presenting the preview to the user, ALWAYS embed the image directly using markdown: `![Preview Frame ${frame}](${previewImageUrl})` followed by `[Download PNG](${directDownloadUrl})`.',
+    name: 'remotion_studio',
+    description: `ALL-IN-ONE REMOTION PRODUCTION STUDIO: Create, preview, and render broadcast-ready videos using the complete Remotion v4.0.542 ecosystem (Three.js 3D, Rough Notation, Transitions, Shapes, Noise, Google Fonts).\n` +
+      `ACTIONS:\n` +
+      `- "render": (Default) Render full MP4 video on GitHub Actions Cloud (16GB RAM). Call this whenever the user asks to create/render a video.\n` +
+      `- "preview": Capture a fast static PNG still frame (via npx remotion still) to inspect layout/3D/colors in seconds.\n` +
+      `RULES:\n` +
+      `1. NEVER print or paste raw tsxCode into the chat conversation.\n` +
+      `2. For "render": present clean links: 🎬 [Xem Video Trực Tiếp](\${watchPageUrl}) | 📥 [Tải Video MP4](\${directDownloadUrl}).\n` +
+      `3. For "preview": embed image markdown: ![Preview Frame #\${frame}](\${previewImageUrl}).\n${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
       properties: {
-        title: {
+        action: {
           type: 'string',
-          description: 'Title for preview',
+          enum: ['render', 'preview'],
+          description: "Action to perform: 'render' for full MP4 video, or 'preview' for a fast static PNG frame.",
+          default: 'render',
         },
-        tsxCode: {
-          type: 'string',
-          description:
-            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`. Pass directly to this tool parameter without pasting it in your chat message.',
-        },
-        frame: {
-          type: 'number',
-          description: 'Specific frame number to capture (default: 0).',
-          default: 0,
-        },
-        fps: { type: 'number', default: 30 },
-        width: { type: 'number', default: 1920 },
-        height: { type: 'number', default: 1080 },
-      },
-      required: ['tsxCode'],
-    },
-  },
-  {
-    name: 'render_remotion_video',
-    description: `DEFAULT VIDEO PRODUCTION TOOL: Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, WebGL2 swangle).\nWhenever the user asks to create, make, generate, or produce a video, call this tool IMMEDIATELY. Do NOT stop at preview_remotion_frame unless the user specifically asked for a preview.\nIMPORTANT FORMATTING RULES:\n1. NEVER print or paste raw tsxCode into the chat message.\n2. Present results cleanly using markdown links: ` +
-      '`🎬 [Xem Video Trực Tiếp](${watchPageUrl})` and `📥 [Tải Video MP4](${directDownloadUrl})`.\n' +
-      `3. Automatically follow up with check_render_status until ready.\n${ECOSYSTEM_DOCS}`,
-    inputSchema: {
-      type: 'object',
-      properties: {
         title: {
           type: 'string',
           description: 'Title of the video project',
@@ -361,12 +335,17 @@ const TOOLS = [
         tsxCode: {
           type: 'string',
           description:
-            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`. Pass directly to the tool parameter. NEVER paste or print this code into the chat conversation unless explicitly requested by the user.',
+            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`. Pass directly to tool parameter.',
         },
         durationInFrames: {
           type: 'number',
-          description: 'Total duration in frames (seconds * fps). Default 300 (10s @ 30fps).',
+          description: 'Total duration in frames (seconds * fps). Default 300 (10s @ 30fps). Only used for action="render".',
           default: 300,
+        },
+        frame: {
+          type: 'number',
+          description: 'Specific frame number to capture. Only used for action="preview" (default: 0).',
+          default: 0,
         },
         fps: {
           type: 'number',
@@ -375,19 +354,18 @@ const TOOLS = [
         },
         width: {
           type: 'number',
-          description: 'Video width in pixels (1920 for YouTube, 1080 for TikTok/Shorts).',
+          description: 'Width in pixels (1920 for YouTube/landscape, 1080 for TikTok/Shorts vertical).',
           default: 1920,
         },
         height: {
           type: 'number',
-          description: 'Video height in pixels (1080 for YouTube, 1920 for TikTok/Shorts).',
+          description: 'Height in pixels (1080 for YouTube/landscape, 1920 for TikTok/Shorts vertical).',
           default: 1080,
         },
         narrationSegments: {
           type: 'array',
           items: { type: 'string' },
-          description:
-            'Optional: Spoken voiceover paragraphs for scenes if the user wants AI voiceover.',
+          description: 'Optional: Voiceover text paragraphs if user requested voice narration.',
         },
         voice: {
           type: 'string',
@@ -397,7 +375,7 @@ const TOOLS = [
         bgmMood: {
           type: 'string',
           enum: ['epic-space', 'cyber-tech', 'warm-inspiring', 'mystery-deep', 'upbeat-energetic'],
-          description: 'Optional mood for background audio.',
+          description: 'Optional background music mood.',
           default: 'epic-space',
         },
       },
@@ -405,27 +383,40 @@ const TOOLS = [
     },
   },
   {
-    name: 'check_render_status',
+    name: 'get_system_task_status',
     description:
-      'Check if a rendered video or still frame is ready on the Cloud, and inspect real-time GitHub Actions step progress or compiler error logs for autonomous self-healing.',
+      'SYSTEM INFRASTRUCTURE TOOL: Track real-time background Cloud execution (GitHub Actions runner, build steps, completion status, or watch links) for any dispatched job.',
     inputSchema: {
       type: 'object',
       properties: {
-        jobId: { type: 'string', description: 'The jobId returned by render_remotion_video or preview_remotion_frame' },
+        jobId: { type: 'string', description: 'The unique jobId returned by remotion_studio' },
       },
       required: ['jobId'],
     },
   },
   {
-    name: 'list_rendered_videos',
+    name: 'inspect_system_logs',
     description:
-      'List all previously rendered MP4 videos stored in the Cloud Gallery along with their watch URLs, stream URLs, and download links.',
+      'SYSTEM DIAGNOSTICS & SELF-HEALING TOOL: Retrieve detailed compiler logs, TypeScript error traces, or runner failures for autonomous debugging and self-healing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        jobId: { type: 'string', description: 'The unique jobId to inspect' },
+      },
+      required: ['jobId'],
+    },
+  },
+  {
+    name: 'manage_cloud_gallery',
+    description:
+      'SYSTEM ASSET & STORAGE TOOL: List all rendered MP4 videos and assets currently stored in the Cloud Release CDN repository.',
     inputSchema: {
       type: 'object',
       properties: {
         limit: {
           type: 'number',
           default: 20,
+          description: 'Maximum number of items to retrieve',
         },
       },
     },
@@ -475,17 +466,8 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
     const args = params?.arguments || {};
 
     try {
-      if (toolName === 'get_remotion_ecosystem_guide') {
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [{ type: 'text', text: ECOSYSTEM_DOCS }],
-          },
-        };
-      }
-
-      if (toolName === 'preview_remotion_frame') {
+      if (toolName === 'remotion_studio' || toolName === 'render_remotion_video' || toolName === 'preview_remotion_frame') {
+        const action = args.action || (toolName === 'preview_remotion_frame' ? 'preview' : 'render');
         const tsxCode = String(args.tsxCode || '');
         const warnings = validateTsxCode(tsxCode);
         if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
@@ -497,7 +479,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               content: [
                 {
                   type: 'text',
-                  text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call preview_remotion_frame again.`,
+                  text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call remotion_studio again.`,
                 },
               ],
             },
@@ -505,107 +487,62 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         }
 
         const jobId = randomJobId();
-        const title = args.title || 'Still Preview';
-        const frame = Number(args.frame || 0);
         const fps = Number(args.fps || 30);
         const width = Number(args.width || 1920);
         const height = Number(args.height || 1080);
 
-        await dispatchGitHubRender(
-          env,
-          jobId,
-          title,
-          tsxCode,
-          Math.max(frame + 1, 30),
-          fps,
-          width,
-          height,
-          {},
-          'still',
-          frame
-        );
+        if (action === 'preview') {
+          const title = args.title || 'Still Preview';
+          const frame = Number(args.frame || 0);
 
-        const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
-        const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
+          await dispatchGitHubRender(
+            env,
+            jobId,
+            title,
+            tsxCode,
+            Math.max(frame + 1, 30),
+            fps,
+            width,
+            height,
+            {},
+            'still',
+            frame
+          );
 
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(
-                  {
-                    status: 'still_dispatched_to_github_actions_cloud',
-                    jobId,
-                    capturedFrame: frame,
-                    specs: `${width}x${height} @ ${fps}fps`,
-                    previewImageUrl: stillUrl,
-                    directDownloadUrl: downloadUrl,
-                    instructionsForAgent:
-                      `Embed the image directly into your response using markdown: ![Preview Frame #${frame}](${stillUrl}). Do NOT show raw long URL strings.`,
-                    message:
-                      `Still frame #${frame} capture dispatched to Cloud! Call check_render_status with jobId "${jobId}" to verify when the PNG image is ready to inspect.`,
-                  },
-                  null,
-                  2
-                ),
-              },
-            ],
-          },
-        };
-      }
+          const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
+          const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
 
-      if (toolName === 'list_rendered_videos') {
-        const limit = Math.max(1, Math.min(100, Number(args.limit || 20)));
-        const videos = await listReleaseVideosOnGitHub(env, baseUrl);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(
-                  {
-                    totalStoredVideos: videos.length,
-                    galleryUrl: `${baseUrl}/gallery${secretQuery}`,
-                    videos: videos.slice(0, limit),
-                  },
-                  null,
-                  2
-                ),
-              },
-            ],
-          },
-        };
-      }
-
-      if (toolName === 'render_remotion_video') {
-        const tsxCode = String(args.tsxCode || '');
-        const warnings = validateTsxCode(tsxCode);
-        if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
           return {
             jsonrpc: '2.0',
             id,
             result: {
-              isError: true,
               content: [
                 {
                   type: 'text',
-                  text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call render_remotion_video again.`,
+                  text: JSON.stringify(
+                    {
+                      status: 'still_dispatched_to_github_actions_cloud',
+                      jobId,
+                      capturedFrame: frame,
+                      specs: `${width}x${height} @ ${fps}fps`,
+                      previewImageUrl: stillUrl,
+                      directDownloadUrl: downloadUrl,
+                      instructionsForAgent:
+                        `Embed the image directly into your response using markdown: ![Preview Frame #${frame}](${stillUrl}). Do NOT show raw long URL strings.`,
+                      message:
+                        `Still frame #${frame} capture dispatched to Cloud! Call get_system_task_status with jobId "${jobId}" to verify when the PNG image is ready to inspect.`,
+                    },
+                    null,
+                    2
+                  ),
                 },
               ],
             },
           };
         }
 
-        const jobId = randomJobId();
+        // Action === 'render' (Full Video)
         const title = args.title || 'Remotion Video';
-        const fps = Number(args.fps || 30);
-        const width = Number(args.width || 1920);
-        const height = Number(args.height || 1080);
         const narrationSegments = Array.isArray(args.narrationSegments) ? args.narrationSegments : [];
         const durationInFrames = Number(args.durationInFrames || 300);
 
@@ -655,7 +592,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     instructionsForAgent:
                       `Present links cleanly in markdown: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${videoUrl}). Do NOT print raw long URLs.`,
                     message:
-                      'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
+                      'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Share watchPageUrl with the user or call get_system_task_status with jobId to track progress.',
                   },
                   null,
                   2
@@ -666,7 +603,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         };
       }
 
-      if (toolName === 'check_render_status') {
+      if (toolName === 'get_system_task_status' || toolName === 'check_render_status') {
         const jobId = sanitizeJobId(String(args.jobId || ''));
         const start = Date.now();
         let ready = false;
@@ -727,8 +664,62 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     message: ready
                       ? (isStill ? 'Still frame is ready to inspect!' : 'Video is completed and ready to watch inline or download!')
                       : isFailed
-                      ? 'Render job failed on GitHub Actions. Read compilerErrorDetails above to see error trace, fix tsxCode and re-render.'
+                      ? 'Render job failed on GitHub Actions. Call inspect_system_logs or read compilerErrorDetails to see error trace, fix tsxCode and re-call remotion_studio.'
                       : `Job is actively rendering on GitHub Actions Cloud. Present URL to user; it tracks live progress and completes when ready!`,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          },
+        };
+      }
+
+      if (toolName === 'inspect_system_logs') {
+        const jobId = sanitizeJobId(String(args.jobId || ''));
+        const check = await checkReleaseAssetsOnGitHub(env, jobId);
+        const workflowInfo = await inspectGitHubWorkflowRun(env, jobId);
+
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    jobId,
+                    hasErrorLog: Boolean(check.errorLogText),
+                    compilerErrorDetails: check.errorLogText || 'No compile-time error log found. Runner may still be in progress or completed without syntax error.',
+                    runnerConclusion: workflowInfo?.conclusion || workflowInfo?.status || 'unknown',
+                    failedSteps: workflowInfo?.steps?.filter((s: any) => s.conclusion === 'failure') || [],
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          },
+        };
+      }
+
+      if (toolName === 'manage_cloud_gallery' || toolName === 'list_rendered_videos') {
+        const limit = Math.max(1, Math.min(100, Number(args.limit || 20)));
+        const videos = await listReleaseVideosOnGitHub(env, baseUrl);
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    totalStoredVideos: videos.length,
+                    galleryUrl: `${baseUrl}/gallery${secretQuery}`,
+                    videos: videos.slice(0, limit),
                   },
                   null,
                   2

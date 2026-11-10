@@ -56,6 +56,8 @@ function buildNarrationTimelineAnalysis(narrationSegments: string[], fps = 30, r
   const baseWordsPerSec = 3.0 * rateFactor;
 
   let cumulativeFrames = 0;
+  const pacingWarnings: string[] = [];
+
   const scenes = narrationSegments.map((rawSeg, sceneIndex) => {
     const text = String(rawSeg || '').trim();
     const tokens = text.split(/\s+/).filter(Boolean);
@@ -65,14 +67,22 @@ function buildNarrationTimelineAnalysis(narrationSegments: string[], fps = 30, r
       const s = {
         sceneIndex,
         text: '',
+        wordCount: 0,
         estimatedAudioSeconds: 1.5,
         durationInFrames: emptyFrames,
         startFrame: cumulativeFrames,
         endFrame: cumulativeFrames + emptyFrames,
+        suggestedVisualBeats: [] as any[],
         words: [] as any[],
       };
       cumulativeFrames += emptyFrames;
       return s;
+    }
+
+    if (tokens.length < 18) {
+      pacingWarnings.push(
+        `Scene ${sceneIndex} has only ${tokens.length} words ("${text.slice(0, 45)}..."). Consider writing 2-3 cohesive sentences (30-55 words) with narrative bridges so the video does not feel choppy!`
+      );
     }
 
     const weights = tokens.map((w) => {
@@ -86,10 +96,10 @@ function buildNarrationTimelineAnalysis(narrationSegments: string[], fps = 30, r
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     const spokenDurationSec = Math.max(1.6, totalWeight / (avgWeightPerWord * baseWordsPerSec));
     const totalAudioMs = Math.round(spokenDurationSec * 1000);
-    const sceneDurationFrames = Math.ceil((spokenDurationSec + 0.55) * fps);
+    const sceneDurationFrames = Math.ceil((spokenDurationSec + 0.4) * fps);
 
-    let cursorMs = 80;
-    const usableMs = Math.max(300, totalAudioMs - 160);
+    let cursorMs = 60;
+    const usableMs = Math.max(300, totalAudioMs - 120);
     const words = tokens.map((w, idx) => {
       const durMs = (weights[idx] / totalWeight) * usableMs;
       const startMs = Math.round(cursorMs);
@@ -97,6 +107,7 @@ function buildNarrationTimelineAnalysis(narrationSegments: string[], fps = 30, r
       cursorMs += durMs;
       return {
         word: w,
+        cleanWord: w.replace(/[^\p{L}\p{N}]/gu, ''),
         startMs,
         endMs,
         startFrame: Math.floor((startMs / 1000) * fps),
@@ -104,13 +115,38 @@ function buildNarrationTimelineAnalysis(narrationSegments: string[], fps = 30, r
       };
     });
 
+    const beatRatios = tokens.length >= 28 ? [0, 0.28, 0.56, 0.8] : [0, 0.35, 0.7];
+    const suggestedVisualBeats = beatRatios.map((ratio, beatIdx) => {
+      const idx = Math.min(words.length - 1, Math.floor(words.length * ratio));
+      const w1 = words[idx]?.cleanWord || words[idx]?.word || '';
+      const w2 = words[idx + 1]?.cleanWord || '';
+      const anchorPhrase = w2 ? `${w1} ${w2}`.trim() : w1;
+      return {
+        beatNumber: beatIdx + 1,
+        role:
+          beatIdx === 0
+            ? 'Primary Visual Anchor (Scene Entry)'
+            : beatIdx === beatRatios.length - 1
+            ? 'Climax Callout / Metric / Camera Focus'
+            : `Progressive Expansion Beat #${beatIdx + 1}`,
+        anchorKeyword: anchorPhrase,
+        estimatedLocalFrame: words[idx]?.startFrame || 0,
+        codeSnippet:
+          beatIdx === 0
+            ? `// Beat 1 enters with <SyncedScene sceneIndex={${sceneIndex}}>`
+            : `const beat${beatIdx + 1} = getWordTrigger(${sceneIndex}, "${anchorPhrase}", frame);`,
+      };
+    });
+
     const sceneObj = {
       sceneIndex,
       text,
+      wordCount: tokens.length,
       estimatedAudioSeconds: Number(spokenDurationSec.toFixed(2)),
       durationInFrames: sceneDurationFrames,
       startFrame: cumulativeFrames,
       endFrame: cumulativeFrames + sceneDurationFrames,
+      suggestedVisualBeats,
       words,
     };
     cumulativeFrames += sceneDurationFrames;
@@ -122,9 +158,10 @@ function buildNarrationTimelineAnalysis(narrationSegments: string[], fps = 30, r
     totalFrames: Math.max(90, cumulativeFrames),
     totalSeconds: Number((Math.max(90, cumulativeFrames) / fps).toFixed(2)),
     sceneFrames: scenes.map((s) => s.durationInFrames),
+    pacingWarnings: pacingWarnings.length > 0 ? pacingWarnings : undefined,
     scenes,
-    usageHint:
-      'Use `getSceneFrames(sceneIndex)` for each scene duration, `getWordFrame(sceneIndex, keyword)` to trigger visual animations at the exact spoken word, and `<WordHighlightCaptions sceneIndex={i} />` from `./audio-sync` for real-time word-by-word karaoke captions!',
+    directorWorkflowHint:
+      'Wrap each scene in `<SyncedScene sceneIndex={i}>`, place `<ContinuousAudioTrack />` + `<WordHighlightCaptions />` at root, and use the exact `anchorKeyword` values in `suggestedVisualBeats` with `getWordTrigger(sceneIndex, anchorKeyword, frame)` so every visual illustration triggers at the exact spoken millisecond!',
   };
 }
 
@@ -327,16 +364,16 @@ async function inspectGitHubWorkflowRun(jobId: string) {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.1)
-## (Continuous Camera Flow + Frame-Exact WordBoundary Sync + Crystal-Clear Audio + Full Ecosystem)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.3)
+## (3-Layer Zero-Drift Audio-Visual Sync + Progressive Visual Build-Up + Pure Voiceover + 60fps Anti-Lag)
 
-1. Anti-Slide-Deck Rule & Continuous Visual Flow:
-   - NEVER repeat the same "TopHeader + Circle Icon + Bottom Box" template across scenes!
-   - Design bespoke visual metaphors for every segment (3D ThreeCanvas, SVG path drawing \`evolvePath\`, real photography \`<Img>\` with parallax zoom, data charts, multi-beat choreography).
-   - Break each spoken sentence into 2–4 visual beats triggered at exact spoken keywords via \`getWordFrame(i, 'keyword')\` and \`getWordProgress(i, 'startWord', 'endWord', frame)\`.
-2. Frame-Exact Audio-Visual Sync (\`./audio-sync\`):
-   - \`import { getSceneFrames, getSegmentStartFrame, getWordFrame, getGlobalWordFrame, getWordProgress, ContinuousAudioTrack, WordHighlightCaptions, audioTelemetry } from './audio-sync';\`
-   - Keep BGM subtle (\`volume={0.10}\`) and SFX soft (\`volume={0.15}\`) for crystal-clear voiceover.
+1. Mandatory 4-Step Before & After Order of Operations:
+   - STEP 1: Write cohesive narrative paragraphs (2-3 sentences / 30-55 words per segment with narrative bridges, NEVER choppy 1-sentence blurbs).
+   - STEP 2: Run \`analyze_narration_timeline\` BEFORE writing \`tsxCode\` to get \`suggestedVisualBeats\` with real spoken anchor keywords.
+   - STEP 3: Wrap each chapter in \`<SyncedScene sceneIndex={i}>\` (Zero-Drift Flow-Sync), place \`<ContinuousAudioTrack />\` + \`<WordHighlightCaptions />\` at root, and trigger progressive visual beats via \`getWordTrigger(i, "keyword", frame)\`.
+   - STEP 4: Never unmount elements mid-scene (\`{progress < 1 && <Comp />}\`), never use heavy \`filter: blur()\`, and never add \`bgm.mp3\` or \`@remotion/sfx\`.
+2. 3-Layer Zero-Drift Audio-Visual Sync (\`./audio-sync\`):
+   - \`import { SyncedScene, getWordTrigger, getWordProgress, getWordFrame, getBeatFrame, getSceneFrames, getSegmentStartFrame, ContinuousAudioTrack, WordHighlightCaptions, audioTelemetry } from './audio-sync';\`
 `;
 
 function createMcpServerInstance(baseUrl: string) {

@@ -1,96 +1,82 @@
-# 🎬 BẢN THIẾT KẾ CHỐT NÂNG CẤP HỆ THỐNG (FINAL UPGRADE SPECIFICATION v5.0)
+# 🎬 BẢN THIẾT KẾ CHỐT NÂNG CẤP HỆ THỐNG (FINAL UPGRADE SPECIFICATION v5.3)
 
-> **Trạng thái:** ✅ ĐÃ TRIỂN KHAI & ĐỐI CHIẾU HOÀN TẤT 100% (v5.0.0)  
+> **Trạng thái:** ✅ ĐÃ TRIỂN KHAI & ĐỐI CHIẾU HOÀN TẤT 100% (v5.3.0)  
 > **Mục tiêu Tối thượng:**  
 > 1. **Tự do Sáng tạo 100% (Zero Templates / Zero Rigid Matrices):** Không đóng khung Gemini vào bất kỳ mẫu slide hay template cố định nào. Khai mở toàn bộ sức mạnh của 26+ gói `@remotion/*`, Three.js 3D, SVG Path, Audio Spectrum, D3 và Lucide Icons.  
-> 2. **Đồng bộ Tuyệt đối "Nói tới đâu — Hình minh họa & Phụ đề Highlight chính xác tới đó" (Frame-Exact Word-to-Visual & Caption Sync):** Giải quyết tận gốc bài toán lệch nhịp giữa giọng đọc và hình ảnh bằng quy trình **Audio-First WordBoundary Telemetry** chuẩn Editor chuyên nghiệp.
+> 2. **Đồng bộ Tuyệt đối 3 Tầng (Macro-Sync + Micro-Sync + Flow-Sync):** Giọng đọc nói tới đâu — Hình ảnh minh họa, Nhịp chuyển cảnh và Phụ đề Karaoke khớp chính xác tới từng mili-giây mà không bao giờ bị trôi lệch (Zero-Drift).  
+> 3. **Giọng đọc Thuần khiết 100% (Pure Neural Voiceover):** Loại bỏ hoàn toàn âm thanh nền tự tạo (`bgm.mp3` tĩnh lặng tuyệt đối) và tiếng động SFX gây nhiễu.  
+> 4. **Mượt mà 60fps & Chống Giật Lag (Zero Unmount Pop-out / Zero Heavy Blur Lag):** Loại bỏ hiện tượng biến mất vật thể đột ngột và nghẽn CPU do `filter: blur()` lớn.
 
 ---
 
-## I. KIẾN TRÚC ĐỒNG BỘ "NÓI TỚI ĐÂU — HÌNH TỚI ĐÓ" (WORD-TO-VISUAL & CAPTION SYNC)
+## I. KIẾN TRÚC ĐỒNG BỘ 3 TẦNG CHUẨN EDITOR CHUYÊN NGHIỆP (3-LAYER ZERO-DRIFT SYNC)
 
-Để đạt độ chính xác 100% như một Editor chuyên nghiệp dựng trên Premiere / After Effects, hệ thống vận hành theo **Cơ chế Đồng bộ Kép (Dual-Layer Audio-Visual Lock)**:
+### 1. Tầng 1 — Đồng bộ Khung Thời Gian Tổng & Từng Phân Cảnh (Macro-Sync)
+- Trên GitHub Actions (`scripts/generate-studio-audio.mjs`), hệ thống thu âm giọng đọc AI bằng `edge_tts.Communicate(..., boundary="WordBoundary")` và đo độ dài thực tế chính xác đến từng phần nghìn giây bằng **`mutagen.mp3`** (kèm dự phòng `npx remotion ffprobe` và kích thước byte CBR).
+- Mỗi phân cảnh `sceneIndex` có mốc bắt đầu thực tế `getSegmentStartFrame(i)` và độ dài thực tế `getSceneFrames(i)` (đã cộng `0.40s` nhịp nghỉ lấy hơi tự nhiên).
 
-### 1. Bước Đo Đạc Trước Khi Dựng Hình — MCP Tool mới: `analyze_narration_timeline`
-Trước khi viết code `DynamicVideo.tsx`, Gemini có thể gọi tool `analyze_narration_timeline(narrationSegments, voice, fps)` (hoặc hệ thống tự động tính toán). Tool này trả về ngay lập tức **Bản Đồ Thời Gian Từng Từ & Từng Cảnh (Frame-Exact Cue Map)**:
-- Độ dài thực tế của từng phân cảnh: `scenes[i].durationInFrames`, `startFrame`, `endFrame`.
-- Vị trí chính xác (bằng `frame` và `ms`) của **từng từ khóa** trong lời thoại:
-  ```json
-  {
-    "sceneIndex": 0,
-    "durationInFrames": 240,
-    "words": [
-      { "word": "Ban", "startFrame": 4, "endFrame": 10, "startMs": 133, "endMs": 333 },
-      ...
-      { "word": "bùng", "startFrame": 92, "endFrame": 101, "startMs": 3066, "endMs": 3366 },
-      { "word": "nổ", "startFrame": 101, "endFrame": 112, "startMs": 3366, "endMs": 3733 }
-    ]
-  }
-  ```
-- **Cách Gemini sử dụng:** Khi biết chính xác từ khóa *"bùng nổ"* nằm ở `frame 92`, Gemini đặt hiệu ứng hình ảnh vụ nổ / biểu đồ / chuyển động máy quay + âm thanh SFX (`vineBoom` / `whoosh`) kích hoạt đúng tại `frame 92`!
+### 2. Tầng 2 — Đồng bộ Chuyển Cảnh Mượt Không Lệch Tiếng (Flow-Sync: `<SyncedScene>`)
+- **Giải quyết lỗ hổng lệch thời gian của `TransitionSeries`:** Nếu dùng `TransitionSeries` chồng lấp 20 frames mỗi cảnh, hình ảnh các cảnh sau sẽ bị kéo sớm hơn giọng đọc (trôi lệch lũy kế).
+- **Giải pháp `<SyncedScene sceneIndex={i}>` trong `src/remotion/audio-sync.tsx`:**
+  - Tự động đọc `getSegmentStartFrame(i)` và `getSceneFrames(i)` để đặt `<Sequence>` đúng 100% vào khung thời gian giọng đọc thực tế của cảnh `i` (Zero-Drift).
+  - Tự động áp dụng hiệu ứng **Smooth Envelope Transition** (mờ dần + trượt/phóng nhẹ camera ở `enterFrames` đầu và `exitFrames` cuối trong khoảng nghỉ lấy hơi của giọng đọc) để chuyển giao mượt mà giữa các cảnh mà không làm lệch dù chỉ 1 frame âm thanh!
 
-### 2. Dữ Liệu Thực Tế & Hàm Neo Từ Khóa Thời Gian Thực Tại Lúc Render (`src/remotion/audio-telemetry.ts`)
-Khi GitHub Actions chạy `edge_tts` (Python API `Communicate` với `WordBoundary`), hệ thống trích xuất mốc thời gian thực tế của **từng từ đơn lẻ** từ file âm thanh thật (`public/voice-${i}.mp3` đo bằng `ffprobe`) và ghi trực tiếp vào `src/remotion/audio-telemetry.json` kèm module hỗ trợ `src/remotion/audio-sync.ts`:
-- **`getSceneFrames(sceneIndex, fallback)`**: Trả về số frame chính xác 100% của cảnh `sceneIndex` theo file `voice-${sceneIndex}.mp3` thực tế (cộng nhịp thở tự nhiên).
-- **`getWordFrame(sceneIndex, keywordOrPhrase, fallbackFrame)`**: Tìm từ khóa hoặc cụm từ trong lời thoại của cảnh `sceneIndex` và trả về **chính xác `startFrame` thực tế lúc giọng đọc AI phát âm từ đó**!
-  - *Ví dụ:* `const boomFrame = getWordFrame(0, "bùng nổ", 60);` $\rightarrow$ Dù giọng AI đọc nhanh hay chậm, hiệu ứng hình ảnh luôn bung ra **đúng mili-giây miệng AI đọc chữ "bùng nổ"**!
-- **`getSceneWordCaptions(sceneIndex)` & `<WordHighlightCaptions sceneIndex={i} />`**:
-  - Dữ liệu từng từ (`text`, `startMs`, `endMs`) chuẩn hóa 100% theo gói `@remotion/captions`.
-  - Hỗ trợ hiển thị **Phụ đề Karaoke Highlight Từng Từ** (từ nào đang được đọc sẽ sáng màu nổi bật / phóng nhẹ `scale` khớp 100% theo từng mili-giây giọng nói).
+### 3. Tầng 3 — Đồng bộ Từ Khóa Tới Hành Động & Nhịp Bồi Đắp (Micro-Sync: Word-to-Action)
+- **Nâng cấp `analyze_narration_timeline` thành "Bảng Điều Phối Đạo Diễn" (Director's Sync Sheet):**
+  - Tự động tách các từ thực tế có trong từng câu `narrationSegments[i]`, chia sẵn thành **3–4 Nhịp Thị Giác (Visual Beats: Đầu câu -> Giữa câu -> Cao trào -> Kết câu)** kèm từ khóa neo (`anchorKeyword`) có thật 100% trong câu và đoạn code mẫu `getWordProgress(i, "từ_khóa")`.
+  - Nhờ đó Gemini không bao giờ truyền sai từ khóa không có trong lời thoại.
+- **Nâng cấp `src/remotion/audio-sync.tsx`:**
+  - `getWordFrame(sceneIndex, keywordOrPhrase, fallbackFrame)`: Hỗ trợ so khớp cụm từ tiếng Việt, bỏ dấu câu, kèm cơ chế đối chiếu không dấu (accent-insensitive fallback) để luôn tìm trúng từ trong câu.
+  - `getWordTrigger(sceneIndex, keywordOrPhrase, localFrame, durationFrames, fallbackRatio)`: Trả về tiến độ `0 -> 1` mượt mà (với `Easing.bezier(0.22, 1, 0.36, 1)`) bắt đầu ngay tại đúng frame giọng đọc phát âm `keywordOrPhrase`! Nếu từ khóa dự phòng được kích hoạt, tự động neo theo tỷ lệ thực tế của mảng từ trong câu (`getBeatFrame`) chứ không nhảy về số frame cố định vô nghĩa.
+  - `getBeatFrame(sceneIndex, beatIndex, totalBeats)`: Chia đều mốc frame dựa trên danh sách các từ thực tế được phát âm trong cảnh `sceneIndex`.
 
 ---
 
-## II. QUY TRÌNH 6 BƯỚC CHUẨN EDITOR CHUYÊN NGHIỆP (GENERAL PROFESSIONAL SKILL)
+## II. THỨ TỰ 7 BƯỚC TẠO VIDEO CHUẨN EDITOR CHUYÊN NGHIỆP (BEFORE & AFTER WORKFLOW)
 
-Prompt hướng dẫn (`ECOSYSTEM_DOCS`) sẽ trang bị cho Gemini tư duy tổng quát của một Đạo diễn & Editor chuyên nghiệp qua 6 bước:
+### Giai đoạn A — Trên Gemini (Đạo diễn & Dựng cảnh)
+1. **Bước 1 — Đọc Hồ sơ Kỹ thuật (`get_remotion_ecosystem_guide`)**: Nạp API 26+ thư viện Remotion v4.0.541 và bộ công cụ `./audio-sync`.
+2. **Bước 2 — Viết Kịch bản Tự sự Liền mạch Trước (Narration First / Radio Edit)**:
+   - Viết xong toàn bộ `narrationSegments` trước khi viết code hình ảnh.
+   - Mỗi phân đoạn dài **2–3 câu hoàn chỉnh (30–55 từ, ~8–14 giây)**, có câu cầu nối chuyển ý tự nhiên (Narrative Bridges), tuyệt đối không viết 1 câu cụt lủn rời rạc.
+3. **Bước 3 — Chạy `analyze_narration_timeline` Để Lấy Bảng Từ Khóa Có Thật**:
+   - Nhận về thời lượng ước tính (`totalFrames`, `sceneFrames`) và danh sách `suggestedVisualBeats` chứa các từ khóa có thật trong từng câu nói.
+4. **Bước 4 — Viết Code `DynamicVideo.tsx` Theo Khung Đồng Bộ & Gửi Render (`render_remotion_video`)**:
+   - Đặt lớp nền chung xuyên suốt (Shared Spatial Canvas) + `<ContinuousAudioTrack />` + `<WordHighlightCaptions />`.
+   - Bọc mỗi phân cảnh bằng **`<SyncedScene sceneIndex={i}>`**.
+   - Bên trong mỗi cảnh, dùng **`getWordTrigger(i, "từ_khóa", frame)`** hoặc **`getWordProgress(i, "từ_A", "từ_B", frame)`** lấy từ Bước 3 để bồi đắp (Progressive Build-up) các lớp hình ảnh khớp 100% với lời nói.
+   - Giữ các phần tử trên màn hình đến hết cảnh (không dùng `{progress < 1 && <Comp />}` làm biến mất đột ngột) và không dùng `filter: blur()` lớn gây giật lag.
 
-1. **Bước 1 — Tư duy Ngôn ngữ Điện ảnh theo Chủ đề (Creative Direction)**
-   - Tự do phân tích đề tài để chọn phong cách thị giác, bảng màu, nhịp độ và công nghệ phù hợp (3D WebGL, vẽ nét SVG `evolvePath`, sóng nhạc `visualizeAudio`, chiều sâu 2.5D Parallax, hay Kinetic Typography). Không dùng lại template cố định hay kiểu lật slide tĩnh.
-2. **Bước 2 — Kịch bản Phân cảnh & Xác định Điểm nhấn Thị giác (Script & Visual Cue Mapping)**
-   - Viết `narrationSegments` giàu hình tượng, xác định rõ trong mỗi câu nói có những **từ khóa/con số/hành động** nào cần hình ảnh minh họa biến đổi tương ứng.
-3. **Bước 3 — Đo đạc & Khóa cứng Timeline theo Giọng đọc (`analyze_narration_timeline` & `audio-sync`)**
-   - Lấy thời lượng từng cảnh (`durationInFrames`) và mốc frame của các từ khóa quan trọng (`getWordFrame` / `getSceneFrames`) để khóa chặt khung thời gian âm thanh và hình ảnh.
-4. **Bước 4 — Biên đạo Hình ảnh & Chuyển động Khớp Từng Ý Nói (Visual Choreography)**
-   - Khi giọng đọc nói đến ý A (frame `0 -> cue1`) $\rightarrow$ camera và đồ họa diễn hoạt ý A.
-   - Đúng frame giọng đọc chạm tới từ khóa B (`cue1`) $\rightarrow$ đồ họa biến đổi/zoom/vẽ đường dẫn minh họa trực tiếp cho ý B.
-   - Đúng frame giọng đọc chạm tới con số/kết luận C (`cue2`) $\rightarrow$ số liệu/điểm nhấn bung ra khớp từng lời nói.
-5. **Bước 5 — Phối âm Đa tầng & Phụ đề Highlight Từng Từ (3-Track Audio & Word-Level Captions)**
-   - Kết hợp hài hòa:
-     - **Voiceover (`volume: 1.0`)**: Giọng đọc Neural AI đã được lọc ấm & chuẩn hóa âm lượng (`ffmpeg loudnorm`).
-     - **BGM (`volume: 0.16 - 0.20`)**: Nhạc nền đa lớp (4 hợp âm chuyển tiếp + Bass + Arpeggio).
-     - **SFX (`@remotion/sfx`, `volume: 0.25 - 0.35`)**: Điểm xuyết đúng tại các `cueFrame` khi hình ảnh biến chuyển.
-   - Phụ đề Highlight từng từ chạy mượt mà theo đúng mốc `WordBoundary`.
-6. **Bước 6 — Đảm bảo Chất lượng & Tính Tất định (Visual Polish & Deterministic QA)**
-   - Đảm bảo chiều sâu khung hình, không tràn chữ, dùng `random('seed')` và clamp mọi hàm `interpolate()`.
+### Giai đoạn B — Trên Đám Mây GitHub Actions (Thu âm thực tế & Khớp mili-giây)
+5. **Bước 5 — Thu âm `edge-tts` & Đo đạc Mili-giây Thực tế (`scripts/generate-studio-audio.mjs`)**:
+   - Tạo `public/voice-${i}.mp3` trong trẻo (không nhạc nền tự tạo), trích xuất `WordBoundary` của từng từ và đo độ dài chuẩn bằng `mutagen.mp3` -> Ghi vào `src/remotion/audio-telemetry.json` và `src/remotion/meta.json`.
+6. **Bước 6 — Kiểm tra An toàn Tài nguyên (`scripts/prepare-render.mjs`)**:
+   - Tải trước ảnh ngoài (Pre-fetch URLs), bảo vệ import icon `lucide-react`, khóa cứng tổng số frames theo `computedDurationInFrames`.
+7. **Bước 7 — Kết xuất H.264 Chất lượng Cao (`npx remotion render`)**:
+   - `<SyncedScene>`, `getWordTrigger`, `getWordFrame`, `<WordHighlightCaptions>` tự động đọc dữ liệu thật từ `audio-telemetry.json` để khớp từng frame âm thanh và hình ảnh, xuất file MP4 lên kho lưu trữ.
 
 ---
 
-## III. DANH SÁCH CÁC FILE & HẠNG MỤC SẼ TRIỂN KHAI (IMPLEMENTATION CHECKLIST)
+## III. DANH SÁCH ĐỐI CHIẾU TRIỂN KHAI (IMPLEMENTATION CHECKLIST v5.3)
 
-### 1. Nâng cấp Engine Âm thanh & Trích xuất `WordBoundary` (`scripts/generate-studio-audio.mjs`)
-- [x] Viết bộ tổng hợp giọng đọc bằng **Python `edge_tts.Communicate(..., boundary="WordBoundary")`** (với fallback an toàn) để trích xuất **chính xác mili-giây (`startMs`, `endMs`) của từng từ đơn lẻ** ngay khi tạo file `public/voice-${i}.mp3`.
-- [x] Bổ sung thuật toán **Syllable/Word Alignment Bảo hiểm**: Đảm bảo 100% mọi câu tiếng Việt/tiếng Anh đều có mảng `words` tách rời từng từ khớp khít với thời lượng thực tế đo bằng `ffprobe`.
-- [x] Chuẩn hóa âm thanh giọng đọc qua `ffmpeg` (`highpass=f=80,acompressor,loudnorm=I=-16:TP=-1.5:LRA=11`) để giọng AI dày, ấm và rõ nét.
-- [x] Nâng cấp bộ tổng hợp nhạc nền `public/bgm.mp3` lên **Multi-Layer BGM v2** (4-Chord Progression + Sub-Bass Pulse + Arpeggio) theo 5 mood, nén chuẩn `.mp3`.
-- [x] Xuất đầy đủ dữ liệu thời lượng cảnh (`sceneFrames`), tổng thời lượng (`computedDurationInFrames`), và bản đồ từng từ (`scenes[i].words` chuẩn `@remotion/captions`) vào `src/remotion/audio-telemetry.json`, `public/audio-telemetry.json` và `src/remotion/meta.json`.
+### 1. Engine Âm thanh Thuần khiết & Đo đạc Chính xác (`scripts/generate-studio-audio.mjs`)
+- [x] Thu âm giọng đọc bằng Python `edge_tts.Communicate(..., boundary="WordBoundary")` + đo độ dài thực tế bằng **`mutagen.mp3`** + fallback `npx remotion ffprobe` + CBR byte-size.
+- [x] Loại bỏ hoàn toàn nhạc nền tự tạo (`public/bgm.mp3` là file im lặng tuyệt đối 100%) theo yêu cầu người dùng.
+- [x] Xuất đầy đủ `sceneFrames`, `sceneStartFrames`, `computedDurationInFrames`, và `scenes[i].words` vào `src/remotion/audio-telemetry.json`, `public/audio-telemetry.json` và `src/remotion/meta.json`.
 
-### 2. Module Đồng bộ Âm-Hình & Phụ đề Highlight Từng Từ (`src/remotion/audio-sync.tsx` & `src/remotion/Root.tsx`)
-- [x] Tạo `src/remotion/audio-telemetry.json` (dữ liệu mặc định khi khởi tạo) và `src/remotion/audio-sync.tsx` cung cấp các hàm cốt lõi:
-  - `audioTelemetry`: Toàn bộ dữ liệu đo đạc thực tế của các cảnh và từng từ.
-  - `getSceneFrames(sceneIndex, fallbackFrames)`: Lấy độ dài chuẩn xác của cảnh `i`.
-  - `getWordFrame(sceneIndex, keyword, fallbackFrame)`: Lấy chính xác frame bắt đầu của bất kỳ từ/cụm từ nào trong cảnh `i` để neo hiệu ứng hình ảnh khớp 100% với lời nói.
-  - `getWordProgress(sceneIndex, startKeyword, endKeyword, frame)`: Trả về tiến độ `0 -> 1` trong khoảng thời gian giọng đọc nói từ cụm `startKeyword` đến `endKeyword`.
-  - `getSceneCaptions(sceneIndex)` & `buildWordHighlightPages`: Trả về mảng `Caption[]` và trang từ chuẩn `@remotion/captions`.
-  - `<WordHighlightCaptions sceneIndex={i} />`: Component phụ đề Karaoke highlight từng từ đang phát âm dựa trên dữ liệu `WordBoundary` thực tế (tùy chỉnh được màu sắc, font chữ, vị trí).
+### 2. Module Đồng bộ 3 Tầng (`src/remotion/audio-sync.tsx`)
+- [x] `getSceneFrames(sceneIndex, fallback)` & `getSegmentStartFrame(sceneIndex, fallback)`.
+- [x] `getWordFrame(sceneIndex, keywordOrPhrase, fallbackFrame)`: Nâng cấp bộ dò cụm từ thông minh (hỗ trợ cả có dấu & không dấu tiếng Việt, tự động đối chiếu từ gần nhất).
+- [x] `getBeatFrame(sceneIndex, beatIndex, totalBeats)`: Lấy frame chuẩn theo vị trí nhịp từ thực tế trong câu.
+- [x] `getWordTrigger(sceneIndex, keywordOrPhrase, localFrame, durationFrames, fallbackBeatRatio)`: Hàm kích hoạt hiệu ứng mượt mà (`0 -> 1` với `Easing.bezier`) ngay tại thời điểm phát âm từ khóa.
+- [x] `getWordProgress(sceneIndex, startKeyword, endKeyword, currentLocalFrame)`: Nội suy tiến độ `0 -> 1` giữa 2 mốc từ khóa.
+- [x] `<SyncedScene sceneIndex={i}>`: Component khung cảnh tự động khóa cứng vào `startFrame` và `durationInFrames` của giọng đọc thực tế + tự động tạo hiệu ứng chuyển giao mượt mà (Smooth Crossfade + Subtle Camera Flow) ở đầu và cuối cảnh mà không làm lệch thời gian.
+- [x] `<ContinuousAudioTrack />` & `<WordHighlightCaptions />`: Phát toàn bộ giọng đọc liền mạch và hiển thị phụ đề Karaoke từng từ.
 
-### 3. Hệ thống Tiền xử lý Tài nguyên & Bảo vệ Build (`scripts/prepare-render.mjs` & `.github/workflows/render.yml`)
-- [x] **Pre-fetch External Images**: Tự động quét `src/remotion/DynamicVideo.tsx`, tải trước mọi URL ảnh bên ngoài (Pollinations.ai, Unsplash, Wikimedia...) về `public/cached-img-${k}.jpg` với timeout & ảnh dự phòng để không bao giờ treo render do lỗi mạng.
-- [x] **Lucide Icon Import Guard**: Kiểm tra mọi tên icon được import từ `lucide-react` trong `DynamicVideo.tsx`. Nếu có tên icon không tồn tại trong thư viện thực tế, tự động ánh xạ sang icon hợp lệ gần nhất để không bao giờ bị lỗi build Webpack.
-- [x] **Auto Duration Sync**: Đảm bảo `src/remotion/meta.json` luôn lấy `computedDurationInFrames` thực tế từ `generate-studio-audio.mjs`.
-
-### 4. Nâng cấp MCP Server (`src/cloudflare-worker.ts` & `src/server.ts`)
-- [x] Bổ sung MCP Tool mới **`analyze_narration_timeline`**: Cho phép Gemini gửi `narrationSegments` để nhận về bản đồ thời lượng từng cảnh (`durationInFrames`) và mốc frame (`startFrame`, `endFrame`) của từng từ khóa trước khi viết `tsxCode`.
-- [x] Bổ sung MCP Tool mới **`list_rendered_videos`** và trang giao diện Web **`/gallery`**: Giúp xem lại toàn bộ danh sách các video đã được render trên Cloud.
-- [x] Cập nhật **`ECOSYSTEM_DOCS` v5.0**:
-  - Khai mở đầy đủ chữ ký API của toàn bộ **26+ gói `@remotion/*`** (`@remotion/captions`, `@remotion/media-utils`, `@remotion/paths`, `@remotion/shapes`, `@remotion/three`, `@remotion/motion-blur`, `@remotion/noise`, `@remotion/light-leaks`, `@remotion/sfx`, `@remotion/google-fonts`, `@remotion/layout-utils`, `@remotion/lottie`, `@remotion/gif`, `lucide-react`).
-  - Hướng dẫn Quy trình 6 bước chuẩn Editor chuyên nghiệp và cách dùng `analyze_narration_timeline` + `audio-sync` (`getSceneFrames`, `getWordFrame`, `<WordHighlightCaptions />`) để **nói tới đâu — hình ảnh minh họa và phụ đề highlight chính xác tới đó**.
+### 3. Nâng cấp Công cụ Phân tích & Hướng dẫn Đạo diễn (`src/cloudflare-worker.ts` & `src/server.ts`)
+- [x] Nâng cấp `buildNarrationTimelineAnalysis` (`analyze_narration_timeline`):
+  - Tự động trích xuất **`suggestedVisualBeats`** (chia câu thoại thành 3–4 nhịp Đầu – Giữa – Cao trào – Kết với từ khóa thực tế có trong câu và gợi ý mã lệnh `getWordTrigger(i, "từ_khóa", frame)`).
+  - Cảnh báo nếu phân đoạn quá ngắn (< 18 từ) để nhắc Gemini viết lời bình sâu sắc, liền mạch hơn.
+- [x] Cập nhật `ECOSYSTEM_DOCS` v5.3 đồng bộ trên cả `src/cloudflare-worker.ts` và `src/server.ts`:
+  - Quy trình chuẩn 4 bước cho Gemini: **Bước 1: Đọc Docs -> Bước 2: Viết kịch bản liền mạch -> Bước 3: Gọi `analyze_narration_timeline` lấy từ khóa thật -> Bước 4: Dựng cảnh với `<SyncedScene>` + `getWordTrigger` / `getWordProgress`**.
+  - Cấm dùng âm thanh nền tự tạo (`bgm.mp3` / `@remotion/sfx`), cấm unmount đột ngột `{progress < 1 && ...}`, cấm dùng `filter: blur()` lớn gây giật lag.

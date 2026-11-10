@@ -4,7 +4,9 @@ import {
   useVideoConfig,
   spring,
   interpolate,
+  Easing,
   Sequence,
+  AbsoluteFill,
   Audio,
   staticFile,
 } from 'remotion';
@@ -64,6 +66,27 @@ export interface AudioTelemetryData {
 }
 
 export const audioTelemetry: AudioTelemetryData = rawTelemetry as AudioTelemetryData;
+
+/**
+ * Normalize text with full Vietnamese diacritics preserved (lowercase + strip punctuation).
+ */
+function normalizeKeepAccents(s: string): string {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Strip Vietnamese diacritics for resilient fallback matching.
+ */
+function stripAccents(s: string): string {
+  return normalizeKeepAccents(s)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+}
 
 /**
  * Group word-level captions into short kinetic pages with individual word tokens (`fromMs`, `toMs`).
@@ -133,51 +156,75 @@ export function buildWordHighlightPages(
  * Get the exact measured duration in frames for a given segment/scene index (0-based),
  * locked 100% to the real synthesized voiceover length on the Cloud.
  */
-export function getSceneFrames(sceneIndex: number, fallbackFrames = 150): number {
+export function getSceneFrames(sceneIndex: number, fallbackFrames = 180): number {
   const val = audioTelemetry?.sceneFrames?.[sceneIndex];
   return typeof val === 'number' && val > 0 ? val : fallbackFrames;
 }
 
 /**
  * Get the exact global start frame of segment `sceneIndex` on the master timeline.
- * Ideal for building a seamless, continuous 1-take camera flow without hard scene cuts!
  */
 export function getSegmentStartFrame(sceneIndex: number, fallbackStartFrame = 0): number {
   const scene = audioTelemetry?.scenes?.[sceneIndex];
   if (scene && typeof scene.startFrame === 'number') return scene.startFrame;
+  const startFromArr = audioTelemetry?.sceneStartFrames?.[sceneIndex];
+  if (typeof startFromArr === 'number') return startFromArr;
   return fallbackStartFrame;
 }
 
 /**
+ * Get a proportional beat frame based on actual spoken words in `sceneIndex`.
+ * For example, `getBeatFrame(0, 1, 3)` returns the startFrame of the word at 1/3rd through scene 0.
+ */
+export function getBeatFrame(
+  sceneIndex: number,
+  beatIndex: number,
+  totalBeats = 3
+): number {
+  const scene = audioTelemetry?.scenes?.[sceneIndex];
+  const sceneDur = getSceneFrames(sceneIndex, 180);
+  const clampedRatio = Math.max(0, Math.min(0.9, beatIndex / Math.max(1, totalBeats)));
+
+  if (!scene || !Array.isArray(scene.words) || scene.words.length === 0) {
+    return Math.round(sceneDur * clampedRatio);
+  }
+
+  const wordIdx = Math.min(
+    scene.words.length - 1,
+    Math.max(0, Math.floor(scene.words.length * clampedRatio))
+  );
+  return scene.words[wordIdx].startFrame;
+}
+
+/**
  * Find the exact local frame within `sceneIndex` when the narrator speaks `keywordOrPhrase`.
+ * Supports multi-word phrases, exact diacritic match, and accent-stripped fuzzy fallback.
  */
 export function getWordFrame(
   sceneIndex: number,
   keywordOrPhrase: string,
-  fallbackFrame = 0
+  fallbackFrame?: number
 ): number {
   const scene = audioTelemetry?.scenes?.[sceneIndex];
+  const defaultFallback = typeof fallbackFrame === 'number' ? fallbackFrame : getBeatFrame(sceneIndex, 1, 3);
+
   if (!scene || !Array.isArray(scene.words) || scene.words.length === 0) {
-    return fallbackFrame;
+    return defaultFallback;
   }
 
-  const normalize = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, '')
-      .trim();
-
-  const target = normalize(keywordOrPhrase);
-  if (!target) return fallbackFrame;
+  const target = normalizeKeepAccents(keywordOrPhrase);
+  if (!target) return defaultFallback;
 
   const targetParts = target.split(/\s+/).filter(Boolean);
   const words = scene.words;
 
-  if (targetParts.length > 1) {
+  // Pass 1: Exact accent multi-word phrase match
+  if (targetParts.length > 1 && words.length >= targetParts.length) {
     for (let i = 0; i <= words.length - targetParts.length; i++) {
       let matched = true;
       for (let j = 0; j < targetParts.length; j++) {
-        if (!normalize(words[i + j].word).includes(targetParts[j])) {
+        const wNorm = normalizeKeepAccents(words[i + j].word);
+        if (wNorm !== targetParts[j] && !wNorm.includes(targetParts[j])) {
           matched = false;
           break;
         }
@@ -186,9 +233,40 @@ export function getWordFrame(
     }
   }
 
+  // Pass 2: Accent-stripped multi-word phrase match
+  const strippedParts = stripAccents(keywordOrPhrase).split(/\s+/).filter(Boolean);
+  if (strippedParts.length > 1 && words.length >= strippedParts.length) {
+    for (let i = 0; i <= words.length - strippedParts.length; i++) {
+      let matched = true;
+      for (let j = 0; j < strippedParts.length; j++) {
+        const wStripped = stripAccents(words[i + j].word);
+        if (wStripped !== strippedParts[j] && !wStripped.includes(strippedParts[j])) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) return words[i].startFrame;
+    }
+  }
+
+  // Pass 3: Single significant word match (with accents)
+  for (const part of targetParts) {
+    if (part.length < 2) continue;
+    const exactWord = words.find((w) => normalizeKeepAccents(w.word) === part);
+    if (exactWord) return exactWord.startFrame;
+  }
   const firstTarget = targetParts[0];
-  const found = words.find((w) => normalize(w.word).includes(firstTarget));
-  return found ? found.startFrame : fallbackFrame;
+  const partialWord = words.find((w) => normalizeKeepAccents(w.word).includes(firstTarget));
+  if (partialWord) return partialWord.startFrame;
+
+  // Pass 4: Single word match (accent-stripped fallback)
+  for (const sPart of strippedParts) {
+    if (sPart.length < 2) continue;
+    const strippedMatch = words.find((w) => stripAccents(w.word) === sPart);
+    if (strippedMatch) return strippedMatch.startFrame;
+  }
+
+  return defaultFallback;
 }
 
 /**
@@ -205,6 +283,29 @@ export function getGlobalWordFrame(
 }
 
 /**
+ * Smoothly triggers a 0 -> 1 animation progress starting at the exact frame `keywordOrPhrase` is spoken!
+ * Uses smooth cubic-bezier easing so visual elements glide in without any abrupt pop or lag.
+ */
+export function getWordTrigger(
+  sceneIndex: number,
+  keywordOrPhrase: string,
+  currentLocalFrame: number,
+  transitionDurationFrames = 22,
+  fallbackBeatRatio = 0.35
+): number {
+  const sceneDur = getSceneFrames(sceneIndex, 180);
+  const defaultFallback = Math.round(sceneDur * Math.max(0.05, Math.min(0.85, fallbackBeatRatio)));
+  const triggerFrame = getWordFrame(sceneIndex, keywordOrPhrase, defaultFallback);
+  const dur = Math.max(8, transitionDurationFrames);
+
+  return interpolate(currentLocalFrame, [triggerFrame, triggerFrame + dur], [0, 1], {
+    easing: Easing.bezier(0.22, 1, 0.36, 1),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+}
+
+/**
  * Returns normalized 0 -> 1 progress during the time window between `startKeyword` and `endKeyword` in `sceneIndex`.
  */
 export function getWordProgress(
@@ -212,12 +313,17 @@ export function getWordProgress(
   startKeyword: string,
   endKeyword: string,
   currentLocalFrame: number,
-  fallbackStartFrame = 0,
-  fallbackEndFrame = 60
+  fallbackStartFrame?: number,
+  fallbackEndFrame?: number
 ): number {
-  const startF = getWordFrame(sceneIndex, startKeyword, fallbackStartFrame);
-  const endF = Math.max(startF + 10, getWordFrame(sceneIndex, endKeyword, fallbackEndFrame));
+  const defStart = typeof fallbackStartFrame === 'number' ? fallbackStartFrame : getBeatFrame(sceneIndex, 0, 3);
+  const defEnd = typeof fallbackEndFrame === 'number' ? fallbackEndFrame : getBeatFrame(sceneIndex, 2, 3);
+  const startF = getWordFrame(sceneIndex, startKeyword, defStart);
+  const rawEndF = getWordFrame(sceneIndex, endKeyword, defEnd);
+  const endF = Math.max(startF + 15, rawEndF);
+
   return interpolate(currentLocalFrame, [startF, endF], [0, 1], {
+    easing: Easing.bezier(0.25, 0.1, 0.25, 1),
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
@@ -239,9 +345,112 @@ export function getSceneCaptions(sceneIndex: number): Caption[] {
 }
 
 /**
+ * Zero-Drift Synchronized Scene Envelope (`<SyncedScene sceneIndex={i}>`):
+ * 1. Locks the scene's start frame (`getSegmentStartFrame(i)`) and duration (`getSceneFrames(i)`)
+ *    100% to the real measured voiceover MP3 on the Cloud — zero cumulative drift!
+ * 2. Applies a butter-smooth cinema envelope (gentle fade + subtle camera push/glide during the
+ *    first `enterFrames` and last `exitFrames` breath padding) so scenes flow seamlessly into one
+ *    another without abrupt hard cuts!
+ */
+export interface SyncedSceneProps {
+  sceneIndex: number;
+  fallbackStartFrame?: number;
+  fallbackDurationInFrames?: number;
+  enterFrames?: number;
+  exitFrames?: number;
+   overlapFrames?: number;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}
+
+const SyncedSceneInner: React.FC<{
+  durationInFrames: number;
+  enterFrames: number;
+  exitFrames: number;
+  isFirst: boolean;
+  isLast: boolean;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}> = ({ durationInFrames, enterFrames, exitFrames, isFirst, isLast, style, children }) => {
+  const frame = useCurrentFrame();
+
+  const inFrames = isFirst ? Math.min(12, enterFrames) : enterFrames;
+  const outFrames = isLast ? Math.min(15, exitFrames) : exitFrames;
+  const exitStart = Math.max(inFrames + 5, durationInFrames - outFrames);
+
+  const enterProgress = interpolate(frame, [0, inFrames], [0, 1], {
+    easing: Easing.bezier(0.22, 1, 0.36, 1),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+
+  const exitProgress = interpolate(frame, [exitStart, durationInFrames], [0, 1], {
+    easing: Easing.bezier(0.4, 0, 0.2, 1),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+
+  const opacity = enterProgress * (1 - exitProgress);
+  const scale =
+    interpolate(enterProgress, [0, 1], [0.975, 1]) *
+    interpolate(exitProgress, [0, 1], [1, 1.02]);
+  const translateY =
+    interpolate(enterProgress, [0, 1], [14, 0]) +
+    interpolate(exitProgress, [0, 1], [0, -10]);
+
+  return (
+    <AbsoluteFill
+      style={{
+        opacity,
+        transform: `translate3d(0, ${translateY.toFixed(2)}px, 0) scale(${scale.toFixed(4)})`,
+        ...style,
+      }}
+    >
+      {children}
+    </AbsoluteFill>
+  );
+};
+
+export const SyncedScene: React.FC<SyncedSceneProps> = ({
+  sceneIndex,
+  fallbackStartFrame = 0,
+  fallbackDurationInFrames = 180,
+  enterFrames = 14,
+  exitFrames = 14,
+  overlapFrames = 6,
+  children,
+  style,
+}) => {
+  const totalScenes = audioTelemetry?.scenes?.length || 1;
+  const isFirst = sceneIndex === 0;
+  const isLast = sceneIndex >= totalScenes - 1;
+
+  const baseStart = getSegmentStartFrame(sceneIndex, fallbackStartFrame);
+  const baseDur = getSceneFrames(sceneIndex, fallbackDurationInFrames);
+
+  // Subtle overlap into the natural breath tail of the previous scene without shifting spoken word localFrames
+  const actualStart = isFirst ? baseStart : Math.max(0, baseStart - overlapFrames);
+  const actualDur = isFirst ? baseDur : baseDur + overlapFrames;
+
+  return (
+    <Sequence from={actualStart} durationInFrames={actualDur}>
+      <SyncedSceneInner
+        durationInFrames={actualDur}
+        enterFrames={enterFrames}
+        exitFrames={exitFrames}
+        isFirst={isFirst}
+        isLast={isLast}
+        style={style}
+      >
+        {children}
+      </SyncedSceneInner>
+    </Sequence>
+  );
+};
+
+/**
  * Automatically plays all synthesized voiceover segments (`voice-0.mp3`, `voice-1.mp3`, ...)
- * at their exact global start frames plus clean background music (`bgm.mp3`),
- * enabling a single continuous visual timeline without needing to split into `<Series>`!
+ * at their exact global start frames (100% pure crystal-clear voiceover, no synthetic BGM).
  */
 export const ContinuousAudioTrack: React.FC<{ bgmVolume?: number; voiceVolume?: number }> = ({
   voiceVolume = 1.0,
@@ -290,7 +499,6 @@ export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Resolve active scene and local frame (works both inside a local <Sequence> or on the global timeline!)
   const resolved = useMemo(() => {
     const scenes = audioTelemetry?.scenes || [];
     if (typeof sceneIndex === 'number') {

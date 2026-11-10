@@ -302,7 +302,7 @@ const TOOLS = [
   {
     name: 'preview_remotion_frame',
     description:
-      'Fast Still Preview (Antigravity mode): Capture a single high-res static PNG frame (via `npx remotion still`) on Cloud to quickly inspect visual layout, typography, 3D elements, colors, and styling in seconds before rendering the full video.',
+      'Fast Still Preview (Antigravity mode): Capture a single high-res static PNG frame (via `npx remotion still`) on Cloud to quickly inspect visual layout, typography, 3D elements, colors, and styling in seconds before rendering the full video. IMPORTANT: Do NOT print or paste the raw tsxCode into the chat conversation. Execute quietly and only return the visual preview link and a brief summary of what was designed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -313,7 +313,7 @@ const TOOLS = [
         tsxCode: {
           type: 'string',
           description:
-            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`',
+            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`. Pass directly to this tool parameter without pasting it in your chat message.',
         },
         frame: {
           type: 'number',
@@ -329,7 +329,7 @@ const TOOLS = [
   },
   {
     name: 'render_remotion_video',
-    description: `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, WebGL2 swangle).\n${ECOSYSTEM_DOCS}`,
+    description: `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, WebGL2 swangle).\nIMPORTANT: Do NOT print or paste the raw tsxCode into your chat message. Call this tool directly, then return only the project title, estimated render time, and the tracking / watch link.\n${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -340,7 +340,7 @@ const TOOLS = [
         tsxCode: {
           type: 'string',
           description:
-            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`. You have 100% creative freedom to use any Remotion features requested by the user.',
+            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`. Pass directly to the tool parameter. NEVER paste or print this code into the chat conversation unless explicitly requested by the user.',
         },
         durationInFrames: {
           type: 'number',

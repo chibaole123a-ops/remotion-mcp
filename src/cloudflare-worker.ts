@@ -5,17 +5,9 @@ export interface Env {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI STUDIO (Antigravity Architecture)
+# REMOTION v4.0.542 — PURE CREATIVE STUDIO (Antigravity Architecture)
 
-You have **100% creative freedom** to build any video or visual composition the user asks for using the complete Remotion v4.0.541 ecosystem.
-
-## 🚀 ANTIGRAVITY AGENTIC WORKFLOW FOR GEMINI:
-1. **Direct Composition**: Write your Remotion React composition directly based on the user's requirements.
-2. **Fast Still Preview (\`preview_remotion_frame\`)**: To quickly inspect visual layout, 3D positioning, colors, or typography in seconds, call \`preview_remotion_frame\` with \`frame: 0\` (or key frame) before or alongside full rendering.
-3. **Full Video Render (\`render_remotion_video\`)**: Call \`render_remotion_video\` to render the complete MP4 on Cloud (16GB RAM).
-4. **Autonomous Self-Healing Loop**: If \`check_render_status\` returns \`failed_on_github_actions\`, inspect \`compilerErrorDetails\`, fix the code error immediately, and re-call \`render_remotion_video\` without asking the user.
-
----
+You have **100% creative freedom** to build any video or visual composition the user asks for using the complete Remotion v4.0.542 ecosystem.
 
 ## 📦 INSTALLED REMOTION PACKAGES & CAPABILITIES:
 
@@ -46,27 +38,8 @@ You have **100% creative freedom** to build any video or visual composition the 
    - Sketchy Annotations (Rough Notation): \`import { Highlight, Box, Circle, Underline, StrikeThrough, CrossedOff, Bracket } from '@remotion/rough-notation';\` (Animate \`progress\` from 0 to 1 with \`interpolate(frame, ...)\`).
    - Icons: Over 1,500+ Lucide icons (\`import { Flame, Star, Globe, Shield, Rocket } from 'lucide-react';\`).
 
-7. **Audio Visualizers & Captions (\`@remotion/media-utils\`, \`@remotion/captions\`, \`./audio-sync\`)**:
+7. **Media Utilities (\`@remotion/media-utils\`)**:
    - Audio waveform & spectrum: \`useAudioData()\`, \`visualizeAudio()\`.
-   - Optional AI Voiceover: When \`narrationSegments\` is supplied, Edge-TTS creates \`staticFile('voice-0.mp3')\`, etc.
-   - Word telemetry & captions: \`ContinuousAudioTrack\`, \`WordHighlightCaptions\`, \`SyncedScene\`, \`getWordTrigger\` from \`./audio-sync\`.
-
----
-
-## 🧠 OFFICIAL REMOTION AGENT SKILLS RULES (remotion-dev/skills):
-
-1. **Frame-Driven State ONLY:**
-   - Every animation, position, opacity, scale MUST be computed strictly from \`useCurrentFrame()\` using \`interpolate()\` or \`spring()\`.
-   - NEVER use \`setTimeout\`, \`setInterval\`, \`requestAnimationFrame\`, or CSS \`transition\` / \`@keyframes\` because frames are rendered concurrently in headless Chrome.
-2. **Deterministic Randomness:**
-   - NEVER use \`Math.random()\` or \`Date.now()\`. Use \`random("unique-seed")\` from \`remotion\` so every render frame produces identical output.
-3. **Sequencing & Transitions:**
-   - Use \`<TransitionSeries>\` with \`<TransitionSeries.Sequence>\` and \`<TransitionSeries.Transition>\` for flawless multi-scene transitions.
-   - Keep timeline modular and clean.
-4. **Spring Physics Over Easing:**
-   - Use \`spring({ frame, fps, config: { damping: 12, mass: 0.5, stiffness: 100 } })\` for snappy Apple/Stripe-level natural motion.
-5. **No Visual Code Dumping:**
-   - NEVER output the raw TSX code in chat. Pass it directly to \`render_remotion_video\` or \`preview_remotion_frame\`.
 
 ---
 
@@ -334,8 +307,7 @@ const TOOLS = [
         },
         durationInFrames: {
           type: 'number',
-          description: 'Total duration in frames (seconds * fps). Default 300 (10s @ 30fps).',
-          default: 300,
+          description: 'Total duration in frames (seconds * fps). You freely decide this based on user request or pacing.',
         },
         fps: {
           type: 'number',
@@ -355,22 +327,6 @@ const TOOLS = [
         frame: {
           type: 'number',
           description: 'Optional: Specific frame index if user only wants to capture a fast static preview PNG. If omitted, the entire video will be rendered.',
-        },
-        narrationSegments: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Optional: Voiceover text paragraphs if user requested voice narration.',
-        },
-        voice: {
-          type: 'string',
-          description: 'Optional neural TTS voice ID (default: vi-VN-NamMinhNeural).',
-          default: 'vi-VN-NamMinhNeural',
-        },
-        bgmMood: {
-          type: 'string',
-          enum: ['epic-space', 'cyber-tech', 'warm-inspiring', 'mystery-deep', 'upbeat-energetic'],
-          description: 'Optional background music mood.',
-          default: 'epic-space',
         },
       },
       required: ['tsxCode'],
@@ -537,14 +493,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         // Full Video Render
         const title = args.title || 'Remotion Video';
-        const narrationSegments = Array.isArray(args.narrationSegments) ? args.narrationSegments : [];
         const durationInFrames = Number(args.durationInFrames || 300);
-
-        const audioConfig = {
-          voice: args.voice || 'vi-VN-NamMinhNeural',
-          bgmMood: args.bgmMood || 'epic-space',
-          narrationSegments,
-        };
 
         await dispatchGitHubRender(
           env,
@@ -555,7 +504,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           fps,
           width,
           height,
-          audioConfig,
+          {},
           'video',
           0
         );

@@ -85,15 +85,6 @@ jobs:
       - name: Ensure Remotion Browser
         run: npx remotion browser ensure
 
-      - name: Generate AI Voiceover (Edge-TTS) & Cinematic Background Music (BGM)
-        env:
-          AUDIO_B64: ${{ inputs.audioConfigBase64 }}
-          DURATION: ${{ inputs.durationInFrames }}
-          FPS: ${{ inputs.fps }}
-        run: |
-          mkdir -p public
-          node scripts/generate-studio-audio.mjs
-
       - name: Prepare DynamicVideo.tsx, Pre-fetch External Assets & Guard Imports
         env:
           TSX_B64: ${{ inputs.tsxCodeBase64 }}
@@ -102,6 +93,7 @@ jobs:
           WIDTH: ${{ inputs.width }}
           HEIGHT: ${{ inputs.height }}
         run: |
+          mkdir -p public
           node scripts/prepare-render.mjs
 
       - name: Render Video or Still with Remotion

@@ -816,6 +816,7 @@ export default {
 
       const respHeaders = new Headers(ghRes.headers);
       respHeaders.set('Content-Type', 'image/png');
+      respHeaders.set('Content-Disposition', 'inline; filename="still-' + rawId + '.png"');
       respHeaders.set('Access-Control-Allow-Origin', '*');
       respHeaders.set('Cache-Control', 'public, max-age=604800, immutable');
 

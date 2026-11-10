@@ -302,7 +302,7 @@ const TOOLS = [
   {
     name: 'preview_remotion_frame',
     description:
-      'Fast Still Preview (Antigravity mode): Capture a single high-res static PNG frame (via `npx remotion still`) on Cloud to quickly inspect visual layout, typography, 3D elements, colors, and styling in seconds before rendering the full video. IMPORTANT: Do NOT print or paste the raw tsxCode into the chat conversation. Execute quietly and only return the visual preview link and a brief summary of what was designed.',
+      'Fast Still Preview: Capture a single high-res static PNG frame (via `npx remotion still`) on Cloud. USE ONLY WHEN the user explicitly asks to preview, inspect a frame, or check the layout before rendering. Do NOT use this tool if the user asks to create or make a video (use render_remotion_video directly instead).\nIMPORTANT FORMATTING RULES:\n1. NEVER print or paste raw tsxCode into chat.\n2. When presenting the preview to the user, ALWAYS embed the image directly using markdown: `![Preview Frame ${frame}](${previewImageUrl})` followed by `[Download PNG](${directDownloadUrl})`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -329,7 +329,9 @@ const TOOLS = [
   },
   {
     name: 'render_remotion_video',
-    description: `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, WebGL2 swangle).\nIMPORTANT: Do NOT print or paste the raw tsxCode into your chat message. Call this tool directly, then return only the project title, estimated render time, and the tracking / watch link.\n${ECOSYSTEM_DOCS}`,
+    description: `DEFAULT VIDEO PRODUCTION TOOL: Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, WebGL2 swangle).\nWhenever the user asks to create, make, generate, or produce a video, call this tool IMMEDIATELY. Do NOT stop at preview_remotion_frame unless the user specifically asked for a preview.\nIMPORTANT FORMATTING RULES:\n1. NEVER print or paste raw tsxCode into the chat message.\n2. Present results cleanly using markdown links: ` +
+      '`🎬 [Xem Video Trực Tiếp](${watchPageUrl})` and `📥 [Tải Video MP4](${directDownloadUrl})`.\n' +
+      `3. Automatically follow up with check_render_status until ready.\n${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -522,6 +524,8 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     specs: `${width}x${height} @ ${fps}fps`,
                     previewImageUrl: stillUrl,
                     directDownloadUrl: downloadUrl,
+                    instructionsForAgent:
+                      `Embed the image directly into your response using markdown: ![Preview Frame #${frame}](${stillUrl}). Do NOT show raw long URL strings.`,
                     message:
                       `Still frame #${frame} capture dispatched to Cloud! Call check_render_status with jobId "${jobId}" to verify when the PNG image is ready to inspect.`,
                   },
@@ -629,6 +633,8 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     galleryUrl,
                     directDownloadUrl: videoUrl,
                     notes: warnings.length > 0 ? warnings : undefined,
+                    instructionsForAgent:
+                      `Present links cleanly in markdown: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${videoUrl}). Do NOT print raw long URLs.`,
                     message:
                       'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
                   },

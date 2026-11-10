@@ -487,12 +487,12 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
           const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
 
-          // Smart Auto-Wait: Poll up to 22 seconds so Gemini gets the image directly in 1 turn
+          // Smart Auto-Wait: Poll up to 45 seconds so Gemini gets the image directly in 1 turn (GitHub Actions runner takes ~30-35s)
           const waitStart = Date.now();
           let stillReady = false;
           let stillBase64: string | undefined;
 
-          while (Date.now() - waitStart < 22000) {
+          while (Date.now() - waitStart < 45000) {
             const check = await checkReleaseAssetsOnGitHub(env, jobId);
             if (check.stillReady) {
               stillReady = true;
@@ -500,7 +500,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               break;
             }
             if (check.errorLogText) break;
-            await new Promise((r) => setTimeout(r, 2500));
+            await new Promise((r) => setTimeout(r, 2000));
           }
 
           const contentBlocks: any[] = [

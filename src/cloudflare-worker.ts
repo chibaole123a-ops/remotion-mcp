@@ -5,9 +5,17 @@ export interface Env {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI STUDIO
+# REMOTION v4.0.541 — OPEN CREATIVE AI STUDIO (Antigravity Architecture)
 
-You have **100% creative freedom** to build any video the user asks for using the complete Remotion v4.0.541 ecosystem.
+You have **100% creative freedom** to build any video or visual composition the user asks for using the complete Remotion v4.0.541 ecosystem.
+
+## 🚀 ANTIGRAVITY AGENTIC WORKFLOW FOR GEMINI:
+1. **Direct Composition**: Write your Remotion React composition directly based on the user's requirements.
+2. **Fast Still Preview (\`preview_remotion_frame\`)**: To quickly inspect visual layout, 3D positioning, colors, or typography in seconds, call \`preview_remotion_frame\` with \`frame: 0\` (or key frame) before or alongside full rendering.
+3. **Full Video Render (\`render_remotion_video\`)**: Call \`render_remotion_video\` to render the complete MP4 on Cloud (16GB RAM).
+4. **Autonomous Self-Healing Loop**: If \`check_render_status\` returns \`failed_on_github_actions\`, inspect \`compilerErrorDetails\`, fix the code error immediately, and re-call \`render_remotion_video\` without asking the user.
+
+---
 
 ## 📦 INSTALLED REMOTION PACKAGES & CAPABILITIES:
 
@@ -113,7 +121,9 @@ async function dispatchGitHubRender(
   fps: number,
   width: number,
   height: number,
-  audioConfig: any
+  audioConfig: any,
+  mode: 'video' | 'still' = 'video',
+  stillFrame = 0
 ) {
   const repo = env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
   const res = await fetch(
@@ -139,6 +149,8 @@ async function dispatchGitHubRender(
           tsxCodeBase64: toBase64Utf8(tsxCode),
           audioConfigBase64: toBase64Utf8(JSON.stringify(audioConfig || {})),
           callbackUrl: '',
+          mode,
+          stillFrame: String(stillFrame),
         },
       }),
     }
@@ -188,7 +200,7 @@ async function listReleaseVideosOnGitHub(env: Env, baseUrl: string) {
 async function checkReleaseAssetsOnGitHub(
   env: Env,
   jobId: string
-): Promise<{ videoReady: boolean; errorLogText?: string }> {
+): Promise<{ videoReady: boolean; stillReady: boolean; errorLogText?: string }> {
   const repo = env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
   try {
     const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/videos-store`, {
@@ -198,11 +210,12 @@ async function checkReleaseAssetsOnGitHub(
         'User-Agent': 'Remotion-Cloudflare-MCP-Worker',
       },
     });
-    if (!res.ok) return { videoReady: false };
+    if (!res.ok) return { videoReady: false, stillReady: false };
     const data: any = await res.json();
     const assets: any[] = data?.assets || [];
 
     const videoReady = assets.some((a) => a.name === `video-${jobId}.mp4` && a.state === 'uploaded');
+    const stillReady = assets.some((a) => a.name === `still-${jobId}.png` && a.state === 'uploaded');
     const errAsset = assets.find((a) => a.name === `error-${jobId}.txt` && a.state === 'uploaded');
 
     let errorLogText: string | undefined;
@@ -217,9 +230,9 @@ async function checkReleaseAssetsOnGitHub(
       }
     }
 
-    return { videoReady, errorLogText };
+    return { videoReady, stillReady, errorLogText };
   } catch {
-    return { videoReady: false };
+    return { videoReady: false, stillReady: false };
   }
 }
 
@@ -287,6 +300,34 @@ const TOOLS = [
     },
   },
   {
+    name: 'preview_remotion_frame',
+    description:
+      'Fast Still Preview (Antigravity mode): Capture a single high-res static PNG frame (via `npx remotion still`) on Cloud to quickly inspect visual layout, typography, 3D elements, colors, and styling in seconds before rendering the full video.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Title for preview',
+        },
+        tsxCode: {
+          type: 'string',
+          description:
+            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`',
+        },
+        frame: {
+          type: 'number',
+          description: 'Specific frame number to capture (default: 0).',
+          default: 0,
+        },
+        fps: { type: 'number', default: 30 },
+        width: { type: 'number', default: 1920 },
+        height: { type: 'number', default: 1080 },
+      },
+      required: ['tsxCode'],
+    },
+  },
+  {
     name: 'render_remotion_video',
     description: `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, WebGL2 swangle).\n${ECOSYSTEM_DOCS}`,
     inputSchema: {
@@ -345,11 +386,11 @@ const TOOLS = [
   {
     name: 'check_render_status',
     description:
-      'Check if a rendered video is ready on the Cloud, and inspect real-time GitHub Actions step progress or compiler error logs.',
+      'Check if a rendered video or still frame is ready on the Cloud, and inspect real-time GitHub Actions step progress or compiler error logs for autonomous self-healing.',
     inputSchema: {
       type: 'object',
       properties: {
-        jobId: { type: 'string', description: 'The jobId returned by render_remotion_video' },
+        jobId: { type: 'string', description: 'The jobId returned by render_remotion_video or preview_remotion_frame' },
       },
       required: ['jobId'],
     },
@@ -386,7 +427,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         },
         serverInfo: {
           name: 'remotion-cloud-mcp',
-          version: '6.0.0',
+          version: '6.1.0',
         },
       },
     };
@@ -419,6 +460,76 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           id,
           result: {
             content: [{ type: 'text', text: ECOSYSTEM_DOCS }],
+          },
+        };
+      }
+
+      if (toolName === 'preview_remotion_frame') {
+        const tsxCode = String(args.tsxCode || '');
+        const warnings = validateTsxCode(tsxCode);
+        if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
+          return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call preview_remotion_frame again.`,
+                },
+              ],
+            },
+          };
+        }
+
+        const jobId = randomJobId();
+        const title = args.title || 'Still Preview';
+        const frame = Number(args.frame || 0);
+        const fps = Number(args.fps || 30);
+        const width = Number(args.width || 1920);
+        const height = Number(args.height || 1080);
+
+        await dispatchGitHubRender(
+          env,
+          jobId,
+          title,
+          tsxCode,
+          Math.max(frame + 1, 30),
+          fps,
+          width,
+          height,
+          {},
+          'still',
+          frame
+        );
+
+        const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
+        const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
+
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: 'still_dispatched_to_github_actions_cloud',
+                    jobId,
+                    capturedFrame: frame,
+                    specs: `${width}x${height} @ ${fps}fps`,
+                    previewImageUrl: stillUrl,
+                    directDownloadUrl: downloadUrl,
+                    message:
+                      `Still frame #${frame} capture dispatched to Cloud! Call check_render_status with jobId "${jobId}" to verify when the PNG image is ready to inspect.`,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
           },
         };
       }
@@ -490,7 +601,9 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           fps,
           width,
           height,
-          audioConfig
+          audioConfig,
+          'video',
+          0
         );
 
         const watchPageUrl = `${baseUrl}/watch/${jobId}${secretQuery}`;
@@ -532,12 +645,14 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const jobId = sanitizeJobId(String(args.jobId || ''));
         const start = Date.now();
         let ready = false;
+        let isStill = false;
         let errorLogText: string | undefined;
         let workflowInfo: any = null;
 
         while (Date.now() - start < 15000) {
           const check = await checkReleaseAssetsOnGitHub(env, jobId);
-          ready = check.videoReady;
+          ready = check.videoReady || check.stillReady;
+          isStill = check.stillReady;
           errorLogText = check.errorLogText;
           if (ready || errorLogText) break;
 
@@ -548,9 +663,12 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           await new Promise((r) => setTimeout(r, 3000));
         }
 
+        const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
         const watchPageUrl = `${baseUrl}/watch/${jobId}${secretQuery}`;
         const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretQuery}`;
-        const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
+        const videoUrl = isStill
+          ? `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`
+          : `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
         if (!ready && !workflowInfo) {
           workflowInfo = await inspectGitHubWorkflowRun(env, jobId);
         }
@@ -568,22 +686,24 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 text: JSON.stringify(
                   {
                     jobId,
+                    type: isStill ? 'still_frame' : 'video',
                     status: ready
                       ? 'completed'
                       : isFailed
                       ? 'failed_on_github_actions'
                       : 'rendering_on_github_actions',
                     currentCloudStep: activeStep || workflowInfo?.status,
-                    watchPageUrl,
-                    streamUrl,
-                    videoUrl,
+                    previewImageUrl: isStill ? stillUrl : undefined,
+                    watchPageUrl: isStill ? undefined : watchPageUrl,
+                    streamUrl: isStill ? undefined : streamUrl,
+                    assetUrl: videoUrl,
                     compilerErrorDetails: errorLogText,
                     cloudRunnerDiagnostics: workflowInfo,
                     message: ready
-                      ? 'Video is completed and ready to watch inline or download!'
+                      ? (isStill ? 'Still frame is ready to inspect!' : 'Video is completed and ready to watch inline or download!')
                       : isFailed
                       ? 'Render job failed on GitHub Actions. Read compilerErrorDetails above to see error trace, fix tsxCode and re-render.'
-                      : `Job is actively rendering on GitHub Actions Cloud. Present watchPageUrl to user; it automatically tracks live progress and plays video when finished!`,
+                      : `Job is actively rendering on GitHub Actions Cloud. Present URL to user; it tracks live progress and completes when ready!`,
                   },
                   null,
                   2
@@ -645,6 +765,32 @@ export default {
           headers: { 'Content-Type': 'application/json' },
         });
       }
+    }
+
+    // Direct still frame streaming proxy route: /still/:jobId.png
+    if (pathParts[0] === 'still' && pathParts[1]) {
+      const rawId = sanitizeJobId(pathParts[1].replace(/\.png$/, '').replace(/^still-/, ''));
+      const fileName = `still-${rawId}.png`;
+      const ghUrl = `https://github.com/${repo}/releases/download/videos-store/${fileName}`;
+
+      const ghRes = await fetch(ghUrl, {
+        headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker' },
+        redirect: 'follow',
+      });
+
+      if (!ghRes.ok) {
+        return new Response('Still frame not found', { status: 404 });
+      }
+
+      const respHeaders = new Headers(ghRes.headers);
+      respHeaders.set('Content-Type', 'image/png');
+      respHeaders.set('Access-Control-Allow-Origin', '*');
+      respHeaders.set('Cache-Control', 'public, max-age=604800, immutable');
+
+      return new Response(ghRes.body, {
+        status: ghRes.status,
+        headers: respHeaders,
+      });
     }
 
     // Cloud Video Gallery route: /gallery
@@ -869,7 +1015,7 @@ export default {
         }
       }
 
-      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '6.0.0' }), {
+      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '6.1.0' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -878,7 +1024,7 @@ export default {
     return new Response(
       JSON.stringify({
         status: 'online_24_7',
-        version: '6.0.0 (Pure Remotion Ecosystem Studio)',
+        version: '6.1.0 (Antigravity-Style Agentic Remotion Studio)',
         platform: 'Cloudflare Workers + GitHub Actions (16GB RAM Cloud)',
         repository: repo,
         tools: TOOLS.map((t) => t.name),

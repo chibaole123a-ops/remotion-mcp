@@ -40,6 +40,16 @@ on:
         description: 'MCP Server webhook callback URL'
         required: false
         type: string
+      mode:
+        description: 'Render mode: video or still'
+        required: false
+        default: 'video'
+        type: string
+      stillFrame:
+        description: 'Frame number for still mode'
+        required: false
+        default: '0'
+        type: string
 
 permissions:
   contents: write
@@ -94,13 +104,18 @@ jobs:
         run: |
           node scripts/prepare-render.mjs
 
-      - name: Render Video with Remotion
+      - name: Render Video or Still with Remotion
         id: render_step
         run: |
           mkdir -p outputs
           set +e
-          npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --public-dir=public --gl=swangle --codec=h264 --crf=18 --concurrency=4 --timeout=60000 2>&1 | tee render.log
-          EXIT_CODE=${PIPESTATUS[0]}
+          if [ "${{ inputs.mode }}" = "still" ]; then
+            npx remotion still src/remotion/index.ts DynamicVideo outputs/still-${{ inputs.jobId }}.png --frame=${{ inputs.stillFrame || '0' }} --public-dir=public --gl=swangle 2>&1 | tee render.log
+            EXIT_CODE=${PIPESTATUS[0]}
+          else
+            npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --public-dir=public --gl=swangle --codec=h264 --crf=18 --concurrency=4 --timeout=60000 2>&1 | tee render.log
+            EXIT_CODE=${PIPESTATUS[0]}
+          fi
           set -e
           if [ $EXIT_CODE -ne 0 ]; then
             echo "Render failed with exit code $EXIT_CODE"
@@ -121,7 +136,7 @@ jobs:
             gh release upload "$TAG" "outputs/error-${{ inputs.jobId }}.txt" --clobber || true
           fi
 
-      - name: Publish Video to GitHub Release (Free Unlimited CDN Link)
+      - name: Publish Video or Still to GitHub Release (Free Unlimited CDN Link)
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -130,4 +145,9 @@ jobs:
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "Rendered Videos Storage" --notes "Automated storage for Remotion MCP rendered MP4 files"
           fi
-          gh release upload "$TAG" "outputs/video-${{ inputs.jobId }}.mp4" --clobber
+          if [ -f "outputs/video-${{ inputs.jobId }}.mp4" ]; then
+            gh release upload "$TAG" "outputs/video-${{ inputs.jobId }}.mp4" --clobber
+          fi
+          if [ -f "outputs/still-${{ inputs.jobId }}.png" ]; then
+            gh release upload "$TAG" "outputs/still-${{ inputs.jobId }}.png" --clobber
+          fi

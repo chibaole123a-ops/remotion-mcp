@@ -1,11 +1,11 @@
 {
   "name": "remotion-mcp-cloud",
-  "version": "5.5.0",
-  "description": "Open Creative AI Video Studio v5.5 (Director Storyboard Framework + Multimodal Vision Media Search + Frame-Exact WordBoundary Sync + Full Remotion 4.0.541) on Cloudflare & GitHub Actions",
+  "version": "6.0.0",
+  "description": "Pure Creative Remotion v4.0.541 AI Video Studio on Cloudflare Workers & GitHub Actions",
   "type": "module",
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
+    "deploy": "npx wrangler deploy",
+    "dev": "npx wrangler dev",
     "studio": "remotion studio src/remotion/index.ts",
     "typecheck": "tsc --noEmit",
     "server": "tsx src/server.ts",

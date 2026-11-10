@@ -2,86 +2,65 @@ export interface Env {
   GITHUB_TOKEN: string;
   GITHUB_REPO: string;
   MCP_SECRET: string;
-  PEXELS_API_KEY?: string;
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.5)
-## (Director Storyboard Planner + Multimodal Media Search + Shared Spatial Canvas + 3-Layer Zero-Drift Sync)
+# REMOTION v4.0.541 — OPEN CREATIVE AI STUDIO
 
-You have **100% creative freedom**. Act as a **World-Class Film Director, Documentary Storyteller, Motion Graphics Artist, and High-Retention Video Editor (Vox / Kurzgesagt / Johnny Harris / Lemmino)**.
+You have **100% creative freedom** to build any video the user asks for using the complete Remotion v4.0.541 ecosystem.
 
----
+## 📦 INSTALLED REMOTION PACKAGES & CAPABILITIES:
 
-## I. MANDATORY 5-STEP ORDER OF OPERATIONS (STORYBOARD-DRIVEN WORKFLOW)
+1. **Core Remotion (\`remotion\`)**:
+   - Hooks: \`useCurrentFrame()\`, \`useVideoConfig()\` (\`fps\`, \`width\`, \`height\`, \`durationInFrames\`).
+   - Animation: \`interpolate(frame, [inStart, inEnd], [outStart, outEnd], options?)\`, \`spring({ frame, fps, config })\`, \`interpolateColors()\`.
+   - Layout & Media: \`AbsoluteFill\`, \`Sequence\`, \`Img\`, \`OffthreadVideo\`, \`Audio\`, \`staticFile()\`.
+   - Utilities: \`random("seed")\` (for deterministic math), \`Easing\`, \`measureSpring()\`.
 
-Always execute video creation in this exact order:
+2. **3D WebGL & Three.js (\`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)**:
+   - \`ThreeCanvas\`, \`Canvas\`, full Three.js materials, lights, geometries, camera controls, particle systems, and 3D scenes.
 
-### STEP 1: Write Cohesive Narrative Script First (Audio Spine Before Code)
-- **NEVER** write 3–4 short, choppy, disconnected 1-sentence blurbs!
-- Write \`narrationSegments\` as a **continuous, deeply engaging documentary story** (5 to 8 chapters).
-- Each \`narrationSegments[i]\` MUST be **2–3 rich, connected sentences (30–55 words, ~8–14 seconds)** using natural narrative bridges (*"Nhưng điều kỳ diệu thực sự nằm ở...", "Để hiểu tại sao cơ chế này hoạt động, hãy nhìn vào...", "Chính bước ngoặt đó đã mở ra..."*).
+3. **2D Vector Shapes & SVG Paths (\`@remotion/shapes\`, \`@remotion/paths\`)**:
+   - Geometric shapes: \`Circle\`, \`Rect\`, \`Triangle\`, \`Star\`, \`Polygon\`, \`Ellipse\`, \`Pie\`, \`Heart\`.
+   - SVG morphing & animation: \`evolvePath(progress, pathString)\`, \`interpolatePath()\`, \`getPointAtLength()\`, \`getBoundingBox()\`.
 
-### STEP 2: Run \`analyze_narration_timeline\` to Get Exact Spoken Keywords & Beats
-- Pass your \`narrationSegments\` to \`analyze_narration_timeline\`.
-- It returns the exact estimated frame durations AND \`suggestedVisualBeats\` containing **real anchor keywords extracted directly from each sentence** along with ready-to-paste \`getWordTrigger(sceneIndex, "keyword", frame)\` snippets.
+4. **Cinematic Transitions (\`@remotion/transitions\`)**:
+   - \`TransitionSeries\`, \`TransitionSeries.Sequence\`, \`TransitionSeries.Transition\`.
+   - Built-in transitions: \`slide()\`, \`fade()\`, \`wipe()\`, \`flip()\`, combined with \`linearTiming()\` or \`springTiming()\`.
 
-### STEP 3: Run \`search_visual_media\` to Find & VISUALLY INSPECT Real Photos & Videos
-- For scenes that reference real-world events, history, science, hardware, or nature, call \`search_visual_media\` with \`sceneQueries\`.
-- The tool returns actual live preview images & video keyframes (\`type: "image"\`) directly to your eyes so you can verify relevance, visual clarity, and subject placement before choosing.
+5. **Motion Blur, Noise & Physics (\`@remotion/motion-blur\`, \`@remotion/noise\`)**:
+   - \`Trail\`, \`CameraMotionBlur\`.
+   - Procedural organic motion: \`noise2D(x, y)\`, \`noise3D(x, y, z)\`, simplex/perlin noise.
 
-### STEP 4: Run \`plan_video_storyboard\` (The Director Blueprint)
-- Call \`plan_video_storyboard\` with your \`scenesPlan\` (providing \`sceneIndex\`, \`narration\`, \`visualConcept\`, \`continuityFromPrevScene\`, and any \`selectedMediaUrl\`).
-- It synthesizes everything into a unified Master Storyboard Blueprint with an aligned code skeleton, locking in visual continuity and preventing isolated slide cuts.
+6. **Typography, Fonts & Icons (\`@remotion/google-fonts/*\`, \`lucide-react\`)**:
+   - Google Fonts: \`import { loadFont } from '@remotion/google-fonts/Inter';\` (or \`BeVietnamPro\`, \`Roboto\`, \`Montserrat\`, etc.).
+   - Icons: Over 1,500+ Lucide icons (\`import { Flame, Star, Globe, Shield, Rocket } from 'lucide-react';\`).
 
-### STEP 5: Build \`DynamicVideo.tsx\` Using \`<StoryboardCanvas>\`, \`<SyncedScene>\`, & Progressive Word Beats
-1. **Shared Spatial Canvas at Root**:
-   \`\`\`tsx
-   <StoryboardCanvas ambientColor="#38bdf8">
-     <ContinuousAudioTrack />
-     <ChapterProgressSpine />
-     {/* Wrap each chapter in SyncedScene */}
-     <SyncedScene sceneIndex={0}>...</SyncedScene>
-     <SyncedScene sceneIndex={1}>...</SyncedScene>
-     <WordHighlightCaptions />
-   </StoryboardCanvas>
-   \`\`\`
-2. **Progressive Intra-Scene Choreography (3–4 Beats per Chapter)**:
-   - Use \`getWordTrigger(sceneIndex, "anchorKeyword", frame)\` to smoothly reveal layers (photo/video with Ken Burns scale glide, SVG diagrams, callout tags) without popping elements in/out mid-scene!
-   - Pure voiceover only (NO \`bgm.mp3\` or \`@remotion/sfx\`).
+7. **Audio Visualizers & Captions (\`@remotion/media-utils\`, \`@remotion/captions\`, \`./audio-sync\`)**:
+   - Audio waveform & spectrum: \`useAudioData()\`, \`visualizeAudio()\`.
+   - Optional AI Voiceover: When \`narrationSegments\` is supplied, Edge-TTS creates \`staticFile('voice-0.mp3')\`, etc.
+   - Word telemetry & captions: \`ContinuousAudioTrack\`, \`WordHighlightCaptions\`, \`SyncedScene\`, \`getWordTrigger\` from \`./audio-sync\`.
 
 ---
 
-## II. COMPLETE INSTALLED ECOSYSTEM & API SIGNATURES (Remotion v4.0.541)
+## 🎯 CODE CONTRACT:
 
-1. **Director Storyboard & Zero-Drift Sync (\`./audio-sync\`)**:
-   \`\`\`tsx
-   import {
-     StoryboardCanvas,
-     ChapterProgressSpine,
-     SyncedScene,
-     getWordTrigger,
-     getWordProgress,
-     getWordFrame,
-     getBeatFrame,
-     getSceneFrames,
-     getSegmentStartFrame,
-     ContinuousAudioTrack,
-     WordHighlightCaptions,
-     audioTelemetry,
-   } from './audio-sync';
-   \`\`\`
-   - \`<StoryboardCanvas ambientColor="#38bdf8" gridOpacity={0.08}>{children}</StoryboardCanvas>\`
-   - \`<ChapterProgressSpine />\` (documentary chapter indicator across scenes)
-   - \`<SyncedScene sceneIndex={i} enterFrames={14} exitFrames={14}>{children}</SyncedScene>\`
-   - \`getWordTrigger(sceneIndex, keyword, localFrame, durationFrames?): number\`
-   - \`getWordProgress(sceneIndex, startKeyword, endKeyword, localFrame): number\`
-3. **Captions & Audio Spectrum (\`@remotion/captions\`, \`@remotion/media-utils\`)**:
-   \`createTikTokStyleCaptions\`, \`useAudioData\`, \`visualizeAudio\`, \`visualizeAudioWaveform\`.
-4. **2D Vector Shapes, SVG Paths & 3D WebGL (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)**:
-   \`Circle\`, \`Rect\`, \`Triangle\`, \`Star\`, \`Polygon\`, \`Ellipse\`, \`Heart\`, \`Pie\`, \`evolvePath\`, \`interpolatePath\`, \`getPointAtLength\`, \`ThreeCanvas\`.
-5. **Motion Blur, Organic Noise, Google Fonts & Icons (\`@remotion/motion-blur\`, \`@remotion/noise\`, \`@remotion/google-fonts/BeVietnamPro\`, \`@remotion/layout-utils\`, \`lucide-react\`)**:
-   \`Trail\`, \`CameraMotionBlur\`, \`noise2D\`, \`noise3D\`, \`loadFont\`, \`fitText\`, and 1,500+ \`lucide-react\` icons.
+Your code must export a master component named \`DynamicVideo\`:
+\`\`\`tsx
+import React from 'react';
+import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
+
+export const DynamicVideo: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#090d16', justifyContent: 'center', alignItems: 'center' }}>
+      {/* Your creative Remotion composition */}
+    </AbsoluteFill>
+  );
+};
+\`\`\`
 `;
 
 function toBase64Utf8(str: string): string {
@@ -119,234 +98,10 @@ function validateTsxCode(tsxCode: string): string[] {
   }
   if (/Math\.random\s*\(/.test(tsxCode)) {
     warnings.push(
-      'NOTE: Detected `Math.random()`. Prefer `random("seed")` from "remotion" so parallel multi-core rendering stays 100% deterministic.'
+      'NOTE: Detected `Math.random()`. Prefer `random("seed")` from "remotion" so parallel rendering stays 100% deterministic.'
     );
   }
   return warnings;
-}
-
-/**
- * Analyze narration segments into a frame-accurate word & scene timeline map
- * so Gemini knows the exact frame of every spoken keyword and scene duration before writing tsxCode.
- */
-function buildNarrationTimelineAnalysis(
-  narrationSegments: string[],
-  fps = 30,
-  rate = '+5%'
-) {
-  const rateMatch = String(rate).match(/([+-]?\d+)%/);
-  const rateFactor = rateMatch ? 1 + Number(rateMatch[1]) / 100 : 1.05;
-  // Natural Vietnamese/English neural TTS speaking rate is ~3.15 words/sec at +5%
-  const baseWordsPerSec = 3.0 * rateFactor;
-
-  let cumulativeFrames = 0;
-  const pacingWarnings: string[] = [];
-
-  const scenes = narrationSegments.map((rawSeg, sceneIndex) => {
-    const text = String(rawSeg || '').trim();
-    const tokens = text.split(/\s+/).filter(Boolean);
-
-    if (tokens.length === 0) {
-      const emptyFrames = Math.ceil(2 * fps);
-      const s = {
-        sceneIndex,
-        text: '',
-        wordCount: 0,
-        estimatedAudioSeconds: 1.5,
-        durationInFrames: emptyFrames,
-        startFrame: cumulativeFrames,
-        endFrame: cumulativeFrames + emptyFrames,
-        suggestedVisualBeats: [] as any[],
-        words: [] as any[],
-      };
-      cumulativeFrames += emptyFrames;
-      return s;
-    }
-
-    if (tokens.length < 18) {
-      pacingWarnings.push(
-        `Scene ${sceneIndex} has only ${tokens.length} words ("${text.slice(0, 45)}..."). Consider writing 2-3 cohesive sentences (30-55 words) with narrative bridges so the video does not feel choppy!`
-      );
-    }
-
-    // Weight each word by syllable character length and punctuation pauses
-    const weights = tokens.map((w) => {
-      const cleanLen = w.replace(/[^\p{L}\p{N}]/gu, '').length || 1;
-      const commaPause = /[,;:]/.test(w) ? 1.4 : 0;
-      const periodPause = /[.!?…]$/.test(w) ? 2.4 : 0;
-      return Math.max(1.2, cleanLen * 0.78 + commaPause + periodPause);
-    });
-
-    const avgWeightPerWord = 3.2;
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    const spokenDurationSec = Math.max(
-      1.6,
-      totalWeight / (avgWeightPerWord * baseWordsPerSec)
-    );
-    const totalAudioMs = Math.round(spokenDurationSec * 1000);
-    const sceneDurationFrames = Math.ceil((spokenDurationSec + 0.4) * fps);
-
-    let cursorMs = 60;
-    const usableMs = Math.max(300, totalAudioMs - 120);
-    const words = tokens.map((w, idx) => {
-      const durMs = (weights[idx] / totalWeight) * usableMs;
-      const startMs = Math.round(cursorMs);
-      const endMs = Math.round(cursorMs + durMs);
-      cursorMs += durMs;
-      return {
-        word: w,
-        cleanWord: w.replace(/[^\p{L}\p{N}]/gu, ''),
-        startMs,
-        endMs,
-        startFrame: Math.floor((startMs / 1000) * fps),
-        endFrame: Math.ceil((endMs / 1000) * fps),
-      };
-    });
-
-    // Extract 3-4 real spoken anchor keywords/phrases at ~0%, ~33%, ~66% of the paragraph for progressive visual beats
-    const beatRatios = tokens.length >= 28 ? [0, 0.28, 0.56, 0.8] : [0, 0.35, 0.7];
-    const suggestedVisualBeats = beatRatios.map((ratio, beatIdx) => {
-      const idx = Math.min(words.length - 1, Math.floor(words.length * ratio));
-      const w1 = words[idx]?.cleanWord || words[idx]?.word || '';
-      const w2 = words[idx + 1]?.cleanWord || '';
-      const anchorPhrase = w2 ? `${w1} ${w2}`.trim() : w1;
-      return {
-        beatNumber: beatIdx + 1,
-        role:
-          beatIdx === 0
-            ? 'Primary Visual Anchor (Scene Entry)'
-            : beatIdx === beatRatios.length - 1
-            ? 'Climax Callout / Metric / Camera Focus'
-            : `Progressive Expansion Beat #${beatIdx + 1}`,
-        anchorKeyword: anchorPhrase,
-        estimatedLocalFrame: words[idx]?.startFrame || 0,
-        codeSnippet:
-          beatIdx === 0
-            ? `// Beat 1 enters with <SyncedScene sceneIndex={${sceneIndex}}>`
-            : `const beat${beatIdx + 1} = getWordTrigger(${sceneIndex}, "${anchorPhrase}", frame);`,
-      };
-    });
-
-    const sceneObj = {
-      sceneIndex,
-      text,
-      wordCount: tokens.length,
-      estimatedAudioSeconds: Number(spokenDurationSec.toFixed(2)),
-      durationInFrames: sceneDurationFrames,
-      startFrame: cumulativeFrames,
-      endFrame: cumulativeFrames + sceneDurationFrames,
-      suggestedVisualBeats,
-      words,
-    };
-    cumulativeFrames += sceneDurationFrames;
-    return sceneObj;
-  });
-
-  return {
-    fps,
-    totalFrames: Math.max(90, cumulativeFrames),
-    totalSeconds: Number((Math.max(90, cumulativeFrames) / fps).toFixed(2)),
-    sceneFrames: scenes.map((s) => s.durationInFrames),
-    pacingWarnings: pacingWarnings.length > 0 ? pacingWarnings : undefined,
-    scenes,
-    directorWorkflowHint:
-      'Wrap each scene in `<SyncedScene sceneIndex={i}>`, place `<ContinuousAudioTrack />` + `<WordHighlightCaptions />` at root, and use the exact `anchorKeyword` values in `suggestedVisualBeats` with `getWordTrigger(sceneIndex, anchorKeyword, frame)` so every visual illustration triggers at the exact spoken millisecond!',
-  };
-}
-
-/**
- * Generate a complete, cohesive Director Storyboard blueprint uniting
- * spoken narration, frame-exact keyword triggers, selected archival media, and inter-scene visual bridges.
- */
-function buildDirectorStoryboard(scenesPlan: any[], fps = 30) {
-  const safePlans = Array.isArray(scenesPlan) ? scenesPlan : [];
-  const narrations = safePlans.map((sp) => String(sp.narration || ''));
-  const timeline = buildNarrationTimelineAnalysis(narrations, fps);
-
-  const storyboardScenes = safePlans.map((plan, idx) => {
-    const tScene = timeline.scenes[idx] || {
-      durationInFrames: 180,
-      startFrame: idx * 180,
-      endFrame: (idx + 1) * 180,
-      suggestedVisualBeats: [],
-      words: [],
-    };
-
-    const visualConcept = String(plan.visualConcept || 'Bespoke Motion Graphics');
-    const visualBridge =
-      idx === 0
-        ? 'Scene 0 opens cleanly with <StoryboardCanvas> ambient drift.'
-        : String(
-            plan.continuityFromPrevScene ||
-              `Smooth transition from Scene ${idx - 1} via camera flow & SyncedScene fade.`
-          );
-
-    const mediaUrl = plan.selectedMediaUrl ? String(plan.selectedMediaUrl).trim() : undefined;
-    const mediaType = plan.selectedMediaType === 'video' ? 'video' : 'image';
-
-    const beats = (tScene.suggestedVisualBeats || []).map((b: any, bIdx: number) => {
-      let roleDesc = b.role;
-      if (bIdx === 0 && mediaUrl) {
-        roleDesc = `Primary Visual Anchor (${mediaType.toUpperCase()} + Ken Burns scale glide)`;
-      }
-      return {
-        beatNumber: b.beatNumber,
-        role: roleDesc,
-        anchorKeyword: b.anchorKeyword,
-        estimatedLocalFrame: b.estimatedLocalFrame,
-        codeSnippet: b.codeSnippet,
-      };
-    });
-
-    return {
-      sceneIndex: idx,
-      narration: plan.narration,
-      durationInFrames: tScene.durationInFrames,
-      startFrame: tScene.startFrame,
-      endFrame: tScene.endFrame,
-      visualConcept,
-      continuityFromPrevScene: visualBridge,
-      selectedMedia: mediaUrl ? { url: mediaUrl, type: mediaType } : null,
-      beats,
-    };
-  });
-
-  return {
-    totalScenes: storyboardScenes.length,
-    totalFrames: timeline.totalFrames,
-    totalSeconds: timeline.totalSeconds,
-    storyboardScenes,
-    masterCodeSkeletonHint: `
-// Import the Director Storyboard Primitives:
-import {
-  StoryboardCanvas,
-  ChapterProgressSpine,
-  SyncedScene,
-  getWordTrigger,
-  getWordProgress,
-  ContinuousAudioTrack,
-  WordHighlightCaptions,
-} from './audio-sync';
-
-export const DynamicVideo: React.FC = () => {
-  return (
-    <StoryboardCanvas ambientColor="#38bdf8">
-      <ContinuousAudioTrack />
-      <ChapterProgressSpine />
-      ${storyboardScenes
-        .map(
-          (s) => `
-      {/* Scene ${s.sceneIndex}: ${s.visualConcept.slice(0, 45)}... */}
-      <SyncedScene sceneIndex={${s.sceneIndex}}>
-        <Scene${s.sceneIndex}View />
-      </SyncedScene>`
-        )
-        .join('\n')}
-      <WordHighlightCaptions />
-    </StoryboardCanvas>
-  );
-};`,
-  };
 }
 
 async function dispatchGitHubRender(
@@ -521,478 +276,19 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
   }
 }
 
-interface MediaCandidate {
-  title: string;
-  embedUrl: string;
-  previewImageUrl: string;
-  mediaType: 'image' | 'video';
-  source: string;
-  width?: number;
-  height?: number;
-  description?: string;
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
-async function fetchImagePreviewBase64(
-  imageUrl: string,
-  timeoutMs = 3500
-): Promise<{ data: string; mimeType: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(imageUrl, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        Accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8',
-      },
-      redirect: 'follow',
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-    const ct = (res.headers.get('content-type') || '').toLowerCase();
-    if (!ct.startsWith('image/') || ct.includes('svg')) return null;
-
-    const ab = await res.arrayBuffer();
-    if (ab.byteLength < 800 || ab.byteLength > 950 * 1024) return null;
-
-    const mimeType = ct.includes('png')
-      ? 'image/png'
-      : ct.includes('webp')
-      ? 'image/webp'
-      : 'image/jpeg';
-    return {
-      data: arrayBufferToBase64(ab),
-      mimeType,
-    };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function searchOpenverseImages(query: string, limit = 3): Promise<MediaCandidate[]> {
-  try {
-    const url = `https://api.openverse.org/v1/images/?q=${encodeURIComponent(
-      query
-    )}&page_size=${limit * 2}`;
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker/5.4' },
-    });
-    if (!res.ok) return [];
-    const data: any = await res.json();
-    const results: any[] = data?.results || [];
-    const out: MediaCandidate[] = [];
-
-    for (const item of results) {
-      if (!item?.url || !item?.thumbnail) continue;
-      if (/\.svg(\?|$)/i.test(item.url)) continue;
-      out.push({
-        title: String(item.title || query).slice(0, 120),
-        embedUrl: item.url,
-        previewImageUrl: item.thumbnail || item.url,
-        mediaType: 'image',
-        source: `Openverse (${item.source || 'global-archive'})`,
-        width: item.width,
-        height: item.height,
-        description: item.creator ? `Creator: ${item.creator}` : undefined,
-      });
-      if (out.length >= limit) break;
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
-async function searchWikimediaMedia(
-  query: string,
-  wantVideo: boolean,
-  limit = 3
-): Promise<MediaCandidate[]> {
-  try {
-    const filetypeFilter = wantVideo ? 'filetype:video' : 'filetype:bitmap';
-    const gsrsearch = `${query} ${filetypeFilter}`;
-    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
-      gsrsearch
-    )}&gsrnamespace=6&gsrlimit=${
-      limit * 2
-    }&prop=imageinfo&iiprop=url|dimensions|mime|extmetadata&iiurlwidth=640&format=json&origin=*`;
-
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker/5.4 (https://github.com/chibaole123a-ops/remotion-mcp)' },
-    });
-    if (!res.ok) return [];
-    const data: any = await res.json();
-    const pages = Object.values(data?.query?.pages || {}) as any[];
-    const out: MediaCandidate[] = [];
-
-    for (const p of pages) {
-      const ii = p?.imageinfo?.[0];
-      if (!ii?.url) continue;
-      const mime = String(ii.mime || '').toLowerCase();
-      const isVid = mime.includes('video') || /\.(webm|mp4|ogv)$/i.test(ii.url);
-      if (wantVideo && !isVid) continue;
-      if (!wantVideo && (isVid || mime.includes('svg') || mime.includes('tiff'))) continue;
-
-      const rawTitle = String(p.title || '')
-        .replace(/^File:/i, '')
-        .replace(/\.[^.]+$/, '');
-      const descHtml = ii?.extmetadata?.ImageDescription?.value || '';
-      const cleanDesc = String(descHtml)
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 160);
-
-      out.push({
-        title: rawTitle,
-        embedUrl: isVid ? ii.url : ii.thumburl || ii.url,
-        previewImageUrl: ii.thumburl || ii.url,
-        mediaType: isVid ? 'video' : 'image',
-        source: 'Wikimedia Commons',
-        width: ii.width,
-        height: ii.height,
-        description: cleanDesc || undefined,
-      });
-      if (out.length >= limit) break;
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
-async function searchInternetArchiveVideos(query: string, limit = 2): Promise<MediaCandidate[]> {
-  try {
-    const q = `(${query}) AND mediatype:(movies) AND format:(MPEG4)`;
-    const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(
-      q
-    )}&fl[]=identifier,title,description&rows=${limit * 2}&page=1&output=json`;
-
-    const res = await fetch(searchUrl, {
-      headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker/5.4' },
-    });
-    if (!res.ok) return [];
-    const data: any = await res.json();
-    const docs: any[] = data?.response?.docs || [];
-    const out: MediaCandidate[] = [];
-
-    for (const doc of docs) {
-      const id = doc?.identifier;
-      if (!id) continue;
-      try {
-        const metaRes = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
-          headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker/5.4' },
-        });
-        if (!metaRes.ok) continue;
-        const meta: any = await metaRes.json();
-        const files: any[] = meta?.files || [];
-        const mp4File = files.find(
-          (f) =>
-            typeof f.name === 'string' &&
-            f.name.endsWith('.mp4') &&
-            !f.name.includes('_ia') &&
-            Number(f.size || 0) < 45 * 1024 * 1024
-        );
-        if (!mp4File) continue;
-
-        const embedUrl = `https://archive.org/download/${encodeURIComponent(id)}/${encodeURIComponent(
-          mp4File.name
-        )}`;
-        const previewImageUrl = `https://archive.org/services/img/${encodeURIComponent(id)}`;
-        out.push({
-          title: String(doc.title || id).slice(0, 120),
-          embedUrl,
-          previewImageUrl,
-          mediaType: 'video',
-          source: 'Internet Archive (.mp4 Video)',
-          description: String(doc.description || '').slice(0, 160) || undefined,
-        });
-        if (out.length >= limit) break;
-      } catch {
-        continue;
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
-async function searchPexelsMedia(
-  apiKey: string,
-  query: string,
-  wantVideo: boolean,
-  limit = 2
-): Promise<MediaCandidate[]> {
-  if (!apiKey) return [];
-  try {
-    const endpoint = wantVideo
-      ? `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${limit}`
-      : `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${limit}`;
-    const res = await fetch(endpoint, {
-      headers: { Authorization: apiKey },
-    });
-    if (!res.ok) return [];
-    const data: any = await res.json();
-    const out: MediaCandidate[] = [];
-
-    if (wantVideo) {
-      for (const v of data?.videos || []) {
-        const hdFile =
-          (v.video_files || []).find((f: any) => f.quality === 'hd' && f.file_type === 'video/mp4') ||
-          (v.video_files || [])[0];
-        if (!hdFile?.link || !v.image) continue;
-        out.push({
-          title: `Pexels HD B-Roll #${v.id} (${query})`,
-          embedUrl: hdFile.link,
-          previewImageUrl: v.image,
-          mediaType: 'video',
-          source: 'Pexels HD Video',
-          width: hdFile.width,
-          height: hdFile.height,
-        });
-      }
-    } else {
-      for (const p of data?.photos || []) {
-        if (!p?.src?.large2x && !p?.src?.large) continue;
-        out.push({
-          title: String(p.alt || query).slice(0, 120),
-          embedUrl: p.src.large2x || p.src.large,
-          previewImageUrl: p.src.medium || p.src.small,
-          mediaType: 'image',
-          source: 'Pexels Photography',
-          width: p.width,
-          height: p.height,
-        });
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
-async function executeMultimodalMediaSearch(env: Env, sceneQueries: any[]) {
-  const contentBlocks: any[] = [];
-  const safeQueries = Array.isArray(sceneQueries) ? sceneQueries.slice(0, 6) : [];
-
-  contentBlocks.push({
-    type: 'text',
-    text: `🔍 MULTIMODAL VISION MEDIA SEARCH RESULTS (${safeQueries.length} scene queries):\nLook directly at the live preview images/keyframes below. Verify that each visual genuinely matches your spoken script before embedding its \`embedUrl\` into \`<Img src="..." />\` or \`<OffthreadVideo src="..." muted />\`.`,
-  });
-
-  for (const sq of safeQueries) {
-    const sceneIndex = Number(sq.sceneIndex ?? 0);
-    const spokenSentence = String(sq.spokenSentence || '').trim();
-    const searchQuery = String(sq.searchQuery || '').trim();
-    const mediaTypePref = String(sq.mediaType || 'any').toLowerCase();
-    const maxResults = Math.min(3, Math.max(1, Number(sq.maxResults || 2)));
-
-    if (!searchQuery) continue;
-
-    const wantVideo = mediaTypePref === 'video' || mediaTypePref === 'any';
-    const wantImage = mediaTypePref === 'image' || mediaTypePref === 'any';
-
-    const parallelTasks: Promise<MediaCandidate[]>[] = [];
-    if (env.PEXELS_API_KEY) {
-      if (wantImage) parallelTasks.push(searchPexelsMedia(env.PEXELS_API_KEY, searchQuery, false, 2));
-      if (wantVideo) parallelTasks.push(searchPexelsMedia(env.PEXELS_API_KEY, searchQuery, true, 2));
-    }
-    if (wantImage) {
-      parallelTasks.push(searchWikimediaMedia(searchQuery, false, 2));
-      parallelTasks.push(searchOpenverseImages(searchQuery, 2));
-    }
-    if (wantVideo) {
-      parallelTasks.push(searchWikimediaMedia(searchQuery, true, 2));
-      parallelTasks.push(searchInternetArchiveVideos(searchQuery, 1));
-    }
-
-    const nestedCandidates = await Promise.all(parallelTasks);
-    const allCandidates = nestedCandidates.flat();
-
-    const verifiedForScene: { candidate: MediaCandidate; preview: { data: string; mimeType: string } }[] = [];
-    for (const cand of allCandidates) {
-      if (verifiedForScene.length >= maxResults) break;
-      const preview = await fetchImagePreviewBase64(cand.previewImageUrl);
-      if (preview) {
-        verifiedForScene.push({ candidate: cand, preview });
-      }
-    }
-
-    if (verifiedForScene.length === 0) {
-      contentBlocks.push({
-        type: 'text',
-        text: `\n--- [Scene ${sceneIndex}] Query: "${searchQuery}" ---\nSpoken Script: "${spokenSentence}"\nNo verified live preview matched this exact query. Use bespoke Remotion 3D/SVG/Data choreography for this scene or refine the English search query.`,
-      });
-      continue;
-    }
-
-    for (let k = 0; k < verifiedForScene.length; k++) {
-      const { candidate, preview } = verifiedForScene[k];
-      const tagSnippet =
-        candidate.mediaType === 'video'
-          ? `<OffthreadVideo src="${candidate.embedUrl}" muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />`
-          : `<Img src="${candidate.embedUrl}" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />`;
-
-      contentBlocks.push({
-        type: 'text',
-        text: `\n=== [Scene ${sceneIndex} — Candidate #${k + 1} (${candidate.mediaType.toUpperCase()})] ===
-• Spoken Script Context: "${spokenSentence}"
-• Title: ${candidate.title}
-• Source: ${candidate.source}${candidate.width ? ` (${candidate.width}x${candidate.height})` : ''}
-${candidate.description ? `• Description: ${candidate.description}\n` : ''}• Embed URL (auto-cached to local SSD on Cloud): ${candidate.embedUrl}
-• Remotion JSX Snippet: \`${tagSnippet}\`
-👇 LIVE VISUAL PREVIEW BELOW (Inspect with your eyes to confirm relevance & subject placement):`,
-      });
-
-      contentBlocks.push({
-        type: 'image',
-        data: preview.data,
-        mimeType: preview.mimeType,
-      });
-    }
-  }
-
-  return contentBlocks;
-}
-
 const TOOLS = [
   {
     name: 'get_remotion_ecosystem_guide',
     description:
-      'Step 1: Get the complete Remotion v4.0.541 Open Creative Studio v5.3 guide (4-Step Before & After Order of Operations, 3-Layer Zero-Drift Audio-Visual Sync `<SyncedScene>`, `getWordTrigger`, pure voiceover rules, and all 26+ package APIs).',
+      'Get the complete Remotion v4.0.541 Open Creative Studio guide (Three.js 3D, Shapes, Paths, Transitions, Fonts, Noise, Captions, Animation utils).',
     inputSchema: {
       type: 'object',
       properties: {},
     },
   },
   {
-    name: 'analyze_narration_timeline',
-    description:
-      'Step 2 (MANDATORY before writing tsxCode): Analyze your cohesive `narrationSegments` script to extract the Director Sync Sheet (`suggestedVisualBeats` with real spoken anchor keywords, ready-to-paste `getWordTrigger(i, keyword, frame)` snippets, and exact scene frame counts).',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        narrationSegments: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Array of cohesive spoken narration paragraphs (each 2-3 sentences / 30-55 words with narrative bridges).',
-        },
-        fps: {
-          type: 'number',
-          description: 'Frames per second (default 30)',
-          default: 30,
-        },
-        voice: {
-          type: 'string',
-          description: 'Neural voice ID (default vi-VN-NamMinhNeural)',
-          default: 'vi-VN-NamMinhNeural',
-        },
-      },
-      required: ['narrationSegments'],
-    },
-  },
-  {
-    name: 'plan_video_storyboard',
-    description:
-      'Step 4 (Director Storyboard Planner): Synthesize your narrative script, spoken keywords, selected archival media, and inter-scene continuity bridges into a Master Storyboard Blueprint. Automatically generates a cohesive code skeleton (<StoryboardCanvas> + <ChapterProgressSpine> + <SyncedScene>) locking audio and visuals together before writing DynamicVideo.tsx.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        scenesPlan: {
-          type: 'array',
-          description: 'List of planned scenes in chronological order.',
-          items: {
-            type: 'object',
-            properties: {
-              sceneIndex: { type: 'number', description: '0-based index of the scene.' },
-              narration: { type: 'string', description: 'Cohesive spoken narration (2-3 sentences).' },
-              visualConcept: {
-                type: 'string',
-                description: 'The creative visual metaphor or layout for this scene (e.g. "Left-split archival photo of IBM 704 with Ken Burns zoom + right-split SVG neural network glowing").',
-              },
-              continuityFromPrevScene: {
-                type: 'string',
-                description: 'How this scene visually connects to the previous one (e.g. "Camera pushes into the center of Scene 0 network", "Persistent planet anchor shrinks to top-left corner").',
-              },
-              selectedMediaUrl: {
-                type: 'string',
-                description: 'Optional URL of the verified image or .mp4 video selected from search_visual_media.',
-              },
-              selectedMediaType: {
-                type: 'string',
-                enum: ['image', 'video'],
-                default: 'image',
-              },
-            },
-            required: ['sceneIndex', 'narration', 'visualConcept'],
-          },
-        },
-        fps: { type: 'number', default: 30 },
-      },
-      required: ['scenesPlan'],
-    },
-  },
-  {
-    name: 'search_visual_media',
-    description:
-      'Step 3 (Multimodal Vision Media Search): Search across 45+ open global archives (Openverse, NASA, Smithsonian, Wikimedia Commons, Wikipedia REST, Internet Archive .mp4 Videos) for real archival photos and real B-roll videos matching your script scenes. Returns actual LIVE IMAGE & VIDEO KEYFRAME PREVIEWS (`type: "image"`) directly to your eyes so you can visually inspect and verify relevance & layout before embedding into `<Img>` or `<OffthreadVideo>`!',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        sceneQueries: {
-          type: 'array',
-          description: 'List of scene-bound media queries (up to 6 scenes per call).',
-          items: {
-            type: 'object',
-            properties: {
-              sceneIndex: {
-                type: 'number',
-                description: '0-based index of the narration segment this media will illustrate.',
-              },
-              spokenSentence: {
-                type: 'string',
-                description: 'The exact spoken narration sentence/paragraph for this scene (used to cross-check visual context).',
-              },
-              searchQuery: {
-                type: 'string',
-                description: 'Specific English search keywords describing the real-world subject (e.g., "Hubble Space Telescope deep field", "IBM 704 mainframe computer 1956", "human brain neuron microscopy").',
-              },
-              mediaType: {
-                type: 'string',
-                enum: ['any', 'image', 'video'],
-                default: 'any',
-                description: 'Whether to search for real photos ("image"), real video clips ("video"), or both ("any").',
-              },
-              maxResults: {
-                type: 'number',
-                default: 2,
-                description: 'Max verified visual candidates to preview for this scene (1 to 3).',
-              },
-            },
-            required: ['sceneIndex', 'spokenSentence', 'searchQuery'],
-          },
-        },
-      },
-      required: ['sceneQueries'],
-    },
-  },
-  {
     name: 'render_remotion_video',
-    description: `Step 3: Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, 3-Layer Zero-Drift WordBoundary Sync, Pure Neural Voiceover, WebGL2 swangle).
-${ECOSYSTEM_DOCS}`,
+    description: `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, WebGL2 swangle).\n${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -1003,84 +299,53 @@ ${ECOSYSTEM_DOCS}`,
         tsxCode: {
           type: 'string',
           description:
-            'Complete TypeScript/React code for DynamicVideo.tsx exporting `export const DynamicVideo: React.FC = () => { ... }`. Wrap each chapter in `<SyncedScene sceneIndex={i}>`, trigger progressive visual beats with `getWordTrigger(i, "keyword", frame)`, and place `<ContinuousAudioTrack />` + `<WordHighlightCaptions />` at root (NO bgm.mp3 or sfx)!',
+            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`. You have 100% creative freedom to use any Remotion features requested by the user.',
         },
         durationInFrames: {
           type: 'number',
-          description:
-            'Total frames of the video (`seconds * fps`). Automatically expanded on Cloud if spoken voiceover is longer.',
+          description: 'Total duration in frames (seconds * fps). Default 300 (10s @ 30fps).',
+          default: 300,
+        },
+        fps: {
+          type: 'number',
+          description: 'Frames per second (default 30).',
+          default: 30,
+        },
+        width: {
+          type: 'number',
+          description: 'Video width in pixels (1920 for YouTube, 1080 for TikTok/Shorts).',
+          default: 1920,
+        },
+        height: {
+          type: 'number',
+          description: 'Video height in pixels (1080 for YouTube, 1920 for TikTok/Shorts).',
+          default: 1080,
         },
         narrationSegments: {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Spoken voiceover script for each scene/chapter in order. Segment `i` is synthesized into `staticFile("voice-" + i + ".mp3")` with exact word-level timestamps in `./audio-sync`.',
+            'Optional: Spoken voiceover paragraphs for scenes if the user wants AI voiceover.',
         },
         voice: {
           type: 'string',
-          description:
-            'Neural TTS voice ID. Use "vi-VN-NamMinhNeural" (Vietnamese Male) or "vi-VN-HoaiMyNeural" (Vietnamese Female), or "en-US-AndrewMultilingualNeural" (English).',
+          description: 'Optional neural TTS voice ID (default: vi-VN-NamMinhNeural).',
           default: 'vi-VN-NamMinhNeural',
         },
         bgmMood: {
           type: 'string',
           enum: ['epic-space', 'cyber-tech', 'warm-inspiring', 'mystery-deep', 'upbeat-energetic'],
-          description:
-            'Mood for automatic multi-layer 4-chord background music synthesized into `staticFile("bgm.mp3")`.',
+          description: 'Optional mood for background audio.',
           default: 'epic-space',
         },
-        fps: {
-          type: 'number',
-          description: 'Frames per second (24 for cinematic film, 30 for standard, 60 for ultra-smooth)',
-          default: 30,
-        },
-        width: {
-          type: 'number',
-          description: 'Video width in pixels (1920 for 16:9 YouTube, 1080 for 9:16 TikTok/Shorts, 3840 for 4K)',
-          default: 1920,
-        },
-        height: {
-          type: 'number',
-          description: 'Video height in pixels (1080 for 16:9 YouTube, 1920 for 9:16 TikTok/Shorts, 2160 for 4K)',
-          default: 1080,
-        },
       },
-      required: ['tsxCode', 'durationInFrames'],
-    },
-  },
-  {
-    name: 'render_batch_videos',
-    description:
-      'Dispatch up to 20 complete Remotion videos (with AI Voiceover, Word-Level Captions & Multi-Layer BGM) in parallel to GitHub Actions Cloud.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        videos: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              title: { type: 'string' },
-              tsxCode: { type: 'string' },
-              durationInFrames: { type: 'number' },
-              narrationSegments: { type: 'array', items: { type: 'string' } },
-              voice: { type: 'string', default: 'vi-VN-NamMinhNeural' },
-              bgmMood: { type: 'string', default: 'epic-space' },
-              fps: { type: 'number', default: 30 },
-              width: { type: 'number', default: 1920 },
-              height: { type: 'number', default: 1080 },
-            },
-            required: ['title', 'tsxCode', 'durationInFrames'],
-          },
-        },
-      },
-      required: ['videos'],
+      required: ['tsxCode'],
     },
   },
   {
     name: 'check_render_status',
     description:
-      'Check if a rendered video is ready on the Cloud, and inspect real-time GitHub Actions step progress or exact compiler error logs.',
+      'Check if a rendered video is ready on the Cloud, and inspect real-time GitHub Actions step progress or compiler error logs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1098,7 +363,6 @@ ${ECOSYSTEM_DOCS}`,
       properties: {
         limit: {
           type: 'number',
-          description: 'Maximum number of videos to return (default 20)',
           default: 20,
         },
       },
@@ -1107,7 +371,7 @@ ${ECOSYSTEM_DOCS}`,
 ];
 
 async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
-  const { id, method, params } = body;
+  const { id, method, params } = body || {};
   const repo = env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
   const secretQuery = env.MCP_SECRET ? `?key=${encodeURIComponent(env.MCP_SECRET)}` : '';
 
@@ -1116,13 +380,13 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
       jsonrpc: '2.0',
       id,
       result: {
-        protocolVersion: params?.protocolVersion || '2024-11-05',
+        protocolVersion: '2024-11-05',
         capabilities: {
           tools: {},
         },
         serverInfo: {
-          name: 'remotion-cloudflare-github-mcp',
-          version: '5.5.0',
+          name: 'remotion-cloud-mcp',
+          version: '6.0.0',
         },
       },
     };
@@ -1155,54 +419,6 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           id,
           result: {
             content: [{ type: 'text', text: ECOSYSTEM_DOCS }],
-          },
-        };
-      }
-
-      if (toolName === 'analyze_narration_timeline') {
-        const segments = Array.isArray(args.narrationSegments) ? args.narrationSegments : [];
-        const fps = Number(args.fps || 30);
-        const analysis = buildNarrationTimelineAnalysis(segments, fps);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(analysis, null, 2),
-              },
-            ],
-          },
-        };
-      }
-
-      if (toolName === 'plan_video_storyboard') {
-        const scenesPlan = Array.isArray(args.scenesPlan) ? args.scenesPlan : [];
-        const fps = Number(args.fps || 30);
-        const storyboard = buildDirectorStoryboard(scenesPlan, fps);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(storyboard, null, 2),
-              },
-            ],
-          },
-        };
-      }
-
-      if (toolName === 'search_visual_media') {
-        const sceneQueries = Array.isArray(args.sceneQueries) ? args.sceneQueries : [];
-        const contentBlocks = await executeMultimodalMediaSearch(env, sceneQueries);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: contentBlocks,
           },
         };
       }
@@ -1252,21 +468,12 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         }
 
         const jobId = randomJobId();
-        const title = args.title || 'Remotion Studio Video';
+        const title = args.title || 'Remotion Video';
         const fps = Number(args.fps || 30);
         const width = Number(args.width || 1920);
         const height = Number(args.height || 1080);
-        const narrationSegments = Array.isArray(args.narrationSegments)
-          ? args.narrationSegments
-          : [];
-        const timelineEst =
-          narrationSegments.length > 0
-            ? buildNarrationTimelineAnalysis(narrationSegments, fps)
-            : null;
-        const durationInFrames = Math.max(
-          Number(args.durationInFrames || 600),
-          timelineEst?.totalFrames || 0
-        );
+        const narrationSegments = Array.isArray(args.narrationSegments) ? args.narrationSegments : [];
+        const durationInFrames = Number(args.durationInFrames || 300);
 
         const audioConfig = {
           voice: args.voice || 'vi-VN-NamMinhNeural',
@@ -1304,77 +511,13 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     jobId,
                     title,
                     specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames / ${(durationInFrames / fps).toFixed(1)}s)`,
-                    audioStudio: {
-                      voice: audioConfig.voice,
-                      bgmMood: audioConfig.bgmMood,
-                      narrationScenesCount: audioConfig.narrationSegments.length,
-                      wordBoundarySync: true,
-                    },
                     watchPageUrl,
                     streamUrl,
                     galleryUrl,
                     directDownloadUrl: videoUrl,
                     notes: warnings.length > 0 ? warnings : undefined,
                     message:
-                      'Render job (with Frame-Exact WordBoundary Sync, Voiceover Mastering & Multi-Layer BGM) dispatched to GitHub Actions Cloud! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
-                  },
-                  null,
-                  2
-                ),
-              },
-            ],
-          },
-        };
-      }
-
-      if (toolName === 'render_batch_videos') {
-        const videos = Array.isArray(args.videos) ? args.videos : [];
-        const jobs = [];
-
-        for (const v of videos) {
-          const jobId = randomJobId();
-          const fps = Number(v.fps || 30);
-          const segs = Array.isArray(v.narrationSegments) ? v.narrationSegments : [];
-          const est = segs.length > 0 ? buildNarrationTimelineAnalysis(segs, fps) : null;
-          const dur = Math.max(Number(v.durationInFrames || 600), est?.totalFrames || 0);
-
-          await dispatchGitHubRender(
-            env,
-            jobId,
-            v.title || 'Batch Video',
-            v.tsxCode,
-            dur,
-            fps,
-            Number(v.width || 1920),
-            Number(v.height || 1080),
-            {
-              voice: v.voice || 'vi-VN-NamMinhNeural',
-              bgmMood: v.bgmMood || 'epic-space',
-              narrationSegments: segs,
-            }
-          );
-          jobs.push({
-            jobId,
-            title: v.title,
-            watchPageUrl: `${baseUrl}/watch/${jobId}${secretQuery}`,
-            streamUrl: `${baseUrl}/video/${jobId}.mp4${secretQuery}`,
-            directDownloadUrl: `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`,
-          });
-        }
-
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(
-                  {
-                    status: 'batch_dispatched',
-                    count: jobs.length,
-                    galleryUrl: `${baseUrl}/gallery${secretQuery}`,
-                    jobs,
+                      'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
                   },
                   null,
                   2
@@ -1439,8 +582,8 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     message: ready
                       ? 'Video is completed and ready to watch inline or download!'
                       : isFailed
-                      ? 'CRITICAL: The render job FAILED on GitHub Actions. Read `compilerErrorDetails` above to see the exact error stack trace, fix your tsxCode, and call render_remotion_video with a corrected version immediately!'
-                      : `Job is actively running on GitHub Actions Cloud (current step: "${activeStep || 'rendering'}"). IMPORTANT FOR GEMINI: Do NOT loop check_render_status repeatedly if this is a long video — present watchPageUrl and videoUrl to the user now so they don't have to wait in chat; the watchPageUrl automatically tracks live progress and plays the video as soon as it finishes!`,
+                      ? 'Render job failed on GitHub Actions. Read compilerErrorDetails above to see error trace, fix tsxCode and re-render.'
+                      : `Job is actively rendering on GitHub Actions Cloud. Present watchPageUrl to user; it automatically tracks live progress and plays video when finished!`,
                   },
                   null,
                   2
@@ -1610,7 +753,7 @@ export default {
           wf?.conclusion === 'cancelled';
         const activeStep = escapeHtml(
           wf?.steps?.find((s: any) => s.status === 'in_progress')?.name ||
-            'Đang xử lý khung hình & âm thanh...'
+            'Đang xử lý khung hình Remotion...'
         );
         const safeHtmlUrl = escapeHtml(wf?.htmlUrl || `https://github.com/${repo}/actions`);
 
@@ -1632,7 +775,7 @@ export default {
 <body>
   <div class="card">
     <h2>⚠️ Bản render #${jobId} gặp lỗi trên Cloud</h2>
-    <p>Tiến trình đã tự động dừng (không lặp vô hạn). Hãy bảo Gemini kiểm tra lỗi và gửi bản render mới.</p>
+    <p>Tiến trình đã tự động dừng. Bạn có thể kiểm tra lỗi bên dưới và yêu cầu Gemini sửa lại code.</p>
     ${check.errorLogText ? `<pre>${escapeHtml(check.errorLogText)}</pre>` : ''}
     <p><a href="${safeHtmlUrl}" target="_blank">Xem chi tiết trên GitHub Actions ↗</a></p>
   </div>
@@ -1647,7 +790,7 @@ export default {
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="12" />
+  <meta http-equiv="refresh" content="10" />
   <title>Đang Render trên Cloud 16GB RAM... (#${jobId})</title>
   <style>
     body { background: #090d16; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
@@ -1659,9 +802,9 @@ export default {
 </head>
 <body>
   <span class="loader"></span>
-  <h2>⏳ Đang thu âm giọng đọc AI, đồng bộ từng từ & render trên Cloud (16GB RAM)...</h2>
+  <h2>⏳ Đang kết xuất video Remotion trên Cloud (16GB RAM)...</h2>
   <div class="step-badge">⚡ Bước hiện tại: ${activeStep}</div>
-  <p>Mã công việc: <strong>#${jobId}</strong> — Trang này tự động kiểm tra mỗi 12 giây và sẽ tự phát video ngay khi hoàn tất!</p>
+  <p>Mã công việc: <strong>#${jobId}</strong> — Trang này tự động làm mới mỗi 10 giây và phát video ngay khi hoàn tất!</p>
   <p><a href="${safeHtmlUrl}" target="_blank">Xem tiến độ trực tiếp trên GitHub Actions ↗</a></p>
 </body>
 </html>`,
@@ -1726,7 +869,7 @@ export default {
         }
       }
 
-      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '5.5.0' }), {
+      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '6.0.0' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -1735,10 +878,10 @@ export default {
     return new Response(
       JSON.stringify({
         status: 'online_24_7',
-        version:
-          '5.5.0 (Open Creative AI Studio: Frame-Exact WordBoundary Sync + Word-Highlight Captions + Director Storyboard + Full Remotion 4.0.541)',
+        version: '6.0.0 (Pure Remotion Ecosystem Studio)',
         platform: 'Cloudflare Workers + GitHub Actions (16GB RAM Cloud)',
         repository: repo,
+        tools: TOOLS.map((t) => t.name),
         security: env.MCP_SECRET ? 'PROTECTED 🔒' : 'OPEN',
       }),
       { headers: { 'Content-Type': 'application/json' } }

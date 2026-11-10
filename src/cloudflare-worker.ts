@@ -308,9 +308,12 @@ const TOOLS = [
     name: 'remotion',
     description: `REMOTION ECOSYSTEM STUDIO: Pure, unconstrained video rendering engine powered by the complete Remotion v4.0.542 ecosystem (Three.js 3D, Rough Notation annotations, Transitions, Shapes, SVG Paths, Noise, Google Fonts, and Physics Springs).\n` +
       `You have 100% creative freedom to write any Remotion React composition based on the user's request.\n` +
-      `RULES FOR AGENT:\n` +
+      `CRITICAL RULES FOR AGENT:\n` +
       `1. NEVER print or paste raw tsxCode into the chat conversation. Send it directly to this tool.\n` +
-      `2. VISUAL PREVIEW & SELF-INSPECTION: Specify the "frame" parameter (e.g. frame: 0, or key frame 45, 90, 120) to capture and inspect a single frame. The tool will automatically wait and return a Base64 image directly to your vision context so you can visually evaluate typography, colors, 3D angles, and composition before rendering the full video.\n` +
+      `2. VISUAL PREVIEW & SELF-INSPECTION (AGENT PROTOCOL):\n` +
+      `   - Specify the "frame" parameter (e.g. frame: 0, 45, 60, 90) to capture and inspect a single frame.\n` +
+      `   - If the returned payload has an image block (type: "image"), inspect the image with your Vision capabilities immediately.\n` +
+      `   - If the returned status is "frame_dispatched_rendering" (Cloud runner is taking ~30-40s to boot), YOU MUST NOT tell the user "I cannot view the image". INSTEAD, YOU MUST autonomously call "get_task_status(jobId)" in your very next action to retrieve the image block into your vision context.\n` +
       `3. FULL VIDEO RENDER: When "frame" is omitted, the full video will be rendered on Cloud (16GB RAM). Follow up with "get_task_status" to track until ready.\n` +
       `4. Present output cleanly in markdown:\n` +
       `   - Full video: 🎬 [Xem Video Trực Tiếp](\${watchPageUrl}) | 📥 [Tải Video MP4](\${directDownloadUrl})\n` +
@@ -357,7 +360,7 @@ const TOOLS = [
   {
     name: 'get_task_status',
     description:
-      'SYSTEM INFRASTRUCTURE TOOL: Track real-time background Cloud execution (GitHub Actions runner, build steps, completion status, or watch links) for any dispatched job.',
+      'SYSTEM INFRASTRUCTURE & VISION RETRIEVAL TOOL: Track real-time background Cloud execution (GitHub Actions runner, build steps, completion status, or watch links) for any dispatched job. When inspecting a still frame, this tool returns the Base64 multimodal image block directly into your vision context.',
     inputSchema: {
       type: 'object',
       properties: {

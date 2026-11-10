@@ -68,6 +68,7 @@ jobs:
           node-version: '22'
 
       - name: Cache node_modules and Remotion Browser
+        id: cache_deps
         uses: actions/cache@v4
         with:
           path: |
@@ -77,11 +78,12 @@ jobs:
           key: remotion-deps-${{ runner.os }}-${{ hashFiles('package.json') }}
 
       - name: Install dependencies (Full Remotion Ecosystem)
+        if: steps.cache_deps.outputs.cache-hit != 'true'
         run: |
           npm install --legacy-peer-deps
 
       - name: Ensure Remotion Browser
-        run: npx remotion browser ensure
+        run: npx remotion browser ensure --quiet
 
       - name: Prepare DynamicVideo.tsx, Pre-fetch External Assets & Guard Imports
         env:

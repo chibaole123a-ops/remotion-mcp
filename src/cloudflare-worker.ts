@@ -40,14 +40,33 @@ You have **100% creative freedom** to build any video or visual composition the 
    - \`Trail\`, \`CameraMotionBlur\`.
    - Procedural organic motion: \`noise2D(x, y)\`, \`noise3D(x, y, z)\`, simplex/perlin noise.
 
-6. **Typography, Fonts & Icons (\`@remotion/google-fonts/*\`, \`lucide-react\`)**:
-   - Google Fonts: \`import { loadFont } from '@remotion/google-fonts/Inter';\` (or \`BeVietnamPro\`, \`Roboto\`, \`Montserrat\`, etc.).
+6. **Typography, Fonts & Annotations (\`@remotion/google-fonts/*\`, \`@remotion/fonts\`, \`@remotion/rough-notation\`, \`lucide-react\`)**:
+   - Google Fonts: \`import { loadFont } from '@remotion/google-fonts/Inter';\`
+   - Custom & Local Fonts: \`import { loadFont } from '@remotion/fonts';\`
+   - Sketchy Annotations (Rough Notation): \`import { Highlight, Box, Circle, Underline, StrikeThrough, CrossedOff, Bracket } from '@remotion/rough-notation';\` (Animate \`progress\` from 0 to 1 with \`interpolate(frame, ...)\`).
    - Icons: Over 1,500+ Lucide icons (\`import { Flame, Star, Globe, Shield, Rocket } from 'lucide-react';\`).
 
 7. **Audio Visualizers & Captions (\`@remotion/media-utils\`, \`@remotion/captions\`, \`./audio-sync\`)**:
    - Audio waveform & spectrum: \`useAudioData()\`, \`visualizeAudio()\`.
    - Optional AI Voiceover: When \`narrationSegments\` is supplied, Edge-TTS creates \`staticFile('voice-0.mp3')\`, etc.
    - Word telemetry & captions: \`ContinuousAudioTrack\`, \`WordHighlightCaptions\`, \`SyncedScene\`, \`getWordTrigger\` from \`./audio-sync\`.
+
+---
+
+## 🧠 OFFICIAL REMOTION AGENT SKILLS RULES (remotion-dev/skills):
+
+1. **Frame-Driven State ONLY:**
+   - Every animation, position, opacity, scale MUST be computed strictly from \`useCurrentFrame()\` using \`interpolate()\` or \`spring()\`.
+   - NEVER use \`setTimeout\`, \`setInterval\`, \`requestAnimationFrame\`, or CSS \`transition\` / \`@keyframes\` because frames are rendered concurrently in headless Chrome.
+2. **Deterministic Randomness:**
+   - NEVER use \`Math.random()\` or \`Date.now()\`. Use \`random("unique-seed")\` from \`remotion\` so every render frame produces identical output.
+3. **Sequencing & Transitions:**
+   - Use \`<TransitionSeries>\` with \`<TransitionSeries.Sequence>\` and \`<TransitionSeries.Transition>\` for flawless multi-scene transitions.
+   - Keep timeline modular and clean.
+4. **Spring Physics Over Easing:**
+   - Use \`spring({ frame, fps, config: { damping: 12, mass: 0.5, stiffness: 100 } })\` for snappy Apple/Stripe-level natural motion.
+5. **No Visual Code Dumping:**
+   - NEVER output the raw TSX code in chat. Pass it directly to \`render_remotion_video\` or \`preview_remotion_frame\`.
 
 ---
 

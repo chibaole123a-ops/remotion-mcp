@@ -449,6 +449,160 @@ export const SyncedScene: React.FC<SyncedSceneProps> = ({
 };
 
 /**
+ * Interactive Cinematic Camera Canvas (<StoryboardCanvas>):
+ * Creates a shared spatial world across the entire video so scene changes feel like
+ * a continuous documentary camera move across a single large universe (Vox/Johnny Harris style),
+ * rather than hard-cut slide presentations.
+ */
+export interface StoryboardCanvasProps {
+  children: React.ReactNode;
+  ambientColor?: string;
+  gridOpacity?: number;
+  enableCameraGlide?: boolean;
+  style?: React.CSSProperties;
+}
+
+export const StoryboardCanvas: React.FC<StoryboardCanvasProps> = ({
+  children,
+  ambientColor = '#38bdf8',
+  gridOpacity = 0.08,
+  enableCameraGlide = true,
+  style,
+}) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+
+  // Slow, cinematic 1-take world drift across the entire timeline
+  const progress = durationInFrames > 0 ? frame / durationInFrames : 0;
+  const cameraDriftX = enableCameraGlide ? Math.sin(progress * Math.PI * 1.5) * 28 : 0;
+  const cameraDriftY = enableCameraGlide ? Math.cos(progress * Math.PI) * 16 : 0;
+  const cameraZoom = enableCameraGlide ? 1.0 + progress * 0.035 : 1.0;
+
+  return (
+    <AbsoluteFill
+      style={{
+        backgroundColor: '#070a11',
+        overflow: 'hidden',
+        ...style,
+      }}
+    >
+      {/* Dynamic ambient backdrop light that subtly travels through scenes */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '-20%',
+          left: '-20%',
+          width: '140%',
+          height: '140%',
+          background: `radial-gradient(circle at ${50 + cameraDriftX * 0.4}% ${
+            40 + cameraDriftY * 0.4
+          }%, ${ambientColor}22 0%, rgba(15, 23, 42, 0) 65%)`,
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
+
+      {/* Subtle perspective spatial grid that creates continuous depth */}
+      {gridOpacity > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            opacity: gridOpacity,
+            backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.4) 1px, transparent 1px)`,
+            backgroundSize: '48px 48px',
+            transform: `translate3d(${cameraDriftX.toFixed(2)}px, ${cameraDriftY.toFixed(
+              2
+            )}px, 0)`,
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        />
+      )}
+
+      {/* Main cinematic camera viewport */}
+      <AbsoluteFill
+        style={{
+          transform: `scale(${cameraZoom.toFixed(4)}) translate3d(${(
+            cameraDriftX * 0.5
+          ).toFixed(2)}px, ${(cameraDriftY * 0.5).toFixed(2)}px, 0)`,
+          transformOrigin: '50% 50%',
+          zIndex: 2,
+        }}
+      >
+        {children}
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
+
+/**
+ * Chapter Progress Spine (<ChapterProgressSpine>):
+ * A sleek, high-retention documentary progress indicator across chapters (like Vox/Kurzgesagt).
+ */
+export const ChapterProgressSpine: React.FC<{
+  totalChapters?: number;
+  activeChapter?: number;
+  activeColor?: string;
+  style?: React.CSSProperties;
+}> = ({
+  totalChapters,
+  activeChapter,
+  activeColor = '#38bdf8',
+  style,
+}) => {
+  const frame = useCurrentFrame();
+  const scenes = audioTelemetry?.scenes || [];
+  const numChapters = totalChapters || scenes.length || 1;
+
+  const currentIdx =
+    typeof activeChapter === 'number'
+      ? activeChapter
+      : scenes.findIndex((s) => frame >= s.startFrame && frame < s.endFrame);
+
+  if (numChapters <= 1) return null;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 36,
+        left: '6%',
+        right: '6%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        zIndex: 90,
+        pointerEvents: 'none',
+        ...style,
+      }}
+    >
+      {Array.from({ length: numChapters }).map((_, idx) => {
+        const isPast = currentIdx > idx;
+        const isCurr = currentIdx === idx;
+        return (
+          <div
+            key={idx}
+            style={{
+              flex: 1,
+              height: 4,
+              borderRadius: 3,
+              backgroundColor: isCurr
+                ? activeColor
+                : isPast
+                ? 'rgba(255, 255, 255, 0.5)'
+                : 'rgba(255, 255, 255, 0.15)',
+              boxShadow: isCurr ? `0 0 12px ${activeColor}bb` : 'none',
+              transition: 'background-color 0.3s ease',
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+};
+
+/**
  * Automatically plays all synthesized voiceover segments (`voice-0.mp3`, `voice-1.mp3`, ...)
  * at their exact global start frames (100% pure crystal-clear voiceover, no synthetic BGM).
  */

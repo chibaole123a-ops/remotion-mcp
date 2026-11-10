@@ -165,6 +165,97 @@ function buildNarrationTimelineAnalysis(narrationSegments: string[], fps = 30, r
   };
 }
 
+function buildDirectorStoryboard(scenesPlan: any[], fps = 30) {
+  const safePlans = Array.isArray(scenesPlan) ? scenesPlan : [];
+  const narrations = safePlans.map((sp) => String(sp.narration || ''));
+  const timeline = buildNarrationTimelineAnalysis(narrations, fps);
+
+  const storyboardScenes = safePlans.map((plan, idx) => {
+    const tScene = timeline.scenes[idx] || {
+      durationInFrames: 180,
+      startFrame: idx * 180,
+      endFrame: (idx + 1) * 180,
+      suggestedVisualBeats: [],
+      words: [],
+    };
+
+    const visualConcept = String(plan.visualConcept || 'Bespoke Motion Graphics');
+    const visualBridge =
+      idx === 0
+        ? 'Scene 0 opens cleanly with <StoryboardCanvas> ambient drift.'
+        : String(
+            plan.continuityFromPrevScene ||
+              `Smooth transition from Scene ${idx - 1} via camera flow & SyncedScene fade.`
+          );
+
+    const mediaUrl = plan.selectedMediaUrl ? String(plan.selectedMediaUrl).trim() : undefined;
+    const mediaType = plan.selectedMediaType === 'video' ? 'video' : 'image';
+
+    const beats = (tScene.suggestedVisualBeats || []).map((b: any, bIdx: number) => {
+      let roleDesc = b.role;
+      if (bIdx === 0 && mediaUrl) {
+        roleDesc = `Primary Visual Anchor (${mediaType.toUpperCase()} + Ken Burns scale glide)`;
+      }
+      return {
+        beatNumber: b.beatNumber,
+        role: roleDesc,
+        anchorKeyword: b.anchorKeyword,
+        estimatedLocalFrame: b.estimatedLocalFrame,
+        codeSnippet: b.codeSnippet,
+      };
+    });
+
+    return {
+      sceneIndex: idx,
+      narration: plan.narration,
+      durationInFrames: tScene.durationInFrames,
+      startFrame: tScene.startFrame,
+      endFrame: tScene.endFrame,
+      visualConcept,
+      continuityFromPrevScene: visualBridge,
+      selectedMedia: mediaUrl ? { url: mediaUrl, type: mediaType } : null,
+      beats,
+    };
+  });
+
+  return {
+    totalScenes: storyboardScenes.length,
+    totalFrames: timeline.totalFrames,
+    totalSeconds: timeline.totalSeconds,
+    storyboardScenes,
+    masterCodeSkeletonHint: `
+// Import the Director Storyboard Primitives:
+import {
+  StoryboardCanvas,
+  ChapterProgressSpine,
+  SyncedScene,
+  getWordTrigger,
+  getWordProgress,
+  ContinuousAudioTrack,
+  WordHighlightCaptions,
+} from './audio-sync';
+
+export const DynamicVideo: React.FC = () => {
+  return (
+    <StoryboardCanvas ambientColor="#38bdf8">
+      <ContinuousAudioTrack />
+      <ChapterProgressSpine />
+      ${storyboardScenes
+        .map(
+          (s) => `
+      {/* Scene ${s.sceneIndex}: ${s.visualConcept.slice(0, 45)}... */}
+      <SyncedScene sceneIndex={${s.sceneIndex}}>
+        <Scene${s.sceneIndex}View />
+      </SyncedScene>`
+        )
+        .join('\n')}
+      <WordHighlightCaptions />
+    </StoryboardCanvas>
+  );
+};`,
+  };
+}
+
 interface CloudRenderJob {
   id: string;
   title: string;
@@ -364,17 +455,17 @@ async function inspectGitHubWorkflowRun(jobId: string) {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.4)
-## (Multimodal Vision Media Search + 3-Layer Zero-Drift Audio-Visual Sync + Progressive Visual Build-Up + Pure Voiceover + 60fps Anti-Lag)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.5)
+## (Director Storyboard Planner + Multimodal Media Search + Shared Spatial Canvas + 3-Layer Zero-Drift Sync)
 
-1. Mandatory 5-Step Before & After Order of Operations:
+1. Mandatory 5-Step Storyboard-Driven Order of Operations:
    - STEP 1: Write cohesive narrative paragraphs (2-3 sentences / 30-55 words per segment with narrative bridges, NEVER choppy 1-sentence blurbs).
-   - STEP 2: Run \`analyze_narration_timeline\` BEFORE writing \`tsxCode\` to get \`suggestedVisualBeats\` with real spoken anchor keywords.
-   - STEP 3: Run \`search_visual_media\` to search 45+ open global archives and VISUALLY INSPECT real photos & video keyframes (\`type: "image"\`) with your eyes before embedding via \`<Img>\` or \`<OffthreadVideo muted />\`.
-   - STEP 4: Wrap each chapter in \`<SyncedScene sceneIndex={i}>\` (Zero-Drift Flow-Sync), place \`<ContinuousAudioTrack />\` + \`<WordHighlightCaptions />\` at root, and trigger progressive visual beats via \`getWordTrigger(i, "keyword", frame)\`.
-   - STEP 5: Never unmount elements mid-scene (\`{progress < 1 && <Comp />}\`), never use heavy \`filter: blur()\`, and never add \`bgm.mp3\` or \`@remotion/sfx\`.
-2. 3-Layer Zero-Drift Audio-Visual Sync (\`./audio-sync\`):
-   - \`import { SyncedScene, getWordTrigger, getWordProgress, getWordFrame, getBeatFrame, getSceneFrames, getSegmentStartFrame, ContinuousAudioTrack, WordHighlightCaptions, audioTelemetry } from './audio-sync';\`
+   - STEP 2: Run \`analyze_narration_timeline\` to get \`suggestedVisualBeats\` with real spoken anchor keywords.
+   - STEP 3: Run \`search_visual_media\` to search 45+ open global archives and VISUALLY INSPECT real photos & video keyframes (\`type: "image"\`) with your eyes.
+   - STEP 4: Run \`plan_video_storyboard\` to synthesize narration, spoken keywords, selected media, and inter-scene continuity bridges into a Master Storyboard Blueprint.
+   - STEP 5: Wrap the entire timeline in \`<StoryboardCanvas ambientColor="#38bdf8">\` with \`<ContinuousAudioTrack />\` + \`<ChapterProgressSpine />\` and individual \`<SyncedScene sceneIndex={i}>\` chapters.
+2. Director Storyboard & Zero-Drift Sync (\`./audio-sync\`):
+   - \`import { StoryboardCanvas, ChapterProgressSpine, SyncedScene, getWordTrigger, getWordProgress, getWordFrame, getBeatFrame, getSceneFrames, getSegmentStartFrame, ContinuousAudioTrack, WordHighlightCaptions, audioTelemetry } from './audio-sync';\`
 `;
 
 interface MediaCandidate {
@@ -691,6 +782,30 @@ function createMcpServerInstance(baseUrl: string) {
       const analysis = buildNarrationTimelineAnalysis(narrationSegments, fps);
       return {
         content: [{ type: 'text', text: JSON.stringify(analysis, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    'plan_video_storyboard',
+    'Step 4 (Director Storyboard Planner): Synthesize your narrative script, spoken keywords, selected archival media, and inter-scene continuity bridges into a Master Storyboard Blueprint. Automatically generates a cohesive code skeleton (<StoryboardCanvas> + <ChapterProgressSpine> + <SyncedScene>) locking audio and visuals together before writing DynamicVideo.tsx.',
+    {
+      scenesPlan: z.array(
+        z.object({
+          sceneIndex: z.number().int().default(0),
+          narration: z.string(),
+          visualConcept: z.string(),
+          continuityFromPrevScene: z.string().optional(),
+          selectedMediaUrl: z.string().optional(),
+          selectedMediaType: z.enum(['image', 'video']).default('image'),
+        })
+      ),
+      fps: z.number().int().default(30),
+    },
+    async ({ scenesPlan, fps }) => {
+      const storyboard = buildDirectorStoryboard(scenesPlan, fps);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(storyboard, null, 2) }],
       };
     }
   );

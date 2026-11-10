@@ -6,14 +6,14 @@ export interface Env {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.4)
-## (Multimodal Vision Media Search + 3-Layer Zero-Drift Sync + Progressive Build-Up + Pure Voiceover + 60fps Anti-Lag)
+# REMOTION v4.0.541 — OPEN CREATIVE AI VIDEO STUDIO (v5.5)
+## (Director Storyboard Planner + Multimodal Media Search + Shared Spatial Canvas + 3-Layer Zero-Drift Sync)
 
 You have **100% creative freedom**. Act as a **World-Class Film Director, Documentary Storyteller, Motion Graphics Artist, and High-Retention Video Editor (Vox / Kurzgesagt / Johnny Harris / Lemmino)**.
 
 ---
 
-## I. MANDATORY 5-STEP ORDER OF OPERATIONS (BEFORE & AFTER WORKFLOW)
+## I. MANDATORY 5-STEP ORDER OF OPERATIONS (STORYBOARD-DRIVEN WORKFLOW)
 
 Always execute video creation in this exact order:
 
@@ -23,44 +23,42 @@ Always execute video creation in this exact order:
 - Each \`narrationSegments[i]\` MUST be **2–3 rich, connected sentences (30–55 words, ~8–14 seconds)** using natural narrative bridges (*"Nhưng điều kỳ diệu thực sự nằm ở...", "Để hiểu tại sao cơ chế này hoạt động, hãy nhìn vào...", "Chính bước ngoặt đó đã mở ra..."*).
 
 ### STEP 2: Run \`analyze_narration_timeline\` to Get Exact Spoken Keywords & Beats
-- **BEFORE writing \`tsxCode\`**, pass your \`narrationSegments\` to \`analyze_narration_timeline\`.
+- Pass your \`narrationSegments\` to \`analyze_narration_timeline\`.
 - It returns the exact estimated frame durations AND \`suggestedVisualBeats\` containing **real anchor keywords extracted directly from each sentence** along with ready-to-paste \`getWordTrigger(sceneIndex, "keyword", frame)\` snippets.
-- **ONLY pass keywords that actually exist in \`narrationSegments[i]\`** into \`getWordTrigger\` / \`getWordFrame\` / \`getWordProgress\`!
 
-### STEP 3: Run \`search_visual_media\` to Find & VISUALLY INSPECT Real Photos & Videos (Mixed-Media)
-- When your story mentions real-world history, science, space, nature, people, hardware, architecture, or geography, call \`search_visual_media\` with \`sceneQueries\` (passing the \`sceneIndex\`, \`spokenSentence\`, and an English \`searchQuery\` for maximum global archive coverage).
-- The tool searches across **45+ global open archives** (Openverse, NASA, Smithsonian, Wikimedia Commons, Wikipedia REST, Internet Archive \`.mp4\` Videos) and **returns actual live preview images & video keyframes (\`type: "image"\`) directly to your eyes**!
-- **Look directly at each returned image/video keyframe**:
-  - Verify that the visual subject genuinely matches \`spokenSentence\` (reject irrelevant diagrams or noisy images).
-  - Note where the focal subject sits (left, center, right) so your typography/SVG callouts complement the photo/video without covering the main subject!
-  - Embed verified photos with \`<Img src="URL" />\` and verified \`.mp4/.webm\` videos with \`<OffthreadVideo src="URL" muted />\` (the Cloud runner automatically pre-fetches and caches them onto local SSD before rendering!).
+### STEP 3: Run \`search_visual_media\` to Find & VISUALLY INSPECT Real Photos & Videos
+- For scenes that reference real-world events, history, science, hardware, or nature, call \`search_visual_media\` with \`sceneQueries\`.
+- The tool returns actual live preview images & video keyframes (\`type: "image"\`) directly to your eyes so you can verify relevance, visual clarity, and subject placement before choosing.
 
-### STEP 4: Build \`DynamicVideo.tsx\` Using Zero-Drift \`<SyncedScene>\` & Progressive Word Beats
-1. **Shared Spatial Canvas + Pure Audio + Karaoke Captions at Root**:
-   - Render a continuous ambient canvas background at the root of \`DynamicVideo\`, plus \`<ContinuousAudioTrack />\` and \`<WordHighlightCaptions />\`.
-   - Do **NOT** use \`bgm.mp3\` or \`@remotion/sfx\` (keep 100% pure, crystal-clear voiceover!).
-2. **Wrap Every Chapter in \`<SyncedScene sceneIndex={i}>\` (Zero-Drift Flow-Sync)**:
-   - Instead of raw \`<Sequence>\` hard cuts or \`TransitionSeries\` (which shifts cumulative timing), wrap each chapter in \`<SyncedScene sceneIndex={i}>\`.
-   - \`<SyncedScene>\` automatically locks 100% to the real measured MP3 start frame & duration on the Cloud AND applies a smooth cross-dissolve + subtle camera glide at the start/end of the chapter!
-3. **Progressive Intra-Scene Choreography via \`getWordTrigger\` (3–4 Beats per Chapter)**:
-   - Inside each chapter, use \`const frame = useCurrentFrame();\` and trigger 3 to 4 progressive visual beats tied to the real spoken keywords from Step 2:
-     - **Beat 1 (Start of sentence)**: Primary visual anchor (e.g., real archival photo/video with gentle Ken Burns zoom or 3D/SVG centerpiece) enters smoothly.
-     - **Beat 2 (\`const beat2 = getWordTrigger(i, "từ_khóa_giữa_câu", frame)\`)**: Secondary diagram / SVG path callout (\`evolvePath\`) / data connections expand out while Beat 1 stays visible on screen!
-     - **Beat 3 (\`const beat3 = getWordTrigger(i, "từ_khóa_cao_trào", frame)\`)**: Highlight / metric callout / camera focus triggers right as the narrator says the climax keyword.
+### STEP 4: Run \`plan_video_storyboard\` (The Director Blueprint)
+- Call \`plan_video_storyboard\` with your \`scenesPlan\` (providing \`sceneIndex\`, \`narration\`, \`visualConcept\`, \`continuityFromPrevScene\`, and any \`selectedMediaUrl\`).
+- It synthesizes everything into a unified Master Storyboard Blueprint with an aligned code skeleton, locking in visual continuity and preventing isolated slide cuts.
 
-### STEP 5: Anti-Lag & Persistence Quality Control (Zero Jitter / Zero Pop-out)
-- **NEVER** unmount elements mid-scene with \`{progress < 1 && <Component />}\`! Keep all visual beats mounted until the end of the scene and control visibility smoothly via \`opacity\` and \`transform\`.
-- **NEVER** use heavy \`filter: blur(60px)\` or large animated CSS blurs (which lag software rendering). Use clean \`radial-gradient(...)\` glows, crisp SVG vectors, and \`transform: translate3d(...) scale(...)\`.
+### STEP 5: Build \`DynamicVideo.tsx\` Using \`<StoryboardCanvas>\`, \`<SyncedScene>\`, & Progressive Word Beats
+1. **Shared Spatial Canvas at Root**:
+   \`\`\`tsx
+   <StoryboardCanvas ambientColor="#38bdf8">
+     <ContinuousAudioTrack />
+     <ChapterProgressSpine />
+     {/* Wrap each chapter in SyncedScene */}
+     <SyncedScene sceneIndex={0}>...</SyncedScene>
+     <SyncedScene sceneIndex={1}>...</SyncedScene>
+     <WordHighlightCaptions />
+   </StoryboardCanvas>
+   \`\`\`
+2. **Progressive Intra-Scene Choreography (3–4 Beats per Chapter)**:
+   - Use \`getWordTrigger(sceneIndex, "anchorKeyword", frame)\` to smoothly reveal layers (photo/video with Ken Burns scale glide, SVG diagrams, callout tags) without popping elements in/out mid-scene!
+   - Pure voiceover only (NO \`bgm.mp3\` or \`@remotion/sfx\`).
 
 ---
 
 ## II. COMPLETE INSTALLED ECOSYSTEM & API SIGNATURES (Remotion v4.0.541)
 
-1. **Core (\`remotion\`)**:
-   \`useCurrentFrame\`, \`useVideoConfig\`, \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`Loop\`, \`Freeze\`, \`interpolate\`, \`interpolateColors\`, \`spring\`, \`Easing\`, \`random\`, \`Audio\`, \`OffthreadVideo\`, \`Img\`, \`staticFile\`.
-2. **3-Layer Zero-Drift Audio-Visual Sync (\`./audio-sync\`)**:
+1. **Director Storyboard & Zero-Drift Sync (\`./audio-sync\`)**:
    \`\`\`tsx
    import {
+     StoryboardCanvas,
+     ChapterProgressSpine,
      SyncedScene,
      getWordTrigger,
      getWordProgress,
@@ -73,15 +71,11 @@ Always execute video creation in this exact order:
      audioTelemetry,
    } from './audio-sync';
    \`\`\`
+   - \`<StoryboardCanvas ambientColor="#38bdf8" gridOpacity={0.08}>{children}</StoryboardCanvas>\`
+   - \`<ChapterProgressSpine />\` (documentary chapter indicator across scenes)
    - \`<SyncedScene sceneIndex={i} enterFrames={14} exitFrames={14}>{children}</SyncedScene>\`
-   - \`getWordTrigger(sceneIndex: number, keywordOrPhrase: string, localFrame: number, transitionDurationFrames?: number): number\` (returns smooth 0 -> 1 progress starting right when \`keywordOrPhrase\` is spoken!)
-   - \`getWordProgress(sceneIndex: number, startKeyword: string, endKeyword: string, localFrame: number): number\`
-   - \`getWordFrame(sceneIndex: number, keywordOrPhrase: string, fallbackFrame?: number): number\`
-   - \`getBeatFrame(sceneIndex: number, beatIndex: number, totalBeats?: number): number\`
-   - \`getSceneFrames(sceneIndex: number, fallbackFrames?: number): number\`
-   - \`getSegmentStartFrame(sceneIndex: number, fallbackStartFrame?: number): number\`
-   - \`<ContinuousAudioTrack voiceVolume?: number />\`
-   - \`<WordHighlightCaptions sceneIndex?: number highlightColor?: string activeBgColor?: string fontSize?: number bottomOffset?: number />\`
+   - \`getWordTrigger(sceneIndex, keyword, localFrame, durationFrames?): number\`
+   - \`getWordProgress(sceneIndex, startKeyword, endKeyword, localFrame): number\`
 3. **Captions & Audio Spectrum (\`@remotion/captions\`, \`@remotion/media-utils\`)**:
    \`createTikTokStyleCaptions\`, \`useAudioData\`, \`visualizeAudio\`, \`visualizeAudioWaveform\`.
 4. **2D Vector Shapes, SVG Paths & 3D WebGL (\`@remotion/shapes\`, \`@remotion/paths\`, \`@remotion/three\`, \`three\`, \`@react-three/fiber\`, \`@react-three/drei\`)**:
@@ -257,6 +251,101 @@ function buildNarrationTimelineAnalysis(
     scenes,
     directorWorkflowHint:
       'Wrap each scene in `<SyncedScene sceneIndex={i}>`, place `<ContinuousAudioTrack />` + `<WordHighlightCaptions />` at root, and use the exact `anchorKeyword` values in `suggestedVisualBeats` with `getWordTrigger(sceneIndex, anchorKeyword, frame)` so every visual illustration triggers at the exact spoken millisecond!',
+  };
+}
+
+/**
+ * Generate a complete, cohesive Director Storyboard blueprint uniting
+ * spoken narration, frame-exact keyword triggers, selected archival media, and inter-scene visual bridges.
+ */
+function buildDirectorStoryboard(scenesPlan: any[], fps = 30) {
+  const safePlans = Array.isArray(scenesPlan) ? scenesPlan : [];
+  const narrations = safePlans.map((sp) => String(sp.narration || ''));
+  const timeline = buildNarrationTimelineAnalysis(narrations, fps);
+
+  const storyboardScenes = safePlans.map((plan, idx) => {
+    const tScene = timeline.scenes[idx] || {
+      durationInFrames: 180,
+      startFrame: idx * 180,
+      endFrame: (idx + 1) * 180,
+      suggestedVisualBeats: [],
+      words: [],
+    };
+
+    const visualConcept = String(plan.visualConcept || 'Bespoke Motion Graphics');
+    const visualBridge =
+      idx === 0
+        ? 'Scene 0 opens cleanly with <StoryboardCanvas> ambient drift.'
+        : String(
+            plan.continuityFromPrevScene ||
+              `Smooth transition from Scene ${idx - 1} via camera flow & SyncedScene fade.`
+          );
+
+    const mediaUrl = plan.selectedMediaUrl ? String(plan.selectedMediaUrl).trim() : undefined;
+    const mediaType = plan.selectedMediaType === 'video' ? 'video' : 'image';
+
+    const beats = (tScene.suggestedVisualBeats || []).map((b: any, bIdx: number) => {
+      let roleDesc = b.role;
+      if (bIdx === 0 && mediaUrl) {
+        roleDesc = `Primary Visual Anchor (${mediaType.toUpperCase()} + Ken Burns scale glide)`;
+      }
+      return {
+        beatNumber: b.beatNumber,
+        role: roleDesc,
+        anchorKeyword: b.anchorKeyword,
+        estimatedLocalFrame: b.estimatedLocalFrame,
+        codeSnippet: b.codeSnippet,
+      };
+    });
+
+    return {
+      sceneIndex: idx,
+      narration: plan.narration,
+      durationInFrames: tScene.durationInFrames,
+      startFrame: tScene.startFrame,
+      endFrame: tScene.endFrame,
+      visualConcept,
+      continuityFromPrevScene: visualBridge,
+      selectedMedia: mediaUrl ? { url: mediaUrl, type: mediaType } : null,
+      beats,
+    };
+  });
+
+  return {
+    totalScenes: storyboardScenes.length,
+    totalFrames: timeline.totalFrames,
+    totalSeconds: timeline.totalSeconds,
+    storyboardScenes,
+    masterCodeSkeletonHint: `
+// Import the Director Storyboard Primitives:
+import {
+  StoryboardCanvas,
+  ChapterProgressSpine,
+  SyncedScene,
+  getWordTrigger,
+  getWordProgress,
+  ContinuousAudioTrack,
+  WordHighlightCaptions,
+} from './audio-sync';
+
+export const DynamicVideo: React.FC = () => {
+  return (
+    <StoryboardCanvas ambientColor="#38bdf8">
+      <ContinuousAudioTrack />
+      <ChapterProgressSpine />
+      ${storyboardScenes
+        .map(
+          (s) => `
+      {/* Scene ${s.sceneIndex}: ${s.visualConcept.slice(0, 45)}... */}
+      <SyncedScene sceneIndex={${s.sceneIndex}}>
+        <Scene${s.sceneIndex}View />
+      </SyncedScene>`
+        )
+        .join('\n')}
+      <WordHighlightCaptions />
+    </StoryboardCanvas>
+  );
+};`,
   };
 }
 
@@ -816,6 +905,47 @@ const TOOLS = [
     },
   },
   {
+    name: 'plan_video_storyboard',
+    description:
+      'Step 4 (Director Storyboard Planner): Synthesize your narrative script, spoken keywords, selected archival media, and inter-scene continuity bridges into a Master Storyboard Blueprint. Automatically generates a cohesive code skeleton (<StoryboardCanvas> + <ChapterProgressSpine> + <SyncedScene>) locking audio and visuals together before writing DynamicVideo.tsx.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scenesPlan: {
+          type: 'array',
+          description: 'List of planned scenes in chronological order.',
+          items: {
+            type: 'object',
+            properties: {
+              sceneIndex: { type: 'number', description: '0-based index of the scene.' },
+              narration: { type: 'string', description: 'Cohesive spoken narration (2-3 sentences).' },
+              visualConcept: {
+                type: 'string',
+                description: 'The creative visual metaphor or layout for this scene (e.g. "Left-split archival photo of IBM 704 with Ken Burns zoom + right-split SVG neural network glowing").',
+              },
+              continuityFromPrevScene: {
+                type: 'string',
+                description: 'How this scene visually connects to the previous one (e.g. "Camera pushes into the center of Scene 0 network", "Persistent planet anchor shrinks to top-left corner").',
+              },
+              selectedMediaUrl: {
+                type: 'string',
+                description: 'Optional URL of the verified image or .mp4 video selected from search_visual_media.',
+              },
+              selectedMediaType: {
+                type: 'string',
+                enum: ['image', 'video'],
+                default: 'image',
+              },
+            },
+            required: ['sceneIndex', 'narration', 'visualConcept'],
+          },
+        },
+        fps: { type: 'number', default: 30 },
+      },
+      required: ['scenesPlan'],
+    },
+  },
+  {
     name: 'search_visual_media',
     description:
       'Step 3 (Multimodal Vision Media Search): Search across 45+ open global archives (Openverse, NASA, Smithsonian, Wikimedia Commons, Wikipedia REST, Internet Archive .mp4 Videos) for real archival photos and real B-roll videos matching your script scenes. Returns actual LIVE IMAGE & VIDEO KEYFRAME PREVIEWS (`type: "image"`) directly to your eyes so you can visually inspect and verify relevance & layout before embedding into `<Img>` or `<OffthreadVideo>`!',
@@ -1041,6 +1171,24 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               {
                 type: 'text',
                 text: JSON.stringify(analysis, null, 2),
+              },
+            ],
+          },
+        };
+      }
+
+      if (toolName === 'plan_video_storyboard') {
+        const scenesPlan = Array.isArray(args.scenesPlan) ? args.scenesPlan : [];
+        const fps = Number(args.fps || 30);
+        const storyboard = buildDirectorStoryboard(scenesPlan, fps);
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(storyboard, null, 2),
               },
             ],
           },

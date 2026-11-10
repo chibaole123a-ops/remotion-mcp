@@ -784,7 +784,13 @@ export default {
     const keyFromQuery = url.searchParams.get('key');
     const keyFromPath = pathParts.length >= 2 && pathParts[0] === 'mcp' ? pathParts[1] : null;
 
-    if (env.MCP_SECRET && url.pathname !== '/') {
+    // Publicly accessible media routes without secret requirement (safe CDN streaming)
+    const isPublicMediaRoute =
+      url.pathname === '/' ||
+      pathParts[0] === 'still' ||
+      pathParts[0] === 'video';
+
+    if (env.MCP_SECRET && !isPublicMediaRoute) {
       if (keyFromQuery !== env.MCP_SECRET && keyFromPath !== env.MCP_SECRET) {
         return new Response(JSON.stringify({ error: 'Unauthorized: Invalid MCP_SECRET' }), {
           status: 401,

@@ -51,17 +51,9 @@ function validateTsxCode(tsxCode: string): string[] {
 }
 
 const ECOSYSTEM_DOCS = `
-# REMOTION v4.0.541 — OPEN CREATIVE AI STUDIO (Antigravity Architecture)
+# REMOTION v4.0.542 — PURE CREATIVE STUDIO (Antigravity Architecture)
 
-You have **100% creative freedom** to build any video or visual composition the user asks for using the complete Remotion v4.0.541 ecosystem.
-
-## 🚀 ANTIGRAVITY AGENTIC WORKFLOW FOR GEMINI:
-1. **Direct Composition**: Write your Remotion React composition directly based on the user's requirements.
-2. **Fast Still Preview (\`preview_remotion_frame\`)**: To quickly inspect visual layout, 3D positioning, colors, or typography in seconds, call \`preview_remotion_frame\` with \`frame: 0\` (or key frame) before or alongside full rendering.
-3. **Full Video Render (\`render_remotion_video\`)**: Call \`render_remotion_video\` to render the complete MP4 on Cloud (16GB RAM).
-4. **Autonomous Self-Healing Loop**: If \`check_render_status\` returns \`failed_on_github_actions\`, inspect \`compilerErrorDetails\`, fix the code error immediately, and re-call \`render_remotion_video\` without asking the user.
-
----
+You have **100% creative freedom** to build any video or visual composition the user asks for using the complete Remotion v4.0.542 ecosystem.
 
 ## 📦 INSTALLED REMOTION PACKAGES & CAPABILITIES:
 
@@ -86,14 +78,14 @@ You have **100% creative freedom** to build any video or visual composition the 
    - \`Trail\`, \`CameraMotionBlur\`.
    - Procedural organic motion: \`noise2D(x, y)\`, \`noise3D(x, y, z)\`, simplex/perlin noise.
 
-6. **Typography, Fonts & Icons (\`@remotion/google-fonts/*\`, \`lucide-react\`)**:
-   - Google Fonts: \`import { loadFont } from '@remotion/google-fonts/Inter';\` (or \`BeVietnamPro\`, \`Roboto\`, \`Montserrat\`, etc.).
+6. **Typography, Fonts & Annotations (\`@remotion/google-fonts/*\`, \`@remotion/fonts\`, \`@remotion/rough-notation\`, \`lucide-react\`)**:
+   - Google Fonts: \`import { loadFont } from '@remotion/google-fonts/Inter';\`
+   - Custom & Local Fonts: \`import { loadFont } from '@remotion/fonts';\`
+   - Sketchy Annotations (Rough Notation): \`import { Highlight, Box, Circle, Underline, StrikeThrough, CrossedOff, Bracket } from '@remotion/rough-notation';\` (Animate \`progress\` from 0 to 1 with \`interpolate(frame, ...)\`).
    - Icons: Over 1,500+ Lucide icons (\`import { Flame, Star, Globe, Shield, Rocket } from 'lucide-react';\`).
 
-7. **Audio Visualizers & Captions (\`@remotion/media-utils\`, \`@remotion/captions\`, \`./audio-sync\`)**:
+7. **Media Utilities (\`@remotion/media-utils\`)**:
    - Audio waveform & spectrum: \`useAudioData()\`, \`visualizeAudio()\`.
-   - Optional AI Voiceover: When \`narrationSegments\` is supplied, Edge-TTS creates \`staticFile('voice-0.mp3')\`, etc.
-   - Word telemetry & captions: \`ContinuousAudioTrack\`, \`WordHighlightCaptions\`, \`SyncedScene\`, \`getWordTrigger\` from \`./audio-sync\`.
 
 ---
 
@@ -125,7 +117,7 @@ async function triggerGitHubActionsRender(
   fps: number,
   width: number,
   height: number,
-  audioConfig: { voice: string; bgmMood: string; narrationSegments: string[] },
+  audioConfig: any = {},
   mode: 'video' | 'still' = 'video',
   stillFrame = 0
 ) {
@@ -224,7 +216,7 @@ async function listReleaseVideosOnGitHub(baseUrl: string) {
 
 async function checkReleaseAssetsOnGitHub(
   jobId: string
-): Promise<{ videoReady: boolean; stillReady: boolean; errorLogText?: string }> {
+): Promise<{ videoReady: boolean; stillReady: boolean; errorLogText?: string; stillBase64?: string }> {
   try {
     const headers: Record<string, string> = {
       Accept: 'application/vnd.github+json',
@@ -242,10 +234,26 @@ async function checkReleaseAssetsOnGitHub(
     const videoReady = assets.some(
       (a) => a.name === `video-${jobId}.mp4` && a.state === 'uploaded'
     );
-    const stillReady = assets.some(
+    const stillAsset = assets.find(
       (a) => a.name === `still-${jobId}.png` && a.state === 'uploaded'
     );
+    const stillReady = Boolean(stillAsset);
     const errAsset = assets.find((a) => a.name === `error-${jobId}.txt` && a.state === 'uploaded');
+
+    let stillBase64: string | undefined;
+    if (stillAsset) {
+      try {
+        const stillUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/still-${jobId}.png`;
+        const stillRes = await fetch(stillUrl, {
+          headers,
+          redirect: 'follow',
+        });
+        if (stillRes.ok) {
+          const arrBuf = await stillRes.arrayBuffer();
+          stillBase64 = Buffer.from(arrBuf).toString('base64');
+        }
+      } catch {}
+    }
 
     let errorLogText: string | undefined;
     if (errAsset) {
@@ -259,7 +267,7 @@ async function checkReleaseAssetsOnGitHub(
       }
     }
 
-    return { videoReady, stillReady, errorLogText };
+    return { videoReady, stillReady, errorLogText, stillBase64 };
   } catch {
     return { videoReady: false, stillReady: false };
   }
@@ -283,12 +291,12 @@ async function inspectGitHubWorkflowRun(jobId: string) {
     const runs: any[] = runsData?.workflow_runs || [];
     if (runs.length === 0) return null;
 
-    const targetRun =
-      runs.find(
-        (r) =>
-          (typeof r.display_title === 'string' && r.display_title.includes(jobId)) ||
-          (typeof r.name === 'string' && r.name.includes(jobId))
-      ) || runs[0];
+    const targetRun = runs.find(
+      (r) =>
+        (typeof r.display_title === 'string' && r.display_title.includes(jobId)) ||
+        (typeof r.name === 'string' && r.name.includes(jobId))
+    );
+    if (!targetRun) return null;
 
     const jobsRes = await fetch(targetRun.jobs_url, {
       headers: {
@@ -325,134 +333,22 @@ function createMcpServerInstance(baseUrl: string) {
   });
 
   server.tool(
-    'get_remotion_ecosystem_guide',
-    'Get the complete Remotion v4.0.541 Open Creative Studio guide (Three.js 3D, Shapes, Paths, Transitions, Fonts, Noise, Captions, Animation utils).',
-    {},
-    async () => ({
-      content: [{ type: 'text', text: ECOSYSTEM_DOCS }],
-    })
-  );
-
-  server.tool(
-    'preview_remotion_frame',
-    'Fast Still Preview (Antigravity mode): Capture a single high-res static PNG frame (via `npx remotion still`) on Cloud to quickly inspect visual layout, typography, 3D elements, colors, and styling in seconds before rendering the full video.',
+    'remotion',
+    `REMOTION ECOSYSTEM STUDIO: Pure, unconstrained video rendering engine powered by the complete Remotion v4.0.542 ecosystem (Three.js 3D, Rough Notation annotations, Transitions, Shapes, SVG Paths, Noise, Google Fonts, and Physics Springs).\n` +
+      `You have 100% creative freedom to write any Remotion React composition based on the user's request.\n` +
+      `RULES FOR AGENT:\n` +
+      `1. NEVER print or paste raw tsxCode into the chat conversation. Send it directly to this tool.\n` +
+      `2. VISUAL PREVIEW & SELF-INSPECTION: Specify the "frame" parameter (e.g. frame: 0, or key frame 45, 90, 120) to capture and inspect a single frame. The tool will automatically wait and return a Base64 image directly to your vision context so you can visually evaluate typography, colors, 3D angles, and composition before rendering the full video.\n` +
+      `3. FULL VIDEO RENDER: When "frame" is omitted, the full video will be rendered on Cloud (16GB RAM). Follow up with "get_task_status" to track until ready.\n` +
+      `4. Present output cleanly in markdown:\n` +
+      `   - Full video: 🎬 [Xem Video Trực Tiếp](\${watchPageUrl}) | 📥 [Tải Video MP4](\${directDownloadUrl})\n` +
+      `   - Single frame: ![Preview Frame #\${frame}](\${previewImageUrl})\n${ECOSYSTEM_DOCS}`,
     {
-      title: z.string().default('Still Preview').describe('Title for preview'),
+      title: z.string().default('Remotion Video').describe('Title of the video composition'),
       tsxCode: z
         .string()
         .describe(
-          'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`'
-        ),
-      frame: z.number().int().default(0).describe('Specific frame number to capture (default: 0)'),
-      fps: z.number().int().default(30),
-      width: z.number().int().default(1920),
-      height: z.number().int().default(1080),
-    },
-    async ({ title, tsxCode, frame, fps, width, height }) => {
-      const warnings = validateTsxCode(tsxCode);
-      if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: 'text',
-              text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call preview_remotion_frame again.`,
-            },
-          ],
-        };
-      }
-
-      const jobId = randomUUID().slice(0, 8);
-      const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
-      const stillUrl = `${baseUrl}/still/${jobId}.png${secretSuffix}`;
-      const directDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/still-${jobId}.png`;
-
-      try {
-        await triggerGitHubActionsRender(
-          jobId,
-          title,
-          tsxCode,
-          Math.max(frame + 1, 30),
-          fps,
-          width,
-          height,
-          { voice: 'vi-VN-NamMinhNeural', bgmMood: 'epic-space', narrationSegments: [] },
-          'still',
-          frame
-        );
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  status: 'still_dispatched_to_github_actions_cloud',
-                  jobId,
-                  capturedFrame: frame,
-                  specs: `${width}x${height} @ ${fps}fps`,
-                  previewImageUrl: stillUrl,
-                  directDownloadUrl,
-                  notes: warnings.length > 0 ? warnings : undefined,
-                  message: `Still frame #${frame} capture dispatched to Cloud! Call check_render_status with jobId "${jobId}" to verify when the PNG image is ready to inspect.`,
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
-      } catch (err: any) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: 'text',
-              text: `Failed to dispatch still frame capture: ${err?.message || String(err)}`,
-            },
-          ],
-        };
-      }
-    }
-  );
-
-  server.tool(
-    'list_rendered_videos',
-    'List all previously rendered MP4 videos stored in the Cloud Gallery along with their watch URLs, stream URLs, and download links.',
-    {
-      limit: z.number().int().min(1).max(100).default(20),
-    },
-    async ({ limit }) => {
-      const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
-      const videos = await listReleaseVideosOnGitHub(baseUrl);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                totalStoredVideos: videos.length,
-                galleryUrl: `${baseUrl}/gallery${secretSuffix}`,
-                videos: videos.slice(0, limit),
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      };
-    }
-  );
-
-  server.tool(
-    'render_remotion_video',
-    `Render a complete broadcast-ready Remotion video on GitHub Actions Cloud (16GB RAM, Remotion v4.0.541, WebGL2 swangle).\n${ECOSYSTEM_DOCS}`,
-    {
-      title: z.string().default('Remotion Video').describe('Title of the video project'),
-      tsxCode: z
-        .string()
-        .describe(
-          'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`'
+          'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`. Pass directly to tool parameter.'
         ),
       durationInFrames: z
         .number()
@@ -460,34 +356,17 @@ function createMcpServerInstance(baseUrl: string) {
         .min(15)
         .max(36000)
         .default(300)
-        .describe('Total duration in frames (seconds * fps). Default 300.'),
-      narrationSegments: z
-        .array(z.string())
-        .default([])
-        .describe('Optional spoken voiceover paragraphs if AI voiceover is requested'),
-      voice: z
-        .string()
-        .default('vi-VN-NamMinhNeural')
-        .describe('Optional neural TTS voice ID'),
-      bgmMood: z
-        .enum(['epic-space', 'cyber-tech', 'warm-inspiring', 'mystery-deep', 'upbeat-energetic'])
-        .default('epic-space')
-        .describe('Optional mood for background audio'),
-      fps: z.number().int().default(30),
-      width: z.number().int().default(1920),
-      height: z.number().int().default(1080),
+        .describe('Total duration in frames (seconds * fps). You freely decide this based on user request or pacing.'),
+      fps: z.number().int().default(30).describe('Frames per second (default 30).'),
+      width: z.number().int().default(1920).describe('Width in pixels (1920 for landscape, 1080 for portrait TikTok/Shorts).'),
+      height: z.number().int().default(1080).describe('Height in pixels (1080 for landscape, 1920 for portrait TikTok/Shorts).'),
+      frame: z
+        .number()
+        .int()
+        .optional()
+        .describe('Optional: Specific frame index if user only wants to capture a fast static preview PNG. If omitted, the entire video will be rendered.'),
     },
-    async ({
-      title,
-      tsxCode,
-      durationInFrames,
-      narrationSegments,
-      voice,
-      bgmMood,
-      fps,
-      width,
-      height,
-    }) => {
+    async ({ title, tsxCode, durationInFrames, fps, width, height, frame }) => {
       const warnings = validateTsxCode(tsxCode);
       if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
         return {
@@ -495,7 +374,7 @@ function createMcpServerInstance(baseUrl: string) {
           content: [
             {
               type: 'text',
-              text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call render_remotion_video again.`,
+              text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call remotion again.`,
             },
           ],
         };
@@ -503,6 +382,92 @@ function createMcpServerInstance(baseUrl: string) {
 
       const jobId = randomUUID().slice(0, 8);
       const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
+      const isFramePreview = typeof frame === 'number';
+
+      if (isFramePreview) {
+        const stillUrl = `${baseUrl}/still/${jobId}.png${secretSuffix}`;
+        const directDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/still-${jobId}.png`;
+
+        try {
+          await triggerGitHubActionsRender(
+            jobId,
+            title || 'Remotion Frame Preview',
+            tsxCode,
+            Math.max((frame || 0) + 1, 30),
+            fps,
+            width,
+            height,
+            {},
+            'still',
+            frame || 0
+          );
+
+          // Smart Auto-Wait: Poll up to 22 seconds so Gemini gets the image directly in 1 turn
+          const waitStart = Date.now();
+          let stillReady = false;
+          let stillBase64: string | undefined;
+
+          while (Date.now() - waitStart < 22000) {
+            const check = await checkReleaseAssetsOnGitHub(jobId);
+            if (check.stillReady) {
+              stillReady = true;
+              stillBase64 = check.stillBase64;
+              break;
+            }
+            if (check.errorLogText) break;
+            await new Promise((r) => setTimeout(r, 2500));
+          }
+
+          const contentBlocks: any[] = [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  status: stillReady ? 'frame_captured_ready' : 'frame_dispatched_rendering',
+                  jobId,
+                  capturedFrame: frame,
+                  specs: `${width}x${height} @ ${fps}fps`,
+                  previewImageUrl: stillUrl,
+                  directDownloadUrl,
+                  hasVisionImage: Boolean(stillReady && stillBase64),
+                  instructionsForAgent: stillReady
+                    ? `Examine the image block attached below. Evaluate visual composition, contrast, font readability, 3D elements, and particle balance. If adjustments are needed, refine tsxCode and test another frame; if satisfied, call remotion without "frame" to render the complete video.`
+                    : `Frame capture is still processing on Cloud runner. Call get_task_status with jobId "${jobId}" after a few moments to receive the image.`,
+                  message: stillReady
+                    ? `Remotion frame #${frame} captured successfully! Inspect the visual image below.`
+                    : `Remotion frame #${frame} dispatched to Cloud runner. If not completed in this turn, check get_task_status.`,
+                },
+                null,
+                2
+              ),
+            },
+          ];
+
+          if (stillReady && stillBase64) {
+            contentBlocks.push({
+              type: 'image',
+              data: stillBase64,
+              mimeType: 'image/png',
+            });
+          }
+
+          return {
+            content: contentBlocks,
+          };
+        } catch (err: any) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Failed to dispatch still frame capture: ${err?.message || String(err)}`,
+              },
+            ],
+          };
+        }
+      }
+
+      // Full Video Render
       const directDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/video-${jobId}.mp4`;
       const watchPageUrl = `${baseUrl}/watch/${jobId}${secretSuffix}`;
       const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretSuffix}`;
@@ -517,11 +482,7 @@ function createMcpServerInstance(baseUrl: string) {
           fps,
           width,
           height,
-          {
-            voice,
-            bgmMood,
-            narrationSegments,
-          },
+          {},
           'video',
           0
         );
@@ -532,7 +493,7 @@ function createMcpServerInstance(baseUrl: string) {
               type: 'text',
               text: JSON.stringify(
                 {
-                  status: 'dispatched_to_github_actions_cloud',
+                  status: 'video_dispatched_to_cloud',
                   jobId,
                   title,
                   specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames / ${(durationInFrames / fps).toFixed(1)}s)`,
@@ -541,8 +502,8 @@ function createMcpServerInstance(baseUrl: string) {
                   galleryUrl,
                   directDownloadUrl,
                   notes: warnings.length > 0 ? warnings : undefined,
-                  message:
-                    'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Share watchPageUrl with the user or call check_render_status with jobId to track progress.',
+                  instructionsForAgent: `Present links cleanly in markdown: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${directDownloadUrl}). Do NOT print raw long URLs.`,
+                  message: 'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Present links to user or call get_task_status with jobId to track progress.',
                 },
                 null,
                 2
@@ -565,10 +526,10 @@ function createMcpServerInstance(baseUrl: string) {
   );
 
   server.tool(
-    'check_render_status',
-    'Check if a rendered video or still frame is ready on the Cloud, and inspect real-time GitHub Actions step progress or compiler error logs for autonomous self-healing.',
+    'get_task_status',
+    'SYSTEM INFRASTRUCTURE TOOL: Track real-time background Cloud execution (GitHub Actions runner, build steps, completion status, or watch links) for any dispatched job.',
     {
-      jobId: z.string().describe('The jobId returned by render_remotion_video or preview_remotion_frame'),
+      jobId: z.string().describe('The unique jobId returned by the remotion tool'),
     },
     async ({ jobId: rawJobId }) => {
       const jobId = sanitizeJobId(rawJobId);
@@ -579,11 +540,14 @@ function createMcpServerInstance(baseUrl: string) {
       let errorLogText: string | undefined;
       let workflowInfo: any = null;
 
+      let stillBase64: string | undefined;
+
       while (Date.now() - start < 15000) {
         const check = await checkReleaseAssetsOnGitHub(jobId);
         ready = check.videoReady || check.stillReady;
         isStill = check.stillReady;
         errorLogText = check.errorLogText;
+        stillBase64 = check.stillBase64;
         if (ready || errorLogText) break;
 
         workflowInfo = await inspectGitHubWorkflowRun(jobId);
@@ -607,6 +571,62 @@ function createMcpServerInstance(baseUrl: string) {
       const activeStep = workflowInfo?.steps?.find((s: any) => s.status === 'in_progress')?.name;
       const isFailed = Boolean(errorLogText) || workflowInfo?.conclusion === 'failure';
 
+      const contentBlocks: any[] = [
+        {
+          type: 'text',
+          text: JSON.stringify(
+            {
+              jobId,
+              type: isStill ? 'still_frame' : 'video',
+              status: ready
+                ? 'completed'
+                : isFailed
+                ? 'failed_on_github_actions'
+                : 'rendering_on_github_actions',
+              currentCloudStep: activeStep || workflowInfo?.status,
+              previewImageUrl: isStill ? stillUrl : undefined,
+              watchPageUrl: isStill ? undefined : watchPageUrl,
+              streamUrl: isStill ? undefined : streamUrl,
+              assetUrl: videoUrl,
+              compilerErrorDetails: errorLogText,
+              cloudRunnerDiagnostics: workflowInfo,
+              message: ready
+                ? (isStill ? 'Still frame is ready to inspect! Multimodal image block attached below.' : 'Video is completed and ready to watch inline or download!')
+                : isFailed
+                ? 'Render job failed on GitHub Actions. Read compilerErrorDetails above to see error trace, fix tsxCode and re-render.'
+                : `Job is actively rendering on GitHub Actions Cloud. Present URL to user; it tracks live progress and completes when ready!`,
+            },
+            null,
+            2
+          ),
+        },
+      ];
+
+      if (isStill && ready && stillBase64) {
+        contentBlocks.push({
+          type: 'image',
+          data: stillBase64,
+          mimeType: 'image/png',
+        });
+      }
+
+      return {
+        content: contentBlocks,
+      };
+    }
+  );
+
+  server.tool(
+    'inspect_task_logs',
+    'SYSTEM DIAGNOSTICS & SELF-HEALING TOOL: Retrieve detailed compiler logs, TypeScript error traces, or runner failures for autonomous debugging and self-healing.',
+    {
+      jobId: z.string().describe('The unique jobId to inspect'),
+    },
+    async ({ jobId: rawJobId }) => {
+      const jobId = sanitizeJobId(rawJobId);
+      const check = await checkReleaseAssetsOnGitHub(jobId);
+      const workflowInfo = await inspectGitHubWorkflowRun(jobId);
+
       return {
         content: [
           {
@@ -614,24 +634,40 @@ function createMcpServerInstance(baseUrl: string) {
             text: JSON.stringify(
               {
                 jobId,
-                type: isStill ? 'still_frame' : 'video',
-                status: ready
-                  ? 'completed'
-                  : isFailed
-                  ? 'failed_on_github_actions'
-                  : 'rendering_on_github_actions',
-                currentCloudStep: activeStep || workflowInfo?.status,
-                previewImageUrl: isStill ? stillUrl : undefined,
-                watchPageUrl: isStill ? undefined : watchPageUrl,
-                streamUrl: isStill ? undefined : streamUrl,
-                assetUrl: videoUrl,
-                compilerErrorDetails: errorLogText,
-                cloudRunnerDiagnostics: workflowInfo,
-                message: ready
-                  ? (isStill ? 'Still frame is ready to inspect!' : 'Video is completed and ready to watch inline or download!')
-                  : isFailed
-                  ? 'Render job failed on GitHub Actions. Read compilerErrorDetails above to see error trace, fix tsxCode and re-render.'
-                  : `Job is actively rendering on GitHub Actions Cloud. Present URL to user; it tracks live progress and completes when ready!`,
+                hasErrorLog: Boolean(check.errorLogText),
+                compilerErrorDetails:
+                  check.errorLogText ||
+                  'No compile-time error log found. Runner may still be in progress or completed without syntax error.',
+                runnerConclusion: workflowInfo?.conclusion || workflowInfo?.status || 'unknown',
+                failedSteps: workflowInfo?.steps?.filter((s: any) => s.conclusion === 'failure') || [],
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+  );
+
+  server.tool(
+    'list_system_assets',
+    'SYSTEM ASSET & STORAGE TOOL: List all rendered MP4 videos and assets currently stored in the Cloud Release CDN repository.',
+    {
+      limit: z.number().int().min(1).max(100).default(20).describe('Maximum number of items to retrieve'),
+    },
+    async ({ limit }) => {
+      const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
+      const videos = await listReleaseVideosOnGitHub(baseUrl);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                totalStoredVideos: videos.length,
+                galleryUrl: `${baseUrl}/gallery${secretSuffix}`,
+                videos: videos.slice(0, limit),
               },
               null,
               2

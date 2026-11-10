@@ -192,7 +192,7 @@ async function listReleaseVideosOnGitHub(env: Env, baseUrl: string) {
 async function checkReleaseAssetsOnGitHub(
   env: Env,
   jobId: string
-): Promise<{ videoReady: boolean; stillReady: boolean; errorLogText?: string }> {
+): Promise<{ videoReady: boolean; stillReady: boolean; errorLogText?: string; stillBase64?: string }> {
   const repo = env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
   try {
     const res = await fetch(`https://api.github.com/repos/${repo}/releases/tags/videos-store`, {
@@ -207,8 +207,30 @@ async function checkReleaseAssetsOnGitHub(
     const assets: any[] = data?.assets || [];
 
     const videoReady = assets.some((a) => a.name === `video-${jobId}.mp4` && a.state === 'uploaded');
-    const stillReady = assets.some((a) => a.name === `still-${jobId}.png` && a.state === 'uploaded');
+    const stillAsset = assets.find((a) => a.name === `still-${jobId}.png` && a.state === 'uploaded');
+    const stillReady = Boolean(stillAsset);
     const errAsset = assets.find((a) => a.name === `error-${jobId}.txt` && a.state === 'uploaded');
+
+    let stillBase64: string | undefined;
+    if (stillAsset) {
+      try {
+        const stillUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
+        const stillRes = await fetch(stillUrl, {
+          headers: { 'User-Agent': 'Remotion-Cloudflare-MCP-Worker' },
+          redirect: 'follow',
+        });
+        if (stillRes.ok) {
+          const arrBuf = await stillRes.arrayBuffer();
+          const bytes = new Uint8Array(arrBuf);
+          let binary = '';
+          const len = bytes.byteLength;
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          stillBase64 = btoa(binary);
+        }
+      } catch {}
+    }
 
     let errorLogText: string | undefined;
     if (errAsset) {
@@ -222,7 +244,7 @@ async function checkReleaseAssetsOnGitHub(
       }
     }
 
-    return { videoReady, stillReady, errorLogText };
+    return { videoReady, stillReady, errorLogText, stillBase64 };
   } catch {
     return { videoReady: false, stillReady: false };
   }
@@ -246,12 +268,12 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
     const runs: any[] = runsData?.workflow_runs || [];
     if (runs.length === 0) return null;
 
-    const targetRun =
-      runs.find(
-        (r) =>
-          (typeof r.display_title === 'string' && r.display_title.includes(jobId)) ||
-          (typeof r.name === 'string' && r.name.includes(jobId))
-      ) || runs[0];
+    const targetRun = runs.find(
+      (r) =>
+        (typeof r.display_title === 'string' && r.display_title.includes(jobId)) ||
+        (typeof r.name === 'string' && r.name.includes(jobId))
+    );
+    if (!targetRun) return null;
 
     const jobsRes = await fetch(targetRun.jobs_url, {
       headers: {
@@ -288,11 +310,11 @@ const TOOLS = [
       `You have 100% creative freedom to write any Remotion React composition based on the user's request.\n` +
       `RULES FOR AGENT:\n` +
       `1. NEVER print or paste raw tsxCode into the chat conversation. Send it directly to this tool.\n` +
-      `2. If the user only wants to preview/inspect a single frame, specify the "frame" parameter (e.g. frame: 0). If "frame" is omitted, the full video is rendered.\n` +
-      `3. Present output cleanly in markdown:\n` +
+      `2. VISUAL PREVIEW & SELF-INSPECTION: Specify the "frame" parameter (e.g. frame: 0, or key frame 45, 90, 120) to capture and inspect a single frame. The tool will automatically wait and return a Base64 image directly to your vision context so you can visually evaluate typography, colors, 3D angles, and composition before rendering the full video.\n` +
+      `3. FULL VIDEO RENDER: When "frame" is omitted, the full video will be rendered on Cloud (16GB RAM). Follow up with "get_task_status" to track until ready.\n` +
+      `4. Present output cleanly in markdown:\n` +
       `   - Full video: 🎬 [Xem Video Trực Tiếp](\${watchPageUrl}) | 📥 [Tải Video MP4](\${directDownloadUrl})\n` +
-      `   - Single frame: ![Preview Frame #\${frame}](\${previewImageUrl})\n` +
-      `4. After calling this tool, autonomously call "get_task_status" to track the render until ready.\n${ECOSYSTEM_DOCS}`,
+      `   - Single frame: ![Preview Frame #\${frame}](\${previewImageUrl})\n${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -462,31 +484,60 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
           const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
 
+          // Smart Auto-Wait: Poll up to 22 seconds so Gemini gets the image directly in 1 turn
+          const waitStart = Date.now();
+          let stillReady = false;
+          let stillBase64: string | undefined;
+
+          while (Date.now() - waitStart < 22000) {
+            const check = await checkReleaseAssetsOnGitHub(env, jobId);
+            if (check.stillReady) {
+              stillReady = true;
+              stillBase64 = check.stillBase64;
+              break;
+            }
+            if (check.errorLogText) break;
+            await new Promise((r) => setTimeout(r, 2500));
+          }
+
+          const contentBlocks: any[] = [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  status: stillReady ? 'frame_captured_ready' : 'frame_dispatched_rendering',
+                  jobId,
+                  capturedFrame: frame,
+                  specs: `${width}x${height} @ ${fps}fps`,
+                  previewImageUrl: stillUrl,
+                  directDownloadUrl: downloadUrl,
+                  hasVisionImage: Boolean(stillReady && stillBase64),
+                  instructionsForAgent: stillReady
+                    ? `Examine the image block attached below. Evaluate visual composition, contrast, font readability, 3D elements, and particle balance. If adjustments are needed, refine tsxCode and test another frame; if satisfied, call remotion without "frame" to render the complete video.`
+                    : `Frame capture is still processing on Cloud runner. Call get_task_status with jobId "${jobId}" after a few moments to receive the image.`,
+                  message: stillReady
+                    ? `Remotion frame #${frame} captured successfully! Inspect the visual image below.`
+                    : `Remotion frame #${frame} dispatched to Cloud runner. If not completed in this turn, check get_task_status.`,
+                },
+                null,
+                2
+              ),
+            },
+          ];
+
+          if (stillReady && stillBase64) {
+            contentBlocks.push({
+              type: 'image',
+              data: stillBase64,
+              mimeType: 'image/png',
+            });
+          }
+
           return {
             jsonrpc: '2.0',
             id,
             result: {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(
-                    {
-                      status: 'frame_dispatched_to_cloud',
-                      jobId,
-                      capturedFrame: frame,
-                      specs: `${width}x${height} @ ${fps}fps`,
-                      previewImageUrl: stillUrl,
-                      directDownloadUrl: downloadUrl,
-                      instructionsForAgent:
-                        `Embed the image directly into your response using markdown: ![Preview Frame #${frame}](${stillUrl}). Do NOT show raw long URL strings.`,
-                      message:
-                        `Remotion frame #${frame} capture dispatched to Cloud! Call get_task_status with jobId "${jobId}" to verify when ready.`,
-                    },
-                    null,
-                    2
-                  ),
-                },
-              ],
+              content: contentBlocks,
             },
           };
         }
@@ -554,11 +605,14 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         let errorLogText: string | undefined;
         let workflowInfo: any = null;
 
+        let stillBase64: string | undefined;
+
         while (Date.now() - start < 15000) {
           const check = await checkReleaseAssetsOnGitHub(env, jobId);
           ready = check.videoReady || check.stillReady;
           isStill = check.stillReady;
           errorLogText = check.errorLogText;
+          stillBase64 = check.stillBase64;
           if (ready || errorLogText) break;
 
           workflowInfo = await inspectGitHubWorkflowRun(env, jobId);
@@ -581,40 +635,50 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const activeStep = workflowInfo?.steps?.find((s: any) => s.status === 'in_progress')?.name;
         const isFailed = Boolean(errorLogText) || workflowInfo?.conclusion === 'failure';
 
+        const contentBlocks: any[] = [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                jobId,
+                type: isStill ? 'still_frame' : 'video',
+                status: ready
+                  ? 'completed'
+                  : isFailed
+                  ? 'failed_on_github_actions'
+                  : 'rendering_on_github_actions',
+                currentCloudStep: activeStep || workflowInfo?.status,
+                previewImageUrl: isStill ? stillUrl : undefined,
+                watchPageUrl: isStill ? undefined : watchPageUrl,
+                streamUrl: isStill ? undefined : streamUrl,
+                assetUrl: videoUrl,
+                compilerErrorDetails: errorLogText,
+                cloudRunnerDiagnostics: workflowInfo,
+                message: ready
+                  ? (isStill ? 'Still frame is ready to inspect! Multimodal image block attached below.' : 'Video is completed and ready to watch inline or download!')
+                  : isFailed
+                  ? 'Render job failed on GitHub Actions. Call inspect_task_logs or read compilerErrorDetails to see error trace, fix tsxCode and re-call remotion.'
+                  : `Job is actively rendering on GitHub Actions Cloud. Present URL to user; it tracks live progress and completes when ready!`,
+              },
+              null,
+              2
+            ),
+          },
+        ];
+
+        if (isStill && ready && stillBase64) {
+          contentBlocks.push({
+            type: 'image',
+            data: stillBase64,
+            mimeType: 'image/png',
+          });
+        }
+
         return {
           jsonrpc: '2.0',
           id,
           result: {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(
-                  {
-                    jobId,
-                    type: isStill ? 'still_frame' : 'video',
-                    status: ready
-                      ? 'completed'
-                      : isFailed
-                      ? 'failed_on_github_actions'
-                      : 'rendering_on_github_actions',
-                    currentCloudStep: activeStep || workflowInfo?.status,
-                    previewImageUrl: isStill ? stillUrl : undefined,
-                    watchPageUrl: isStill ? undefined : watchPageUrl,
-                    streamUrl: isStill ? undefined : streamUrl,
-                    assetUrl: videoUrl,
-                    compilerErrorDetails: errorLogText,
-                    cloudRunnerDiagnostics: workflowInfo,
-                    message: ready
-                      ? (isStill ? 'Still frame is ready to inspect!' : 'Video is completed and ready to watch inline or download!')
-                      : isFailed
-                      ? 'Render job failed on GitHub Actions. Call inspect_system_logs or read compilerErrorDetails to see error trace, fix tsxCode and re-call remotion_studio.'
-                      : `Job is actively rendering on GitHub Actions Cloud. Present URL to user; it tracks live progress and completes when ready!`,
-                  },
-                  null,
-                  2
-                ),
-              },
-            ],
+            content: contentBlocks,
           },
         };
       }

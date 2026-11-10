@@ -67,20 +67,18 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Cache node_modules, Remotion Browser and Python pip
+      - name: Cache node_modules and Remotion Browser
         uses: actions/cache@v4
         with:
           path: |
             ~/.npm
             ~/.cache/remotion
-            ~/.cache/pip
             node_modules
           key: remotion-deps-${{ runner.os }}-${{ hashFiles('package.json') }}
 
-      - name: Install dependencies (Full Remotion Ecosystem + Edge-TTS + Mutagen)
+      - name: Install dependencies (Full Remotion Ecosystem)
         run: |
           npm install --legacy-peer-deps
-          pip install edge-tts mutagen --quiet || pip3 install edge-tts mutagen --break-system-packages --quiet
 
       - name: Ensure Remotion Browser
         run: npx remotion browser ensure

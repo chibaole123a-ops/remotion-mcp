@@ -52,6 +52,7 @@ RUN npx remotion browser ensure
 
 # Copy application source files
 COPY --chown=user tsconfig.json ./
+COPY --chown=user scripts ./scripts
 COPY --chown=user src ./src
 
 EXPOSE 7860

@@ -310,27 +310,22 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
 
 const TOOLS = [
   {
-    name: 'remotion_studio',
-    description: `ALL-IN-ONE REMOTION PRODUCTION STUDIO: Create, preview, and render broadcast-ready videos using the complete Remotion v4.0.542 ecosystem (Three.js 3D, Rough Notation, Transitions, Shapes, Noise, Google Fonts).\n` +
-      `ACTIONS:\n` +
-      `- "render": (Default) Render full MP4 video on GitHub Actions Cloud (16GB RAM). Call this whenever the user asks to create/render a video.\n` +
-      `- "preview": Capture a fast static PNG still frame (via npx remotion still) to inspect layout/3D/colors in seconds.\n` +
-      `RULES:\n` +
-      `1. NEVER print or paste raw tsxCode into the chat conversation.\n` +
-      `2. For "render": present clean links: 🎬 [Xem Video Trực Tiếp](\${watchPageUrl}) | 📥 [Tải Video MP4](\${directDownloadUrl}).\n` +
-      `3. For "preview": embed image markdown: ![Preview Frame #\${frame}](\${previewImageUrl}).\n${ECOSYSTEM_DOCS}`,
+    name: 'remotion',
+    description: `REMOTION ECOSYSTEM STUDIO: Pure, unconstrained video rendering engine powered by the complete Remotion v4.0.542 ecosystem (Three.js 3D, Rough Notation annotations, Transitions, Shapes, SVG Paths, Noise, Google Fonts, and Physics Springs).\n` +
+      `You have 100% creative freedom to write any Remotion React composition based on the user's request.\n` +
+      `RULES FOR AGENT:\n` +
+      `1. NEVER print or paste raw tsxCode into the chat conversation. Send it directly to this tool.\n` +
+      `2. If the user only wants to preview/inspect a single frame, specify the "frame" parameter (e.g. frame: 0). If "frame" is omitted, the full video is rendered.\n` +
+      `3. Present output cleanly in markdown:\n` +
+      `   - Full video: 🎬 [Xem Video Trực Tiếp](\${watchPageUrl}) | 📥 [Tải Video MP4](\${directDownloadUrl})\n` +
+      `   - Single frame: ![Preview Frame #\${frame}](\${previewImageUrl})\n` +
+      `4. After calling this tool, autonomously call "get_task_status" to track the render until ready.\n${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
       properties: {
-        action: {
-          type: 'string',
-          enum: ['render', 'preview'],
-          description: "Action to perform: 'render' for full MP4 video, or 'preview' for a fast static PNG frame.",
-          default: 'render',
-        },
         title: {
           type: 'string',
-          description: 'Title of the video project',
+          description: 'Title of the video composition',
         },
         tsxCode: {
           type: 'string',
@@ -339,13 +334,8 @@ const TOOLS = [
         },
         durationInFrames: {
           type: 'number',
-          description: 'Total duration in frames (seconds * fps). Default 300 (10s @ 30fps). Only used for action="render".',
+          description: 'Total duration in frames (seconds * fps). Default 300 (10s @ 30fps).',
           default: 300,
-        },
-        frame: {
-          type: 'number',
-          description: 'Specific frame number to capture. Only used for action="preview" (default: 0).',
-          default: 0,
         },
         fps: {
           type: 'number',
@@ -354,13 +344,17 @@ const TOOLS = [
         },
         width: {
           type: 'number',
-          description: 'Width in pixels (1920 for YouTube/landscape, 1080 for TikTok/Shorts vertical).',
+          description: 'Width in pixels (1920 for landscape, 1080 for portrait TikTok/Shorts).',
           default: 1920,
         },
         height: {
           type: 'number',
-          description: 'Height in pixels (1080 for YouTube/landscape, 1920 for TikTok/Shorts vertical).',
+          description: 'Height in pixels (1080 for landscape, 1920 for portrait TikTok/Shorts).',
           default: 1080,
+        },
+        frame: {
+          type: 'number',
+          description: 'Optional: Specific frame index if user only wants to capture a fast static preview PNG. If omitted, the entire video will be rendered.',
         },
         narrationSegments: {
           type: 'array',
@@ -383,19 +377,19 @@ const TOOLS = [
     },
   },
   {
-    name: 'get_system_task_status',
+    name: 'get_task_status',
     description:
       'SYSTEM INFRASTRUCTURE TOOL: Track real-time background Cloud execution (GitHub Actions runner, build steps, completion status, or watch links) for any dispatched job.',
     inputSchema: {
       type: 'object',
       properties: {
-        jobId: { type: 'string', description: 'The unique jobId returned by remotion_studio' },
+        jobId: { type: 'string', description: 'The unique jobId returned by the remotion tool' },
       },
       required: ['jobId'],
     },
   },
   {
-    name: 'inspect_system_logs',
+    name: 'inspect_task_logs',
     description:
       'SYSTEM DIAGNOSTICS & SELF-HEALING TOOL: Retrieve detailed compiler logs, TypeScript error traces, or runner failures for autonomous debugging and self-healing.',
     inputSchema: {
@@ -407,7 +401,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'manage_cloud_gallery',
+    name: 'list_system_assets',
     description:
       'SYSTEM ASSET & STORAGE TOOL: List all rendered MP4 videos and assets currently stored in the Cloud Release CDN repository.',
     inputSchema: {
@@ -466,8 +460,8 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
     const args = params?.arguments || {};
 
     try {
-      if (toolName === 'remotion_studio' || toolName === 'render_remotion_video' || toolName === 'preview_remotion_frame') {
-        const action = args.action || (toolName === 'preview_remotion_frame' ? 'preview' : 'render');
+      if (toolName === 'remotion' || toolName === 'remotion_studio' || toolName === 'render_remotion_video' || toolName === 'preview_remotion_frame') {
+        const isFramePreview = typeof args.frame === 'number' || toolName === 'preview_remotion_frame' || args.action === 'preview';
         const tsxCode = String(args.tsxCode || '');
         const warnings = validateTsxCode(tsxCode);
         if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
@@ -479,7 +473,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               content: [
                 {
                   type: 'text',
-                  text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call remotion_studio again.`,
+                  text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call remotion again.`,
                 },
               ],
             },
@@ -491,8 +485,8 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const width = Number(args.width || 1920);
         const height = Number(args.height || 1080);
 
-        if (action === 'preview') {
-          const title = args.title || 'Still Preview';
+        if (isFramePreview) {
+          const title = args.title || 'Remotion Frame Preview';
           const frame = Number(args.frame || 0);
 
           await dispatchGitHubRender(
@@ -521,7 +515,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                   type: 'text',
                   text: JSON.stringify(
                     {
-                      status: 'still_dispatched_to_github_actions_cloud',
+                      status: 'frame_dispatched_to_cloud',
                       jobId,
                       capturedFrame: frame,
                       specs: `${width}x${height} @ ${fps}fps`,
@@ -530,7 +524,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       instructionsForAgent:
                         `Embed the image directly into your response using markdown: ![Preview Frame #${frame}](${stillUrl}). Do NOT show raw long URL strings.`,
                       message:
-                        `Still frame #${frame} capture dispatched to Cloud! Call get_system_task_status with jobId "${jobId}" to verify when the PNG image is ready to inspect.`,
+                        `Remotion frame #${frame} capture dispatched to Cloud! Call get_task_status with jobId "${jobId}" to verify when ready.`,
                     },
                     null,
                     2
@@ -541,7 +535,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           };
         }
 
-        // Action === 'render' (Full Video)
+        // Full Video Render
         const title = args.title || 'Remotion Video';
         const narrationSegments = Array.isArray(args.narrationSegments) ? args.narrationSegments : [];
         const durationInFrames = Number(args.durationInFrames || 300);
@@ -580,7 +574,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 type: 'text',
                 text: JSON.stringify(
                   {
-                    status: 'dispatched_to_github_actions_cloud',
+                    status: 'video_dispatched_to_cloud',
                     jobId,
                     title,
                     specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames / ${(durationInFrames / fps).toFixed(1)}s)`,
@@ -592,7 +586,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     instructionsForAgent:
                       `Present links cleanly in markdown: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${videoUrl}). Do NOT print raw long URLs.`,
                     message:
-                      'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Share watchPageUrl with the user or call get_system_task_status with jobId to track progress.',
+                      'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Present links to user or call get_task_status with jobId to track progress.',
                   },
                   null,
                   2
@@ -603,7 +597,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         };
       }
 
-      if (toolName === 'get_system_task_status' || toolName === 'check_render_status') {
+      if (toolName === 'get_task_status' || toolName === 'get_system_task_status' || toolName === 'check_render_status') {
         const jobId = sanitizeJobId(String(args.jobId || ''));
         const start = Date.now();
         let ready = false;
@@ -676,7 +670,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         };
       }
 
-      if (toolName === 'inspect_system_logs') {
+      if (toolName === 'inspect_task_logs' || toolName === 'inspect_system_logs') {
         const jobId = sanitizeJobId(String(args.jobId || ''));
         const check = await checkReleaseAssetsOnGitHub(env, jobId);
         const workflowInfo = await inspectGitHubWorkflowRun(env, jobId);
@@ -705,7 +699,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         };
       }
 
-      if (toolName === 'manage_cloud_gallery' || toolName === 'list_rendered_videos') {
+      if (toolName === 'list_system_assets' || toolName === 'manage_cloud_gallery' || toolName === 'list_rendered_videos') {
         const limit = Math.max(1, Math.min(100, Number(args.limit || 20)));
         const videos = await listReleaseVideosOnGitHub(env, baseUrl);
         return {

@@ -102,17 +102,32 @@ jobs:
           mkdir -p outputs
           set +e
           if [ "${{ inputs.mode }}" = "still" ]; then
-            npx remotion still src/remotion/index.ts DynamicVideo outputs/still-${{ inputs.jobId }}.png --frame=${{ inputs.stillFrame || '0' }} --public-dir=public --gl=swangle 2>&1 | tee render.log
-            EXIT_CODE=${PIPESTATUS[0]}
+            npx remotion still src/remotion/index.ts DynamicVideo outputs/still-${{ inputs.jobId }}.png \
+              --frame=${{ inputs.stillFrame || '0' }} \
+              --public-dir=public \
+              --gl=swangle \
+              --log=error \
+              --chromium-options="--disable-dev-shm-usage --no-sandbox" 2> outputs/error-${{ inputs.jobId }}.txt
+            EXIT_CODE=$?
           else
-            npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 --public-dir=public --gl=swangle --codec=h264 --crf=18 --concurrency=4 --timeout=60000 2>&1 | tee render.log
-            EXIT_CODE=${PIPESTATUS[0]}
+            npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 \
+              --public-dir=public \
+              --gl=swangle \
+              --codec=h264 \
+              --crf=18 \
+              --preset=faster \
+              --concurrency=100% \
+              --log=error \
+              --timeout=60000 \
+              --chromium-options="--disable-dev-shm-usage --no-sandbox" 2> outputs/error-${{ inputs.jobId }}.txt
+            EXIT_CODE=$?
           fi
           set -e
           if [ $EXIT_CODE -ne 0 ]; then
             echo "Render failed with exit code $EXIT_CODE"
-            tail -n 60 render.log > outputs/error-${{ inputs.jobId }}.txt
             exit $EXIT_CODE
+          else
+            rm -f outputs/error-${{ inputs.jobId }}.txt
           fi
 
       - name: Upload Error Log on Failure (For Gemini Self-Healing Diagnostics)

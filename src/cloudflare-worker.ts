@@ -793,7 +793,13 @@ export default {
 
     const pathParts = url.pathname.split('/').filter(Boolean);
     const keyFromQuery = url.searchParams.get('key');
-    const keyFromPath = pathParts.length >= 2 && pathParts[0] === 'mcp' ? pathParts[1] : null;
+    const authHeader = request.headers.get('Authorization') || '';
+    const bearerKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    const customHeaderKey = request.headers.get('x-mcp-secret') || request.headers.get('x-api-key');
+    const keyFromPath =
+      pathParts.length >= 2 && (pathParts[0] === 'mcp' || pathParts[0] === 'sse')
+        ? pathParts[1]
+        : null;
 
     // Publicly accessible media routes without secret requirement (safe CDN streaming)
     const isPublicMediaRoute =
@@ -802,7 +808,13 @@ export default {
       pathParts[0] === 'video';
 
     if (env.MCP_SECRET && !isPublicMediaRoute) {
-      if (keyFromQuery !== env.MCP_SECRET && keyFromPath !== env.MCP_SECRET) {
+      const isValid =
+        keyFromQuery === env.MCP_SECRET ||
+        keyFromPath === env.MCP_SECRET ||
+        bearerKey === env.MCP_SECRET ||
+        customHeaderKey === env.MCP_SECRET;
+
+      if (!isValid) {
         return new Response(JSON.stringify({ error: 'Unauthorized: Invalid MCP_SECRET' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },

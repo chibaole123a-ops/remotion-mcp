@@ -85,21 +85,14 @@ jobs:
       - name: Ensure Remotion Browser
         run: npx remotion browser ensure --quiet
 
-      - name: Install Python Edge-TTS, yt-dlp & Cloudflare WARP for Autonomous Audio Extraction
+      - name: Install Python Edge-TTS, yt-dlp & PO Token Provider for Autonomous Audio Extraction
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl
-          python -m pip install --upgrade edge-tts mutagen yt-dlp
-          # Install official Cloudflare WARP client for Ubuntu 24.04 (noble)
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ noble main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          sudo apt-get update -qq && sudo apt-get install -y -qq cloudflare-warp
-          sudo systemctl start warp-svc || true
-          sleep 2
-          warp-cli --accept-tos registration new || true
-          warp-cli --accept-tos connect || true
+          python -m pip install --upgrade edge-tts mutagen yt-dlp bgutil-ytdlp-pot-provider
+          # Run official docker container for BotGuard Proof-of-Origin Token Provider
+          docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider
           sleep 3
-          echo "🌐 Outbound IP routed via Cloudflare WARP:"
-          curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E "ip|warp" || true
+          curl -s http://127.0.0.1:4416/ping || echo "POT provider initialized"
 
       - name: Prepare YouTube Cookies if configured
         env:

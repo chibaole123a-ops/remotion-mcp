@@ -355,11 +355,12 @@ function calculateSpeechTelemetry(
     const baseWps = 2.6;
     const baseDur = wordCount > 0 ? wordCount / (baseWps * rateMultiplier) : 0;
 
-    const commas = (text.match(/[,;]/g) || []).length;
-    const periods = (text.match(/[.!?]/g) || []).length;
-    const pauseDur = (commas * 0.25 + periods * 0.45) / rateMultiplier;
+    // Only count punctuation at the end of words/sentences as speech pauses
+    const commas = (text.match(/[,;](\s|$)/g) || []).length;
+    const periods = (text.match(/[.!?](\s|$)/g) || []).length;
+    const pauseDur = (commas * 0.25 + periods * 0.4) / rateMultiplier;
 
-    const durationSec = Number(Math.max(1.8, baseDur + pauseDur + 0.35).toFixed(2));
+    const durationSec = Number(Math.max(1.5, baseDur + pauseDur + 0.25).toFixed(2));
     const durationInFrames = Math.ceil(durationSec * fps);
 
     const startFrame = cumulativeFrames;

@@ -87,6 +87,7 @@ jobs:
 
       - name: Install Python Edge-TTS, yt-dlp & Cloudflare WARP for Autonomous Audio Extraction
         run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl
           python -m pip install --upgrade edge-tts mutagen yt-dlp
           # Install official Cloudflare WARP client for Ubuntu 24.04 (noble)
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg

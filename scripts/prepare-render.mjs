@@ -113,9 +113,11 @@ async function prefetchExternalMedia(code) {
             console.log(`🎵 Extracting audio track via yt-dlp [${idx}]: ${url.slice(0, 70)}...`);
             const { execSync } = await import('child_process');
             const cookieFlag = fs.existsSync('cookies.txt') ? '--cookies cookies.txt' : '';
-            execSync(`python3 -m yt_dlp ${cookieFlag} -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
+            // Pass android,ios client args to bypass YouTube datacenter bot blocks
+            const extractorArgs = '--extractor-args "youtube:player_client=android,ios,web"';
+            execSync(`python3 -m yt_dlp ${cookieFlag} ${extractorArgs} -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
               stdio: ['ignore', 'inherit', 'inherit'],
-              timeout: 45000,
+              timeout: 60000,
             });
           } else {
             const { buffer, contentType } = await fetchWithTimeout(url, 25000, 'audio/*,*/*;q=0.8');

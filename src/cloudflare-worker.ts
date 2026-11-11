@@ -400,45 +400,92 @@ function calculateSpeechTelemetry(
 }
 
 async function searchSoundtrackQuery(query: string, limit = 5): Promise<any[]> {
-  const cleanQ = encodeURIComponent(query.trim());
-  const url = `https://www.youtube.com/results?search_query=${cleanQ}`;
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept-Language': 'en-US,en;q=0.9',
-      Cookie: 'SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg; CONSENT=YES+cb.20210328-04-p0.en+FX+434',
-    },
-  });
-  if (!res.ok) return [];
-  const html = await res.text();
-  const match = html.match(/var ytInitialData = ({.*?});<\/script>/);
-  if (!match) return [];
+  const qTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const results: any[] = [];
 
+  // Source 1: Incompetech Free Direct MP3 Studio Library (1,400+ curated royalty-free tracks)
   try {
-    const data = JSON.parse(match[1]);
-    const sections =
-      data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
-    const items: any[] = [];
-    for (const s of sections) {
-      const contents = s.itemSectionRenderer?.contents || [];
-      for (const c of contents) {
-        const vr = c.videoRenderer;
-        if (vr && vr.videoId) {
-          items.push({
-            id: vr.videoId,
-            title: vr.title?.runs?.[0]?.text || '',
-            duration: vr.lengthText?.simpleText || '',
-            channel: vr.ownerText?.runs?.[0]?.text || '',
-            url: `https://www.youtube.com/watch?v=${vr.videoId}`,
-          });
+    const res = await fetch('https://incompetech.com/music/royalty-free/pieces.json');
+    if (res.ok) {
+      const catalog: Record<string, any> = await res.json();
+      const scored: Array<{ score: number; item: any }> = [];
+
+      for (const item of Object.values(catalog)) {
+        const text = [
+          item.title,
+          item.genre,
+          item.description,
+          item.feel,
+          item.instruments,
+        ]
+          .join(' ')
+          .toLowerCase();
+
+        let score = 0;
+        for (const term of qTerms) {
+          if (text.includes(term)) score++;
+        }
+        if (score > 0) {
+          scored.push({ score, item });
         }
       }
+
+      scored.sort((a, b) => b.score - a.score);
+      for (const { item } of scored.slice(0, limit)) {
+        results.push({
+          id: item.isrc || item.title,
+          title: item.title,
+          duration: item.length,
+          channel: 'Kevin MacLeod (Incompetech)',
+          genre: item.feel || item.genre,
+          url: `https://incompetech.com/music/royalty-free/mp3-royaltyfree/${encodeURIComponent(item.filename)}`,
+          directMp3: true,
+        });
+      }
     }
-    return items.slice(0, Math.max(1, Math.min(15, limit)));
-  } catch {
-    return [];
+  } catch {}
+
+  // Source 2: Internet Archive Direct Audio Collection (if limit not reached)
+  if (results.length < limit) {
+    try {
+      const cleanQ = query.replace(/[^\w\s]/g, ' ').trim();
+      const iaUrl = `https://archive.org/advancedsearch.php?q=mediatype:audio+AND+${encodeURIComponent(cleanQ)}&fl[]=identifier,title,creator,downloads&sort[]=downloads+desc&rows=${limit * 2}&output=json`;
+      const iaRes = await fetch(iaUrl);
+      if (iaRes.ok) {
+        const iaData: any = await iaRes.json();
+        const docs = iaData.response?.docs || [];
+        for (const doc of docs) {
+          try {
+            const metaRes = await fetch(`https://archive.org/metadata/${doc.identifier}`);
+            if (metaRes.ok) {
+              const meta: any = await metaRes.json();
+              const mp3 = meta.files?.find(
+                (f: any) =>
+                  (f.format === 'VBR MP3' || f.format === 'MP3' || String(f.name).endsWith('.mp3')) &&
+                  !String(f.name).includes('_vbr')
+              );
+              if (mp3) {
+                const dur = parseFloat(mp3.length || 0);
+                const mins = Math.floor(dur / 60);
+                const secs = Math.floor(dur % 60);
+                results.push({
+                  id: doc.identifier,
+                  title: doc.title || mp3.title || doc.identifier,
+                  duration: dur > 0 ? `${mins}:${secs < 10 ? '0' : ''}${secs}` : 'N/A',
+                  channel: doc.creator || 'Internet Archive',
+                  url: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(mp3.name)}`,
+                  directMp3: true,
+                });
+                if (results.length >= limit) break;
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
   }
+
+  return results.slice(0, Math.max(1, Math.min(15, limit)));
 }
 
 const TOOLS = [

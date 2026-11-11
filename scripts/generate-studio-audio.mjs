@@ -228,7 +228,27 @@ if (audioB64) {
   }
 }
 
-const segments = Array.isArray(config.narrationSegments) ? config.narrationSegments : [];
+// Support any key format Gemini might produce: scenes, narrationSegments, segments, script, or dialogue
+const rawList =
+  config.scenes ||
+  config.narrationSegments ||
+  config.segments ||
+  config.script ||
+  config.dialogue ||
+  (Array.isArray(config) ? config : []);
+
+let segments = Array.isArray(rawList)
+  ? rawList
+  : typeof rawList === 'string' && rawList.trim()
+  ? [{ text: rawList.trim() }]
+  : [];
+
+// Also support single text field e.g. { voice: "...", text: "..." }
+if (segments.length === 0 && typeof config.text === 'string' && config.text.trim()) {
+  segments = [{ text: config.text.trim(), voice: config.voice }];
+}
+
+console.log(`🎙️ Parsed ${segments.length} narration segment(s) for Studio Voiceover.`);
 const voice = config.voice || 'vi-VN-NamMinhNeural';
 const rate = config.rate || '+5%';
 const scenesTelemetry = [];

@@ -399,6 +399,48 @@ function calculateSpeechTelemetry(
   };
 }
 
+async function searchSoundtrackQuery(query: string, limit = 5): Promise<any[]> {
+  const cleanQ = encodeURIComponent(query.trim());
+  const url = `https://www.youtube.com/results?search_query=${cleanQ}`;
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+      Cookie: 'SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg; CONSENT=YES+cb.20210328-04-p0.en+FX+434',
+    },
+  });
+  if (!res.ok) return [];
+  const html = await res.text();
+  const match = html.match(/var ytInitialData = ({.*?});<\/script>/);
+  if (!match) return [];
+
+  try {
+    const data = JSON.parse(match[1]);
+    const sections =
+      data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+    const items: any[] = [];
+    for (const s of sections) {
+      const contents = s.itemSectionRenderer?.contents || [];
+      for (const c of contents) {
+        const vr = c.videoRenderer;
+        if (vr && vr.videoId) {
+          items.push({
+            id: vr.videoId,
+            title: vr.title?.runs?.[0]?.text || '',
+            duration: vr.lengthText?.simpleText || '',
+            channel: vr.ownerText?.runs?.[0]?.text || '',
+            url: `https://www.youtube.com/watch?v=${vr.videoId}`,
+          });
+        }
+      }
+    }
+    return items.slice(0, Math.max(1, Math.min(15, limit)));
+  } catch {
+    return [];
+  }
+}
+
 const TOOLS = [
   {
     name: 'render_video',
@@ -575,6 +617,35 @@ const TOOLS = [
     },
   },
   {
+    name: 'search_soundtrack',
+    description:
+      'SOUNDTRACK & MUSIC SEARCH TOOL: Search background music, soundscapes, or audio tracks by natural query.\n' +
+      'Returns a list of tracks with title, duration, channel, and stream URL so you can choose the best music for your scene mood.\n' +
+      'You can then mount `<Audio src="<track.url>" volume={0.2} loop />` directly in your Remotion TSX code!',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Search query or mood keywords (e.g. "cyberpunk synthwave instrumental", "lofi chill hiphop beat", "epic cinematic ambient orchestral")',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of track results to return (default 5, max 15)',
+          default: 5,
+        },
+      },
+      required: ['query'],
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  {
     name: 'list_system_assets',
     description:
       'STORAGE & ASSET BROWSER: List all rendered MP4 videos, still frames, and CDN links currently available.',
@@ -659,6 +730,35 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
     const args = params?.arguments || {};
 
     try {
+      if (toolName === 'search_soundtrack') {
+        const query = String(args.query || '');
+        const limit = Number(args.limit || 5);
+        const results = await searchSoundtrackQuery(query, limit);
+
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    query,
+                    totalFound: results.length,
+                    tracks: results,
+                    instructionsForAgent:
+                      'You can choose any track matching your video mood and duration. In your Remotion TSX, import Audio from "remotion" and mount `<Audio src="<track.url>" volume={0.15} loop />`. The runner will automatically download and bundle the audio file!',
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          },
+        };
+      }
+
       if (toolName === 'synthesize_speech' || toolName === 'plan_voiceover') {
         const scenesInput = args.scenes || args.text || [];
         const voice = args.voice || 'vi-VN-NamMinhNeural';

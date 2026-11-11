@@ -97,7 +97,44 @@ async function prefetchExternalMedia(code) {
     );
   }
 
-  // 2. Pre-fetch external image URLs (Wikimedia, Openverse, Liveflickr, NASA, Unsplash, Pollinations, etc.)
+  // 2. Pre-fetch external audio URLs (.mp3, .wav, .m4a, .aac, .ogg) or streaming tracks via yt-dlp
+  const audioUrlRegex = /(['"`])(https?:\/\/[^\s'"`]+\.(?:mp3|wav|m4a|aac|ogg)(?:\?[^\s'"`]*)?|https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=[a-zA-Z0-9_-]+|youtu\.be\/[a-zA-Z0-9_-]+))\1/gi;
+  const audioMatches = [...updatedCode.matchAll(audioUrlRegex)];
+  const uniqueAudioUrls = [...new Set(audioMatches.map((m) => m[2]))];
+
+  if (uniqueAudioUrls.length > 0) {
+    await Promise.all(
+      uniqueAudioUrls.map(async (url, idx) => {
+        const isStreaming = /youtube\.com|youtu\.be/i.test(url);
+        const fileName = `cached-audio-${idx}.mp3`;
+        const outPath = `public/${fileName}`;
+        try {
+          if (isStreaming) {
+            console.log(`🎵 Downloading audio track via yt-dlp [${idx}]: ${url.slice(0, 70)}...`);
+            const { execSync } = await import('child_process');
+            execSync(`python3 -m yt_dlp -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
+              stdio: ['ignore', 'inherit', 'inherit'],
+              timeout: 45000,
+            });
+          } else {
+            const { buffer, contentType } = await fetchWithTimeout(url, 25000, 'audio/*,*/*;q=0.8');
+            if (buffer && buffer.length > 1024 && !contentType.includes('text/html')) {
+              fs.writeFileSync(outPath, buffer);
+            }
+          }
+          if (fs.existsSync(outPath)) {
+            fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
+            urlToLocalFile.set(url, fileName);
+            console.log(`🎶 Cached soundtrack [${idx}]: -> ${fileName}`);
+          }
+        } catch (err) {
+          console.warn(`⚠️ Audio pre-fetch warning for ${url.slice(0, 60)}:`, err?.message || err);
+        }
+      })
+    );
+  }
+
+  // 3. Pre-fetch external image URLs (Wikimedia, Openverse, Liveflickr, NASA, Unsplash, Pollinations, etc.)
   const imageUrlRegex = /(['"`])(https?:\/\/(?:image\.pollinations\.ai\/[^\s'"`]+|images\.unsplash\.com\/[^\s'"`]+|picsum\.photos\/[^\s'"`]+|upload\.wikimedia\.org\/[^\s'"`]+|live\.staticflickr\.com\/[^\s'"`]+|[^\s'"`]+\.(?:png|jpg|jpeg|webp|gif|svg)(?:\?[^\s'"`]*)?))\1/gi;
   const imageMatches = [...updatedCode.matchAll(imageUrlRegex)];
   const uniqueImageUrls = [...new Set(imageMatches.map((m) => m[2]))].filter(
@@ -159,6 +196,12 @@ async function prefetchExternalMedia(code) {
   const fnName = hasStaticFileImport ? 'staticFile' : '__remotionStaticFile';
 
   updatedCode = updatedCode.replace(videoUrlRegex, (fullMatch, quote, url) => {
+    const localFile = urlToLocalFile.get(url);
+    if (!localFile) return fullMatch;
+    return `${fnName}('${localFile}')`;
+  });
+
+  updatedCode = updatedCode.replace(audioUrlRegex, (fullMatch, quote, url) => {
     const localFile = urlToLocalFile.get(url);
     if (!localFile) return fullMatch;
     return `${fnName}('${localFile}')`;

@@ -97,7 +97,7 @@ async function prefetchExternalMedia(code) {
     );
   }
 
-  // 2. Pre-fetch external audio URLs (.mp3, .wav, .m4a, .aac, .ogg), TikTok videos/sounds, or YouTube via yt-dlp
+  // 2. Pre-fetch external audio URLs (.mp3, .wav, .m4a, .aac, .ogg), TikTok videos/sounds, or YouTube via yt-dlp / Zing MP3
   const audioUrlRegex = /(['"`])(https?:\/\/[^\s'"`]+\.(?:mp3|wav|m4a|aac|ogg)(?:\?[^\s'"`]*)?|https?:\/\/(?:www\.)?(?:tiktok\.com\/@[^\s'"`]+\/video\/\d+|vt\.tiktok\.com\/[^\s'"`]+|youtube\.com\/watch\?v=[a-zA-Z0-9_-]+|youtu\.be\/[a-zA-Z0-9_-]+))\1/gi;
   const audioMatches = [...updatedCode.matchAll(audioUrlRegex)];
   const uniqueAudioUrls = [...new Set(audioMatches.map((m) => m[2]))];
@@ -108,6 +108,8 @@ async function prefetchExternalMedia(code) {
         const isStreaming = /tiktok\.com|youtube\.com|youtu\.be/i.test(url);
         const fileName = `cached-audio-${idx}.mp3`;
         const outPath = `public/${fileName}`;
+        let downloaded = false;
+
         try {
           if (isStreaming) {
             console.log(`🎵 Extracting audio track via yt-dlp [${idx}]: ${url.slice(0, 70)}...`);
@@ -115,29 +117,81 @@ async function prefetchExternalMedia(code) {
             const cookieFlag = fs.existsSync('cookies.txt') ? '--cookies cookies.txt' : '';
             // Connect to local BotGuard PO Token provider via official youtubepot-bgutilhttp argument
             const extractorArgs = '--extractor-args "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416;youtube:player-client=web,web_safari,mweb"';
-            execSync(`python3 -m yt_dlp ${cookieFlag} ${extractorArgs} -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
-              stdio: ['ignore', 'inherit', 'inherit'],
-              timeout: 90000,
-            });
+            try {
+              execSync(`python3 -m yt_dlp ${cookieFlag} ${extractorArgs} -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
+                stdio: ['ignore', 'inherit', 'inherit'],
+                timeout: 90000,
+              });
+              if (fs.existsSync(outPath) && fs.statSync(outPath).size > 1024) {
+                downloaded = true;
+              }
+            } catch (yterr) {
+              console.warn(`⚠️ yt-dlp stream download failed (likely bot block or geo-restriction): ${yterr?.message || yterr}`);
+            }
+
+            // Autonomous CDN fallback: if yt-dlp is blocked by YouTube bot challenge, resolve song title via oEmbed and stream directly from Zing MP3 CDN
+            if (!downloaded && /youtube\.com|youtu\.be/i.test(url)) {
+              try {
+                console.log(`🔄 Triggering autonomous Zing MP3 CDN resolver for YouTube URL: ${url}`);
+                const oembedRes = await fetchWithTimeout(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, 8000);
+                if (oembedRes && oembedRes.buffer) {
+                  const meta = JSON.parse(oembedRes.buffer.toString('utf-8'));
+                  const cleanQuery = (meta.title || '')
+                    .replace(/\|.*$/i, '')
+                    .replace(/\[.*?\]/g, '')
+                    .replace(/\(official.*?\)/gi, '')
+                    .replace(/\(mv.*?\)/gi, '')
+                    .replace(/ft\..*$/i, '')
+                    .trim();
+                  console.log(`🔎 Resolved YouTube track title: "${cleanQuery}"`);
+
+                  const { ZingMp3 } = await import('zingmp3-api-full');
+                  const s = await ZingMp3.search(cleanQuery);
+                  const songs = s.data?.items?.[0]?.items || s.data?.songs || [];
+                  if (songs.length > 0) {
+                    const topSong = songs[0];
+                    console.log(`✨ Found Zing MP3 match: "${topSong.title}" - ${topSong.artistsNames} (ID: ${topSong.encodeId})`);
+                    const songData = await ZingMp3.getSong(topSong.encodeId);
+                    const streamUrl = songData.data?.['128'];
+                    if (streamUrl) {
+                      console.log(`⚡ Downloading direct 128kbps Zing CDN stream...`);
+                      const audioStreamRes = await fetch(streamUrl);
+                      if (audioStreamRes.ok) {
+                        const arrayBuf = await audioStreamRes.arrayBuffer();
+                        fs.writeFileSync(outPath, Buffer.from(arrayBuf));
+                        downloaded = true;
+                        console.log(`✅ Autonomously fetched track from Zing CDN (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)`);
+                      }
+                    }
+                  }
+                }
+              } catch (zingErr) {
+                console.warn(`⚠️ Zing MP3 autonomous fallback failed:`, zingErr?.message || zingErr);
+              }
+            }
           } else {
             const { buffer, contentType } = await fetchWithTimeout(url, 25000, 'audio/*,*/*;q=0.8');
             if (buffer && buffer.length > 1024 && !contentType.includes('text/html')) {
               fs.writeFileSync(outPath, buffer);
+              downloaded = true;
             }
           }
+
           if (fs.existsSync(outPath) && fs.statSync(outPath).size > 1024) {
             fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
             urlToLocalFile.set(url, fileName);
             console.log(`🎶 Cached soundtrack [${idx}]: -> ${fileName}`);
+          } else {
+            throw new Error(`Audio file was not written or empty`);
           }
         } catch (err) {
           console.warn(`⚠️ Audio pre-fetch warning for ${url.slice(0, 60)}:`, err?.message || err);
-          // Safe fallback: if an external stream fails to download, alias it to the silent/default bgm so Remotion never crashes!
+          // Safe fallback: if an external stream fails to download, alias it to the studio bgm so Remotion never crashes and is never silent!
           if (fs.existsSync('public/bgm.mp3')) {
             fs.copyFileSync('public/bgm.mp3', outPath);
             fs.copyFileSync('public/bgm.mp3', `src/remotion/public/${fileName}`);
             urlToLocalFile.set(url, fileName);
-            console.log(`🛡️ Safely protected render from audio failure: aliased ${url.slice(0, 40)}... to fallback BGM`);
+            console.log(`🛡️ Safely protected render from audio failure: aliased ${url.slice(0, 40)}... to fallback studio BGM`);
           }
         }
       })

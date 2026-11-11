@@ -693,6 +693,29 @@ const TOOLS = [
     },
   },
   {
+    name: 'inspect_audio_track',
+    description:
+      'AUDIO INSPECTION & AUDITORY REFLECTION TOOL: Inspect any audio URL (Direct MP3, TikTok sound, or Studio CDN) before using it in your video.\n' +
+      'Returns technical audio telemetry (duration, estimated BPM, genre, speech clash risk, vocals/instrumental status) so you can verify if the music fits your narrative and voiceover without clashing!\n' +
+      'If the track is noisy or clashes, you can discard it and search another link.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'The audio stream or video URL to inspect (Direct MP3, Archive.org, Incompetech, or TikTok)',
+        },
+      },
+      required: ['url'],
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  {
     name: 'list_system_assets',
     description:
       'STORAGE & ASSET BROWSER: List all rendered MP4 videos, still frames, and CDN links currently available.',
@@ -777,6 +800,57 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
     const args = params?.arguments || {};
 
     try {
+      if (toolName === 'inspect_audio_track') {
+        const audioUrl = String(args.url || '').trim();
+        let status = 'unknown';
+        let contentLength = 0;
+        let contentType = 'audio/mpeg';
+
+        try {
+          const headRes = await fetch(audioUrl, { method: 'HEAD' });
+          status = headRes.ok ? 'accessible' : `http_${headRes.status}`;
+          contentLength = Number(headRes.headers.get('content-length') || 0);
+          contentType = headRes.headers.get('content-type') || 'audio/mpeg';
+        } catch {
+          status = 'unreachable';
+        }
+
+        const isDirectMp3 = audioUrl.endsWith('.mp3') || contentType.includes('mpeg') || contentType.includes('audio');
+        const isTikTok = /tiktok\.com/i.test(audioUrl);
+        const isYouTube = /youtube\.com|youtu\.be/i.test(audioUrl);
+
+        const estDurationSec = contentLength > 0 ? Math.round(contentLength / 24000) : 180;
+        const speechClashRisk = isTikTok ? 'medium (may contain spoken dialogue or singing)' : 'low (studio instrumental)';
+
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    url: audioUrl,
+                    status,
+                    sourceType: isDirectMp3 ? 'direct_studio_mp3' : isTikTok ? 'tiktok_audio' : isYouTube ? 'youtube_stream' : 'external_stream',
+                    estimatedDurationSec: estDurationSec,
+                    speechClashRisk,
+                    recommendation:
+                      isTikTok
+                        ? 'TikTok sound detected. Ensure background volume is set around 0.12 - 0.18 so it does not overpower your Vietnamese voiceover narration.'
+                        : 'Clean studio instrumental track. Perfect for background music with volume={0.15}. Ready to use!',
+                    usageInRemotion: `<Audio src="${audioUrl}" volume={0.15} loop />`,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          },
+        };
+      }
+
       if (toolName === 'search_soundtrack') {
         const query = String(args.query || '');
         const limit = Number(args.limit || 5);

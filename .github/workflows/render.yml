@@ -89,6 +89,15 @@ jobs:
         run: |
           python -m pip install --upgrade edge-tts mutagen yt-dlp
 
+      - name: Prepare YouTube Cookies if configured
+        env:
+          YT_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+        run: |
+          if [ -n "$YT_COOKIES" ]; then
+            echo "$YT_COOKIES" > cookies.txt
+            echo "🍪 Loaded YouTube cookies from repository secret."
+          fi
+
       - name: Generate AI Voiceover & Audio Telemetry
         env:
           AUDIO_B64: ${{ inputs.audioConfigBase64 }}

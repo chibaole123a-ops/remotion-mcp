@@ -97,22 +97,23 @@ async function prefetchExternalMedia(code) {
     );
   }
 
-  // 2. Pre-fetch external audio URLs (.mp3, .wav, .m4a, .aac, .ogg) or streaming tracks via yt-dlp
-  const audioUrlRegex = /(['"`])(https?:\/\/[^\s'"`]+\.(?:mp3|wav|m4a|aac|ogg)(?:\?[^\s'"`]*)?|https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=[a-zA-Z0-9_-]+|youtu\.be\/[a-zA-Z0-9_-]+))\1/gi;
+  // 2. Pre-fetch external audio URLs (.mp3, .wav, .m4a, .aac, .ogg), TikTok videos/sounds, or YouTube via yt-dlp
+  const audioUrlRegex = /(['"`])(https?:\/\/[^\s'"`]+\.(?:mp3|wav|m4a|aac|ogg)(?:\?[^\s'"`]*)?|https?:\/\/(?:www\.)?(?:tiktok\.com\/@[^\s'"`]+\/video\/\d+|vt\.tiktok\.com\/[^\s'"`]+|youtube\.com\/watch\?v=[a-zA-Z0-9_-]+|youtu\.be\/[a-zA-Z0-9_-]+))\1/gi;
   const audioMatches = [...updatedCode.matchAll(audioUrlRegex)];
   const uniqueAudioUrls = [...new Set(audioMatches.map((m) => m[2]))];
 
   if (uniqueAudioUrls.length > 0) {
     await Promise.all(
       uniqueAudioUrls.map(async (url, idx) => {
-        const isStreaming = /youtube\.com|youtu\.be/i.test(url);
+        const isStreaming = /tiktok\.com|youtube\.com|youtu\.be/i.test(url);
         const fileName = `cached-audio-${idx}.mp3`;
         const outPath = `public/${fileName}`;
         try {
           if (isStreaming) {
-            console.log(`🎵 Downloading audio track via yt-dlp [${idx}]: ${url.slice(0, 70)}...`);
+            console.log(`🎵 Extracting audio track via yt-dlp [${idx}]: ${url.slice(0, 70)}...`);
             const { execSync } = await import('child_process');
-            execSync(`python3 -m yt_dlp -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
+            const cookieFlag = fs.existsSync('cookies.txt') ? '--cookies cookies.txt' : '';
+            execSync(`python3 -m yt_dlp ${cookieFlag} -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
               stdio: ['ignore', 'inherit', 'inherit'],
               timeout: 45000,
             });
@@ -122,13 +123,20 @@ async function prefetchExternalMedia(code) {
               fs.writeFileSync(outPath, buffer);
             }
           }
-          if (fs.existsSync(outPath)) {
+          if (fs.existsSync(outPath) && fs.statSync(outPath).size > 1024) {
             fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
             urlToLocalFile.set(url, fileName);
             console.log(`🎶 Cached soundtrack [${idx}]: -> ${fileName}`);
           }
         } catch (err) {
           console.warn(`⚠️ Audio pre-fetch warning for ${url.slice(0, 60)}:`, err?.message || err);
+          // Safe fallback: if an external stream fails to download, alias it to the silent/default bgm so Remotion never crashes!
+          if (fs.existsSync('public/bgm.mp3')) {
+            fs.copyFileSync('public/bgm.mp3', outPath);
+            fs.copyFileSync('public/bgm.mp3', `src/remotion/public/${fileName}`);
+            urlToLocalFile.set(url, fileName);
+            console.log(`🛡️ Safely protected render from audio failure: aliased ${url.slice(0, 40)}... to fallback BGM`);
+          }
         }
       })
     );

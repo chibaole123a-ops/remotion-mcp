@@ -43,36 +43,43 @@ You have **100% creative freedom** to build any video or visual composition the 
 
 ---
 
-## 🎯 CODE CONTRACT & AI VOICEOVER SYNCHRONIZATION:
+## 🎯 YOU ARE THE SOLE AI VIDEO DIRECTOR (100% AUTONOMY):
 
-Your code must export a master component named \`DynamicVideo\`.
+You have 100% creative and technical authority over the entire video.
+No background scripts, heuristics, or hidden rules will modify or override your code:
+- Your React TSX code is compiled and rendered **EXACTLY as you write it**.
+- You decide every detail: scene structure, timing, pacing, visual hierarchy, animations, and typography.
 
-### 🎙️ AI Voiceover & Scene Sync Rules:
-When you provide \`audioConfig.scenes\`:
-1. Microsoft Edge-TTS computes the exact speech duration and word timings for every scene into \`./audio-telemetry.json\`.
-2. The Cloud Render Pipeline will automatically inject and play the voiceover audio tracks, and will automatically adjust your \`<Sequence>\` durations so visual scenes stay in sync!
-3. You can also import telemetry directly for 100% precision:
+### 🎙️ Full Control of Audio & Voiceover:
+When you request voiceover in \`audioConfig.scenes\`:
+1. Microsoft Edge-TTS synthesizes high-fidelity audio files into your project: \`staticFile("voice-0.mp3")\`, \`staticFile("voice-1.mp3")\`, etc.
+2. **Remotion is React**: To play voiceover or music, **you mount \`<Audio>\` components directly in your JSX tree** wherever and whenever you choose:
 \`\`\`tsx
 import React from 'react';
-import { AbsoluteFill, Sequence, useCurrentFrame, interpolate } from 'remotion';
-import telemetry from './audio-telemetry.json';
+import { AbsoluteFill, Sequence, Audio, staticFile, useCurrentFrame } from 'remotion';
 
 export const DynamicVideo: React.FC = () => {
-  const s0 = telemetry?.scenes?.[0] || { startFrame: 0, durationInFrames: 150 };
-  const s1 = telemetry?.scenes?.[1] || { startFrame: 150, durationInFrames: 150 };
-
   return (
     <AbsoluteFill style={{ backgroundColor: '#090d16' }}>
-      <Sequence from={s0.startFrame} durationInFrames={s0.durationInFrames}>
-        <Scene1 duration={s0.durationInFrames} />
+      {/* Background Music if desired */}
+      <Audio src={staticFile('bgm.mp3')} volume={0.15} loop />
+
+      {/* Scene 1: Visuals & Voiceover */}
+      <Sequence from={0} durationInFrames={180}>
+        <Scene1 />
+        <Audio src={staticFile('voice-0.mp3')} volume={1} />
       </Sequence>
-      <Sequence from={s1.startFrame} durationInFrames={s1.durationInFrames}>
-        <Scene2 duration={s1.durationInFrames} />
+
+      {/* Scene 2: Visuals & Voiceover */}
+      <Sequence from={180} durationInFrames={180}>
+        <Scene2 />
+        <Audio src={staticFile('voice-1.mp3')} volume={1} />
       </Sequence>
     </AbsoluteFill>
   );
 };
 \`\`\`
+3. You have full control over \`volume\`, \`startFrom\`, \`endAt\`, and timing. You decide how long each scene lasts to let the voiceover breathe naturally.
 `;
 
 function toBase64Utf8(str: string): string {

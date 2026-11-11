@@ -1012,15 +1012,15 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const galleryUrl = `${baseUrl}/gallery${secretQuery}`;
         const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
-        // Wait synchronously for initial render completion up to 25s (so Gemini can directly observe result or catch error in 1 call!)
+        // Wait synchronously for render completion up to 45s so Gemini directly receives status: "completed" with the final watch URL!
         const waitStart = Date.now();
         let finalStatus = 'rendering_on_cloud';
         let isSuccess = false;
         let isFailed = false;
         let errorDetails: string | undefined;
 
-        while (Date.now() - waitStart < 25000) {
-          await new Promise((r) => setTimeout(r, 3000));
+        while (Date.now() - waitStart < 45000) {
+          await new Promise((r) => setTimeout(r, 4000));
           const check = await checkReleaseAssetsOnGitHub(env, jobId);
           if (check.videoReady) {
             isSuccess = true;
@@ -1063,12 +1063,12 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       ? `Render completed successfully! Present the video watch link to the user: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${videoUrl})`
                       : isFailed
                       ? `Render failed on cloud runner! Inspect "errorDetails" above, fix your React TSX code or assets, and re-call render_video.`
-                      : `Video is actively rendering on 16GB Cloud Runners (takes ~30-40s). Call get_task_status(jobId: "${jobId}") to monitor completion!`,
+                      : `Video is still rendering. DO NOT END TURN YET! You MUST immediately call get_task_status(jobId: "${jobId}") in your next tool call to wait for the completed video!`,
                     message: isSuccess
-                      ? 'Render completed successfully!'
+                      ? 'Render completed successfully! Present watchPageUrl to user.'
                       : isFailed
                       ? `Render failed with error: ${errorDetails || 'Runner failure'}. Check errorDetails to fix.`
-                      : 'Render job dispatched and actively rendering. Call get_task_status to wait for final MP4 link.',
+                      : `Render is in progress on Cloud Runner. Call get_task_status(jobId: "${jobId}") now to get the completed video!`,
                   },
                   null,
                   2

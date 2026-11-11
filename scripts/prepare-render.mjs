@@ -113,8 +113,8 @@ async function prefetchExternalMedia(code) {
             console.log(`🎵 Extracting audio track via yt-dlp [${idx}]: ${url.slice(0, 70)}...`);
             const { execSync } = await import('child_process');
             const cookieFlag = fs.existsSync('cookies.txt') ? '--cookies cookies.txt' : '';
-            // Connect to local BotGuard PO Token provider and use web client
-            const extractorArgs = '--extractor-args "youtube:player_client=web;po_token=web+http://127.0.0.1:4416"';
+            // Connect to local BotGuard PO Token provider via official youtubepot-bgutilhttp argument
+            const extractorArgs = '--extractor-args "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416;youtube:player-client=web,web_safari,mweb"';
             execSync(`python3 -m yt_dlp ${cookieFlag} ${extractorArgs} -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
               stdio: ['ignore', 'inherit', 'inherit'],
               timeout: 90000,

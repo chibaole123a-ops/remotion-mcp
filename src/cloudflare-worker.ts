@@ -79,26 +79,6 @@ export const DynamicVideo: React.FC = () => {
   );
 };
 \`\`\`
-
-### ⚡ PACING & SEAMLESS SCENE TRANSITIONS (NO DEAD AIR / NO AWKWARD PAUSES):
-In professional video production, scenes must flow seamlessly without awkward dead air or long silent pauses:
-- **Speech Speed Rule**: Vietnamese Edge-TTS speaks at ~2.6 words/sec (~11 frames per word at 30fps).
-  - 15 words ≈ 165 - 175 frames (~5.5 - 5.8s)
-  - 25 words ≈ 260 - 280 frames (~8.5 - 9.3s)
-- **Tight Transition Rule**: Set your \`<Sequence durationInFrames={...}>\` tightly to the narration length (speech frames + 10-15 frames buffer for a natural 0.3s breath).
-- **NEVER** set 300+ frames for a sentence that only takes 180 frames, otherwise the scene will sit frozen in silence for 3-4 seconds of dead air!
-- **Zero-Guessing Auto-Sync**: You can import \`./audio-telemetry.json\` directly in your code for 100% frame-perfect sync:
-\`\`\`tsx
-import telemetry from './audio-telemetry.json';
-
-const s0 = telemetry?.scenes?.[0] || { startFrame: 0, durationInFrames: 180 };
-const s1 = telemetry?.scenes?.[1] || { startFrame: 180, durationInFrames: 220 };
-
-<Sequence from={s0.startFrame} durationInFrames={s0.durationInFrames}>
-  <Scene1 />
-  <Audio src={staticFile('voice-0.mp3')} />
-</Sequence>
-\`\`\`
 `;
 
 function toBase64Utf8(str: string): string {

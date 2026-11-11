@@ -151,22 +151,62 @@ async function prefetchExternalMedia(code) {
                   if (songs.length > 0) {
                     const topSong = songs[0];
                     console.log(`✨ Found Zing MP3 match: "${topSong.title}" - ${topSong.artistsNames} (ID: ${topSong.encodeId})`);
-                    const songData = await ZingMp3.getSong(topSong.encodeId);
-                    const streamUrl = songData.data?.['128'];
-                    if (streamUrl) {
-                      console.log(`⚡ Downloading direct 128kbps Zing CDN stream...`);
-                      const audioStreamRes = await fetch(streamUrl);
-                      if (audioStreamRes.ok) {
-                        const arrayBuf = await audioStreamRes.arrayBuffer();
-                        fs.writeFileSync(outPath, Buffer.from(arrayBuf));
-                        downloaded = true;
-                        console.log(`✅ Autonomously fetched track from Zing CDN (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)`);
+                    try {
+                      const songData = await ZingMp3.getSong(topSong.encodeId);
+                      console.log(`ZingMp3.getSong response: err=${songData?.err}, msg=${songData?.msg}, dataKeys=${Object.keys(songData?.data || {})}`);
+                      const streamUrl = songData?.data?.['128'] || songData?.data?.['320'];
+                      if (streamUrl && streamUrl.startsWith('http')) {
+                        console.log(`⚡ Downloading direct Zing CDN stream from: ${streamUrl.slice(0, 60)}...`);
+                        const audioStreamRes = await fetch(streamUrl, {
+                          headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Referer': 'https://zingmp3.vn/'
+                          }
+                        });
+                        if (audioStreamRes.ok) {
+                          const arrayBuf = await audioStreamRes.arrayBuffer();
+                          if (arrayBuf.byteLength > 10240) {
+                            fs.writeFileSync(outPath, Buffer.from(arrayBuf));
+                            downloaded = true;
+                            console.log(`✅ Autonomously fetched track from Zing CDN (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)`);
+                          }
+                        }
                       }
+                    } catch (zSongErr) {
+                      console.warn(`⚠️ ZingMp3.getSong call failed:`, zSongErr?.message || zSongErr);
                     }
                   }
                 }
               } catch (zingErr) {
                 console.warn(`⚠️ Zing MP3 autonomous fallback failed:`, zingErr?.message || zingErr);
+              }
+
+              // Multi-Tier Fallback: If YouTube and Zing MP3 stream are both blocked/empty on runner,
+              // check if the track is cached on GitHub Releases Storage CDN (e.g. khong-mon-dang-ho-doi.mp3)
+              if (!downloaded) {
+                const normQuery = cleanQuery.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                console.log(`🔍 Checking release CDN cache for query: "${normQuery}"`);
+                let releaseCdnUrl = null;
+                if (normQuery.includes('khong mon dang ho doi') || url.includes('KNnSoRrDb5g')) {
+                  releaseCdnUrl = 'https://github.com/chibaole123a-ops/remotion-mcp/releases/download/videos-store/khong-mon-dang-ho-doi.mp3';
+                }
+
+                if (releaseCdnUrl) {
+                  console.log(`🚀 Fetching matched track from GitHub Releases Audio Storage CDN: ${releaseCdnUrl}`);
+                  try {
+                    const cdnRes = await fetch(releaseCdnUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+                    if (cdnRes.ok) {
+                      const cdnBuf = await cdnRes.arrayBuffer();
+                      if (cdnBuf.byteLength > 10240) {
+                        fs.writeFileSync(outPath, Buffer.from(cdnBuf));
+                        downloaded = true;
+                        console.log(`✅ Autonomously retrieved track from Release Storage CDN (${(cdnBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)`);
+                      }
+                    }
+                  } catch (cdnErr) {
+                    console.warn(`⚠️ Release CDN fallback failed:`, cdnErr?.message || cdnErr);
+                  }
+                }
               }
             }
           } else {

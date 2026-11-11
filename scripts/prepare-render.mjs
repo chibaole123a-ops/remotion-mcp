@@ -228,8 +228,9 @@ async function main() {
     ? JSON.parse(fs.readFileSync('src/remotion/meta.json', 'utf-8'))
     : {};
 
-  // Respect durationInFrames exactly as decided by Gemini or user request
-  const finalDuration = durationEnv > 0 ? durationEnv : 300;
+  // Respect durationInFrames, but ensure it covers full audio duration if voiceover exists
+  const audioDuration = prevMeta.computedDurationInFrames || 0;
+  const finalDuration = Math.max(durationEnv > 0 ? durationEnv : 300, audioDuration);
 
   fs.writeFileSync(
     'src/remotion/meta.json',
@@ -246,6 +247,62 @@ async function main() {
     ),
     'utf-8'
   );
+
+  // AUTO-AUDIO INJECTION:
+  // If voiceover was generated (audio-telemetry.json exists) but Gemini's TSX code forgot
+  // to import/render <Audio>, dynamically update Root.tsx so Remotion always renders audio!
+  const hasUserAudio = /<Audio[\s/>]/.test(code);
+  const telemetryPath = 'src/remotion/audio-telemetry.json';
+  if (!hasUserAudio && fs.existsSync(telemetryPath)) {
+    try {
+      const telemetry = JSON.parse(fs.readFileSync(telemetryPath, 'utf-8'));
+      const scenes = Array.isArray(telemetry?.scenes) ? telemetry.scenes : [];
+      if (scenes.length > 0) {
+        console.log(`🎙️ Auto-injecting ${scenes.length} voiceover scene(s) into Root.tsx composition...`);
+        const rootTsxContent = `import React from 'react';
+import { Composition, Audio, Sequence, staticFile } from 'remotion';
+import { DynamicVideo } from './DynamicVideo';
+import meta from './meta.json';
+import telemetry from './audio-telemetry.json';
+
+const StudioVideoWithAudio: React.FC = () => {
+  const scenes = telemetry?.scenes || [];
+  return (
+    <>
+      <DynamicVideo />
+      {scenes.map((scene: any) => (
+        <Sequence
+          key={scene.sceneIndex}
+          from={scene.startFrame}
+          durationInFrames={scene.durationInFrames}
+        >
+          <Audio src={staticFile(\`voice-\${scene.sceneIndex}.mp3\`)} volume={1} />
+        </Sequence>
+      ))}
+    </>
+  );
+};
+
+export const RemotionRoot: React.FC = () => {
+  return (
+    <Composition
+      id="DynamicVideo"
+      component={StudioVideoWithAudio}
+      durationInFrames={meta.durationInFrames || 150}
+      fps={meta.fps || 30}
+      width={meta.width || 1920}
+      height={meta.height || 1080}
+    />
+  );
+};
+`;
+        fs.writeFileSync('src/remotion/Root.tsx', rootTsxContent, 'utf-8');
+        console.log('✅ Root.tsx successfully patched with auto voiceover audio track!');
+      }
+    } catch (e) {
+      console.warn('⚠️ Could not auto-inject audio into Root.tsx:', e);
+    }
+  }
 
   console.log(
     `✅ Prepared DynamicVideo.tsx and meta.json (${widthEnv}x${heightEnv} @ ${fpsEnv}fps, ${finalDuration} frames)`

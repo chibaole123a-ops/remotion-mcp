@@ -322,21 +322,90 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
   }
 }
 
+function calculateSpeechTelemetry(
+  rawScenes: any,
+  defaultVoice = 'vi-VN-NamMinhNeural',
+  fps = 30,
+  rateStr = '+0%'
+) {
+  let rateMultiplier = 1.0;
+  const rateMatch = rateStr.match(/([+-]?\d+)%/);
+  if (rateMatch) {
+    rateMultiplier = 1.0 + Number(rateMatch[1]) / 100;
+  }
+  rateMultiplier = Math.max(0.5, Math.min(2.0, rateMultiplier));
+
+  const list = Array.isArray(rawScenes)
+    ? rawScenes
+    : typeof rawScenes === 'string' && rawScenes.trim()
+    ? [{ text: rawScenes.trim() }]
+    : [];
+
+  let cumulativeFrames = 0;
+  let cumulativeSec = 0;
+
+  const scenes = list.map((item: any, idx: number) => {
+    const text = (typeof item === 'string' ? item : item?.text || '').trim();
+    const voice = (typeof item === 'object' && item?.voice) || defaultVoice;
+
+    const words = text.split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
+
+    // Normal Vietnamese speed: ~155 words/min = 2.58 words/sec
+    const baseWps = 2.6;
+    const baseDur = wordCount > 0 ? wordCount / (baseWps * rateMultiplier) : 0;
+
+    const commas = (text.match(/[,;]/g) || []).length;
+    const periods = (text.match(/[.!?]/g) || []).length;
+    const pauseDur = (commas * 0.25 + periods * 0.45) / rateMultiplier;
+
+    const durationSec = Number(Math.max(1.8, baseDur + pauseDur + 0.35).toFixed(2));
+    const durationInFrames = Math.ceil(durationSec * fps);
+
+    const startFrame = cumulativeFrames;
+    const endFrame = startFrame + durationInFrames;
+
+    cumulativeFrames += durationInFrames;
+    cumulativeSec += durationSec;
+
+    return {
+      sceneIndex: idx,
+      text,
+      voice,
+      wordCount,
+      durationSec,
+      durationInFrames,
+      startFrame,
+      endFrame,
+      audioFileName: `voice-${idx}.mp3`,
+      usageCode: `<Sequence from={${startFrame}} durationInFrames={${durationInFrames}}><Audio src={staticFile("voice-${idx}.mp3")} volume={1} /></Sequence>`,
+    };
+  });
+
+  return {
+    fps,
+    defaultVoice,
+    rate: rateStr,
+    totalScenes: scenes.length,
+    totalDurationSec: Number(cumulativeSec.toFixed(2)),
+    totalDurationInFrames: cumulativeFrames,
+    scenes,
+    audioConfigPayload: {
+      voice: defaultVoice,
+      rate: rateStr,
+      scenes: scenes.map((s) => ({ text: s.text, voice: s.voice })),
+    },
+    message: `Synthesized timing for ${scenes.length} scene(s). Total duration: ${cumulativeSec.toFixed(1)}s (${cumulativeFrames} frames @ ${fps}fps). Use these exact frame boundaries in your Remotion <Sequence> components!`,
+  };
+}
+
 const TOOLS = [
   {
-    name: 'remotion',
-    description: `REMOTION ECOSYSTEM STUDIO: Pure, unconstrained video rendering engine powered by the complete Remotion v4.0.542 ecosystem (Three.js 3D, Rough Notation annotations, Transitions, Shapes, SVG Paths, Noise, Google Fonts, and Physics Springs).\n` +
-      `You have 100% creative freedom to write any Remotion React composition based on the user's request.\n` +
-      `CRITICAL RULES FOR AGENT:\n` +
-      `1. NEVER print or paste raw tsxCode into the chat conversation. Send it directly to this tool.\n` +
-      `2. VISUAL PREVIEW & SELF-INSPECTION (AGENT PROTOCOL):\n` +
-      `   - Specify the "frame" parameter (e.g. frame: 0, 45, 60, 90) to capture and inspect a single frame.\n` +
-      `   - If the returned payload has an image block (type: "image"), inspect the image with your Vision capabilities immediately.\n` +
-      `   - If the returned status is "frame_dispatched_rendering" (Cloud runner is taking ~30-40s to boot), YOU MUST NOT tell the user "I cannot view the image". INSTEAD, YOU MUST autonomously call "get_task_status(jobId)" in your very next action to retrieve the image block into your vision context.\n` +
-      `3. FULL VIDEO RENDER: When "frame" is omitted, the full video will be rendered on Cloud (16GB RAM). Follow up with "get_task_status" to track until ready.\n` +
-      `4. Present output cleanly in markdown:\n` +
-      `   - Full video: 🎬 [Xem Video Trực Tiếp](\${watchPageUrl}) | 📥 [Tải Video MP4](\${directDownloadUrl})\n` +
-      `   - Single frame: ![Preview Frame #\${frame}](\${previewImageUrl})\n${ECOSYSTEM_DOCS}`,
+    name: 'render_video',
+    description:
+      `PRODUCTION VIDEO RENDER TOOL: Render a complete Remotion v4.0.542 React video composition into an MP4 file on 16GB Cloud Runners.\n` +
+      `You are the sole AI Video Director: you control all layout, transitions, audio tracks, and animations.\n` +
+      `Pass your full React code via "tsxCode". If your video has speech, pass "audioConfig". Follow up with "get_task_status(jobId)" to track or deliver the watch link.\n${ECOSYSTEM_DOCS}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -351,7 +420,8 @@ const TOOLS = [
         },
         durationInFrames: {
           type: 'number',
-          description: 'Total duration in frames (seconds * fps). You freely decide this based on user request or pacing.',
+          description: 'Total duration in frames (seconds * fps). You freely decide this based on narrative pacing or speech telemetry.',
+          default: 300,
         },
         fps: {
           type: 'number',
@@ -368,27 +438,114 @@ const TOOLS = [
           description: 'Height in pixels (1080 for landscape, 1920 for portrait TikTok/Shorts).',
           default: 1080,
         },
-        frame: {
-          type: 'number',
-          description: 'Optional: Specific frame index if user only wants to capture a fast static preview PNG. If omitted, the entire video will be rendered.',
-        },
         audioConfig: {
           type: 'object',
           description:
-            'Optional: AI Voiceover & Background Music configuration. Schema: { voice?: "vi-VN-HoaiMyNeural" | "vi-VN-NamMinhNeural", bgm?: "lofi" | "cinematic" | "tech", scenes?: Array<{ text: string, voice?: string }> }',
+            'Optional: AI Voiceover & Background Music configuration. Schema: { voice?: "vi-VN-NamMinhNeural" | "vi-VN-HoaiMyNeural", bgm?: "lofi" | "cinematic" | "tech", scenes?: Array<{ text: string, voice?: string }> }',
         },
       },
       required: ['tsxCode'],
     },
   },
   {
-    name: 'get_task_status',
+    name: 'preview_frame',
     description:
-      'SYSTEM INFRASTRUCTURE & VISION RETRIEVAL TOOL: Track real-time background Cloud execution (GitHub Actions runner, build steps, completion status, or watch links) for any dispatched job. When inspecting a still frame, this tool returns the Base64 multimodal image block directly into your vision context.',
+      'VISUAL INSPECTION TOOL: Render and capture a single high-resolution still frame (PNG) from your Remotion TSX code.\n' +
+      'Use this to inspect layout, color harmony, typography, and contrast with your Vision capabilities before or instead of rendering a full video.\n' +
+      'Follow up with get_task_status(jobId) to receive the image block directly in your context.',
     inputSchema: {
       type: 'object',
       properties: {
-        jobId: { type: 'string', description: 'The unique jobId returned by the remotion tool' },
+        title: {
+          type: 'string',
+          description: 'Title or description of the frame preview',
+        },
+        tsxCode: {
+          type: 'string',
+          description:
+            'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`.',
+        },
+        frame: {
+          type: 'number',
+          description: 'Specific frame number to capture (e.g. 0 for poster/intro, 60 for mid-scene). Defaults to 0.',
+          default: 0,
+        },
+        fps: {
+          type: 'number',
+          description: 'Frames per second (default 30).',
+          default: 30,
+        },
+        width: {
+          type: 'number',
+          description: 'Width in pixels (default 1920).',
+          default: 1920,
+        },
+        height: {
+          type: 'number',
+          description: 'Height in pixels (default 1080).',
+          default: 1080,
+        },
+      },
+      required: ['tsxCode'],
+    },
+  },
+  {
+    name: 'synthesize_speech',
+    description:
+      'AI VOICEOVER & TIMING CALCULATOR TOOL: Plan and calculate exact speech duration (seconds, frames, word timings) for Vietnamese or English voiceover scenes.\n' +
+      'Returns exact frame boundaries (startFrame, durationInFrames) for each scene so you can code your Remotion <Sequence> blocks with 100% sync!',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scenes: {
+          type: 'array',
+          description: 'Array of scenes with narration text: [{ text: "...", voice?: "vi-VN-NamMinhNeural" }]',
+          items: {
+            type: 'object',
+            properties: {
+              text: { type: 'string' },
+              voice: { type: 'string' },
+            },
+            required: ['text'],
+          },
+        },
+        text: {
+          type: 'string',
+          description: 'Alternative: single narration text string if only 1 scene.',
+        },
+        voice: {
+          type: 'string',
+          description: 'Default voice (e.g. "vi-VN-NamMinhNeural" or "vi-VN-HoaiMyNeural").',
+          default: 'vi-VN-NamMinhNeural',
+        },
+        rate: {
+          type: 'string',
+          description: 'Speech rate adjustment (e.g. "+0%", "+10%", "-5%").',
+          default: '+0%',
+        },
+        fps: {
+          type: 'number',
+          description: 'Frames per second of your video project (default 30).',
+          default: 30,
+        },
+      },
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
+    name: 'get_task_status',
+    description:
+      'TASK STATUS & MULTIMODAL RETRIEVAL TOOL: Check the real-time execution status of any background Cloud render job.\n' +
+      'When checking a still frame preview, this tool returns the Base64 multimodal image block directly into your vision context.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        jobId: { type: 'string', description: 'The unique jobId returned by render_video, preview_frame, or remotion' },
       },
       required: ['jobId'],
     },
@@ -402,7 +559,7 @@ const TOOLS = [
   {
     name: 'inspect_task_logs',
     description:
-      'SYSTEM DIAGNOSTICS & SELF-HEALING TOOL: Retrieve detailed compiler logs, TypeScript error traces, or runner failures for autonomous debugging and self-healing.',
+      'DIAGNOSTICS & SELF-HEALING TOOL: Retrieve detailed compiler logs, TypeScript error traces, or runner failures for autonomous debugging and self-healing.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -420,7 +577,7 @@ const TOOLS = [
   {
     name: 'list_system_assets',
     description:
-      'SYSTEM ASSET & STORAGE TOOL: List all rendered MP4 videos and assets currently stored in the Cloud Release CDN repository.',
+      'STORAGE & ASSET BROWSER: List all rendered MP4 videos, still frames, and CDN links currently available.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -436,6 +593,25 @@ const TOOLS = [
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: false,
+    },
+  },
+  {
+    name: 'remotion',
+    description:
+      'LEGACY ALIAS TOOL: Unified entrypoint supporting both video render and still preview. Automatically routes to render_video or preview_frame.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        tsxCode: { type: 'string' },
+        durationInFrames: { type: 'number' },
+        fps: { type: 'number', default: 30 },
+        width: { type: 'number', default: 1920 },
+        height: { type: 'number', default: 1080 },
+        frame: { type: 'number' },
+        audioConfig: { type: 'object' },
+      },
+      required: ['tsxCode'],
     },
   },
 ];
@@ -483,8 +659,41 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
     const args = params?.arguments || {};
 
     try {
-      if (toolName === 'remotion' || toolName === 'remotion_studio' || toolName === 'render_remotion_video' || toolName === 'preview_remotion_frame') {
-        const isFramePreview = typeof args.frame === 'number' || toolName === 'preview_remotion_frame' || args.action === 'preview';
+      if (toolName === 'synthesize_speech' || toolName === 'plan_voiceover') {
+        const scenesInput = args.scenes || args.text || [];
+        const voice = args.voice || 'vi-VN-NamMinhNeural';
+        const rate = args.rate || '+0%';
+        const fps = Number(args.fps || 30);
+
+        const telemetry = calculateSpeechTelemetry(scenesInput, voice, fps, rate);
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(telemetry, null, 2),
+              },
+            ],
+          },
+        };
+      }
+
+      if (
+        toolName === 'render_video' ||
+        toolName === 'render_remotion_video' ||
+        toolName === 'preview_frame' ||
+        toolName === 'preview_remotion_frame' ||
+        toolName === 'remotion' ||
+        toolName === 'remotion_studio'
+      ) {
+        const isFramePreview =
+          toolName === 'preview_frame' ||
+          toolName === 'preview_remotion_frame' ||
+          typeof args.frame === 'number' ||
+          args.action === 'preview';
+
         const tsxCode = String(args.tsxCode || '');
         const warnings = validateTsxCode(tsxCode);
         if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
@@ -496,7 +705,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               content: [
                 {
                   type: 'text',
-                  text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call remotion again.`,
+                  text: `Pre-flight validation failed:\n${warnings.join('\n')}\nPlease fix and call tool again.`,
                 },
               ],
             },
@@ -529,7 +738,6 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
           const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
 
-          // Async Job Pattern: Return immediately within 1-2s to permanently prevent socket timeouts
           return {
             jsonrpc: '2.0',
             id,
@@ -546,7 +754,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       previewImageUrl: stillUrl,
                       directDownloadUrl: downloadUrl,
                       instructionsForAgent:
-                        `Frame capture job dispatched to Cloud runner! It takes ~25-30s. Call get_task_status with jobId "${jobId}" to retrieve the visual inspection image.`,
+                        `Frame capture job dispatched to Cloud runner! It takes ~20-25s. Call get_task_status with jobId "${jobId}" to retrieve the visual inspection image into your vision context.`,
                       message:
                         `Remotion frame #${frame} successfully dispatched to GitHub Actions Cloud (16GB RAM)! Next step: Call get_task_status with jobId "${jobId}" to inspect the visual frame.`,
                     },

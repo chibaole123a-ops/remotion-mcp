@@ -104,6 +104,7 @@ jobs:
           if [ "${{ inputs.mode }}" = "still" ]; then
             npx remotion still src/remotion/index.ts DynamicVideo outputs/still-${{ inputs.jobId }}.png \
               --frame=${{ inputs.stillFrame || '0' }} \
+              --scale=0.67 \
               --public-dir=public \
               --gl=swangle \
               --log=error \

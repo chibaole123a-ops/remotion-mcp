@@ -487,61 +487,32 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
           const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
 
-          // Smart Auto-Wait: Poll up to 45 seconds so Gemini gets the image directly in 1 turn (GitHub Actions runner takes ~30-35s)
-          const waitStart = Date.now();
-          let stillReady = false;
-          let stillBase64: string | undefined;
-
-          while (Date.now() - waitStart < 45000) {
-            const check = await checkReleaseAssetsOnGitHub(env, jobId);
-            if (check.stillReady) {
-              stillReady = true;
-              stillBase64 = check.stillBase64;
-              break;
-            }
-            if (check.errorLogText) break;
-            await new Promise((r) => setTimeout(r, 2000));
-          }
-
-          const contentBlocks: any[] = [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  status: stillReady ? 'frame_captured_ready' : 'frame_dispatched_rendering',
-                  jobId,
-                  capturedFrame: frame,
-                  specs: `${width}x${height} @ ${fps}fps`,
-                  previewImageUrl: stillUrl,
-                  directDownloadUrl: downloadUrl,
-                  hasVisionImage: Boolean(stillReady && stillBase64),
-                  instructionsForAgent: stillReady
-                    ? `Examine the image block attached below. Evaluate visual composition, contrast, font readability, 3D elements, and particle balance. If adjustments are needed, refine tsxCode and test another frame; if satisfied, call remotion without "frame" to render the complete video.`
-                    : `Frame capture is still processing on Cloud runner. Call get_task_status with jobId "${jobId}" after a few moments to receive the image.`,
-                  message: stillReady
-                    ? `Remotion frame #${frame} captured successfully! Inspect the visual image below.`
-                    : `Remotion frame #${frame} dispatched to Cloud runner. If not completed in this turn, check get_task_status.`,
-                },
-                null,
-                2
-              ),
-            },
-          ];
-
-          if (stillReady && stillBase64) {
-            contentBlocks.push({
-              type: 'image',
-              data: stillBase64,
-              mimeType: 'image/png',
-              mime_type: 'image/png',
-            });
-          }
-
+          // Async Job Pattern: Return immediately within 1-2s to permanently prevent socket timeouts
           return {
             jsonrpc: '2.0',
             id,
             result: {
-              content: contentBlocks,
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify(
+                    {
+                      status: 'frame_dispatched_to_cloud',
+                      jobId,
+                      capturedFrame: frame,
+                      specs: `${width}x${height} @ ${fps}fps`,
+                      previewImageUrl: stillUrl,
+                      directDownloadUrl: downloadUrl,
+                      instructionsForAgent:
+                        `Frame capture job dispatched to Cloud runner! It takes ~25-30s. Call get_task_status with jobId "${jobId}" to retrieve the visual inspection image.`,
+                      message:
+                        `Remotion frame #${frame} successfully dispatched to GitHub Actions Cloud (16GB RAM)! Next step: Call get_task_status with jobId "${jobId}" to inspect the visual frame.`,
+                    },
+                    null,
+                    2
+                  ),
+                },
+              ],
             },
           };
         }
@@ -611,7 +582,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         let stillBase64: string | undefined;
 
-        while (Date.now() - start < 15000) {
+        while (Date.now() - start < 8000) {
           const check = await checkReleaseAssetsOnGitHub(env, jobId);
           ready = check.videoReady || check.stillReady;
           isStill = check.stillReady;
@@ -623,7 +594,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           if (workflowInfo?.conclusion === 'failure' || workflowInfo?.conclusion === 'cancelled') {
             break;
           }
-          await new Promise((r) => setTimeout(r, 3000));
+          await new Promise((r) => setTimeout(r, 2000));
         }
 
         const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;

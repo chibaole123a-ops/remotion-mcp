@@ -131,12 +131,13 @@ async function prefetchExternalMedia(code) {
 
             // Autonomous CDN fallback: if yt-dlp is blocked by YouTube bot challenge, resolve song title via oEmbed and stream directly from Zing MP3 CDN
             if (!downloaded && /youtube\.com|youtu\.be/i.test(url)) {
+              let cleanQuery = '';
               try {
                 console.log(`🔄 Triggering autonomous Zing MP3 CDN resolver for YouTube URL: ${url}`);
                 const oembedRes = await fetchWithTimeout(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, 8000);
                 if (oembedRes && oembedRes.buffer) {
                   const meta = JSON.parse(oembedRes.buffer.toString('utf-8'));
-                  const cleanQuery = (meta.title || '')
+                  cleanQuery = (meta.title || '')
                     .replace(/\|.*$/i, '')
                     .replace(/\[.*?\]/g, '')
                     .replace(/\(official.*?\)/gi, '')
@@ -184,7 +185,7 @@ async function prefetchExternalMedia(code) {
               // Multi-Tier Fallback: If YouTube and Zing MP3 stream are both blocked/empty on runner,
               // check if the track is cached on GitHub Releases Storage CDN (e.g. khong-mon-dang-ho-doi.mp3)
               if (!downloaded) {
-                const normQuery = cleanQuery.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const normQuery = (cleanQuery || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                 console.log(`🔍 Checking release CDN cache for query: "${normQuery}"`);
                 let releaseCdnUrl = null;
                 if (normQuery.includes('khong mon dang ho doi') || url.includes('KNnSoRrDb5g')) {

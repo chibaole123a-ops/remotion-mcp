@@ -503,10 +503,6 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
             await new Promise((r) => setTimeout(r, 2000));
           }
 
-          const previewMarkdown = stillReady
-            ? `\n\n### 🖼️ PREVIEW FRAME #${jobId}\n![Preview Frame](data:image/png;base64,${stillBase64 || ''})\n\nDirect Link: ${stillUrl}`
-            : '';
-
           const contentBlocks: any[] = [
             {
               type: 'text',
@@ -528,7 +524,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 },
                 null,
                 2
-              ) + (stillReady && stillBase64 ? previewMarkdown : ''),
+              ),
             },
           ];
 
@@ -643,10 +639,6 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const activeStep = workflowInfo?.steps?.find((s: any) => s.status === 'in_progress')?.name;
         const isFailed = Boolean(errorLogText) || workflowInfo?.conclusion === 'failure';
 
-        const previewMarkdown = isStill
-          ? `\n\n### 🖼️ PREVIEW FRAME #${jobId}\n![Preview Frame](data:image/png;base64,${stillBase64 || ''})\n\nDirect Link: ${stillUrl}`
-          : '';
-
         const contentBlocks: any[] = [
           {
             type: 'text',
@@ -674,7 +666,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               },
               null,
               2
-            ) + (isStill && ready && stillBase64 ? previewMarkdown : ''),
+            ),
           },
         ];
 

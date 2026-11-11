@@ -87,10 +87,13 @@ jobs:
 
       - name: Install Python Edge-TTS, yt-dlp & PO Token Provider for Autonomous Audio Extraction
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl
+          # ffmpeg and curl are pre-installed on GitHub Actions Ubuntu runners; avoid fragile apt update hangs
+          if ! command -v ffmpeg &> /dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl || true
+          fi
           python -m pip install --upgrade edge-tts mutagen yt-dlp bgutil-ytdlp-pot-provider
           # Run official docker container for BotGuard Proof-of-Origin Token Provider
-          docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider
+          docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider || true
           sleep 3
           curl -s http://127.0.0.1:4416/ping || echo "POT provider initialized"
 

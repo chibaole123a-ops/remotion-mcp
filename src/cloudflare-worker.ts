@@ -629,12 +629,18 @@ const TOOLS = [
   {
     name: 'get_task_status',
     description:
-      'TASK STATUS & MULTIMODAL RETRIEVAL TOOL: Check the real-time execution status of any background Cloud render job.\n' +
-      'When checking a still frame preview, this tool returns the Base64 multimodal image block directly into your vision context.',
+      'TASK STATUS & COMPLETION TRACKER TOOL: Check status and wait for any background Cloud render job to complete.\n' +
+      'When rendering a video (or still frame), you should call this tool until status is "completed" or "failed".\n' +
+      'This tool automatically holds connection up to 30s per check, so you can easily loop until you have the final completed watch link to give the user!',
     inputSchema: {
       type: 'object',
       properties: {
         jobId: { type: 'string', description: 'The unique jobId returned by render_video, preview_frame, or remotion' },
+        waitForCompletion: {
+          type: 'boolean',
+          description: 'If true, waits up to 30 seconds for the job to finish before returning. Defaults to true.',
+          default: true,
+        },
       },
       required: ['jobId'],
     },
@@ -1081,6 +1087,8 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
       if (toolName === 'get_task_status' || toolName === 'get_system_task_status' || toolName === 'check_render_status') {
         const jobId = sanitizeJobId(String(args.jobId || ''));
+        const shouldWait = args.waitForCompletion !== false;
+        const maxWaitMs = shouldWait ? 30000 : 4000;
         const start = Date.now();
         let ready = false;
         let isStill = false;
@@ -1089,7 +1097,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         let stillBase64: string | undefined;
 
-        while (Date.now() - start < 8000) {
+        while (Date.now() - start < maxWaitMs) {
           const check = await checkReleaseAssetsOnGitHub(env, jobId);
           ready = check.videoReady || check.stillReady;
           isStill = check.stillReady;
@@ -1101,7 +1109,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           if (workflowInfo?.conclusion === 'failure' || workflowInfo?.conclusion === 'cancelled') {
             break;
           }
-          await new Promise((r) => setTimeout(r, 2000));
+          await new Promise((r) => setTimeout(r, 3000));
         }
 
         const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;

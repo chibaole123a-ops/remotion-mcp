@@ -368,6 +368,12 @@ const TOOLS = [
       },
       required: ['jobId'],
     },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   },
   {
     name: 'inspect_task_logs',
@@ -379,6 +385,12 @@ const TOOLS = [
         jobId: { type: 'string', description: 'The unique jobId to inspect' },
       },
       required: ['jobId'],
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
     },
   },
   {
@@ -394,6 +406,12 @@ const TOOLS = [
           description: 'Maximum number of items to retrieve',
         },
       },
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
     },
   },
 ];

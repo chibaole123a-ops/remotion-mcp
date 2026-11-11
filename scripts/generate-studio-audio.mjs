@@ -84,9 +84,10 @@ async def main():
         text = f.read().strip()
 
     try:
-        comm = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
-    except TypeError:
         comm = edge_tts.Communicate(text, voice, rate=rate)
+    except Exception as e:
+        sys.stderr.write(f"Communicate init error: {e}\n")
+        sys.exit(1)
 
     words = []
     max_end_ms = 0

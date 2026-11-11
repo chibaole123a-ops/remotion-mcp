@@ -353,6 +353,11 @@ const TOOLS = [
           type: 'number',
           description: 'Optional: Specific frame index if user only wants to capture a fast static preview PNG. If omitted, the entire video will be rendered.',
         },
+        audioConfig: {
+          type: 'object',
+          description:
+            'Optional: AI Voiceover & Background Music configuration. Schema: { voice?: "vi-VN-HoaiMyNeural" | "vi-VN-NamMinhNeural", bgm?: "lofi" | "cinematic" | "tech", scenes?: Array<{ text: string, voice?: string }> }',
+        },
       },
       required: ['tsxCode'],
     },
@@ -538,6 +543,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         // Full Video Render
         const title = args.title || 'Remotion Video';
         const durationInFrames = Number(args.durationInFrames || 300);
+        const audioConfig = args.audioConfig || {};
 
         await dispatchGitHubRender(
           env,
@@ -548,7 +554,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           fps,
           width,
           height,
-          {},
+          audioConfig,
           'video',
           0
         );

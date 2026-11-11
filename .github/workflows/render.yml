@@ -85,6 +85,19 @@ jobs:
       - name: Ensure Remotion Browser
         run: npx remotion browser ensure --quiet
 
+      - name: Install Python Edge-TTS for Natural AI Voiceover
+        run: |
+          python -m pip install --upgrade edge-tts mutagen
+
+      - name: Generate AI Voiceover & Audio Telemetry
+        env:
+          AUDIO_B64: ${{ inputs.audioConfigBase64 }}
+          FPS: ${{ inputs.fps }}
+          DURATION: ${{ inputs.durationInFrames }}
+        run: |
+          mkdir -p public src/remotion/public
+          node scripts/generate-studio-audio.mjs
+
       - name: Prepare DynamicVideo.tsx, Pre-fetch External Assets & Guard Imports
         env:
           TSX_B64: ${{ inputs.tsxCodeBase64 }}

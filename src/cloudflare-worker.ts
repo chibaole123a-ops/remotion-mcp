@@ -43,20 +43,32 @@ You have **100% creative freedom** to build any video or visual composition the 
 
 ---
 
-## 🎯 CODE CONTRACT:
+## 🎯 CODE CONTRACT & AI VOICEOVER SYNCHRONIZATION:
 
-Your code must export a master component named \`DynamicVideo\`:
+Your code must export a master component named \`DynamicVideo\`.
+
+### 🎙️ AI Voiceover & Scene Sync Rules:
+When you provide \`audioConfig.scenes\`:
+1. Microsoft Edge-TTS computes the exact speech duration and word timings for every scene into \`./audio-telemetry.json\`.
+2. The Cloud Render Pipeline will automatically inject and play the voiceover audio tracks, and will automatically adjust your \`<Sequence>\` durations so visual scenes stay in sync!
+3. You can also import telemetry directly for 100% precision:
 \`\`\`tsx
 import React from 'react';
-import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
+import { AbsoluteFill, Sequence, useCurrentFrame, interpolate } from 'remotion';
+import telemetry from './audio-telemetry.json';
 
 export const DynamicVideo: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
+  const s0 = telemetry?.scenes?.[0] || { startFrame: 0, durationInFrames: 150 };
+  const s1 = telemetry?.scenes?.[1] || { startFrame: 150, durationInFrames: 150 };
 
   return (
-    <AbsoluteFill style={{ backgroundColor: '#090d16', justifyContent: 'center', alignItems: 'center' }}>
-      {/* Your creative Remotion composition */}
+    <AbsoluteFill style={{ backgroundColor: '#090d16' }}>
+      <Sequence from={s0.startFrame} durationInFrames={s0.durationInFrames}>
+        <Scene1 duration={s0.durationInFrames} />
+      </Sequence>
+      <Sequence from={s1.startFrame} durationInFrames={s1.durationInFrames}>
+        <Scene2 duration={s1.durationInFrames} />
+      </Sequence>
     </AbsoluteFill>
   );
 };

@@ -85,8 +85,8 @@ async def main():
 
     try:
         comm = edge_tts.Communicate(text, voice, rate=rate)
-    except Exception as e:
-        sys.stderr.write(f"Communicate init error: {e}\n")
+    except Exception as err:
+        sys.stderr.write("Communicate init error: " + str(err) + "\\n")
         sys.exit(1)
 
     words = []

@@ -214,6 +214,82 @@ async function sanitizeLucideImports(code) {
   }
 }
 
+function resyncVisualScenes(code, scenes) {
+  if (!scenes || scenes.length === 0) return code;
+
+  // Find DynamicVideo block or component body
+  const dvMatch = code.match(/(export\s+(?:const|function)\s+DynamicVideo[\s\S]*)/);
+  if (!dvMatch) return code;
+
+  const dvBlock = dvMatch[1];
+  const seqTagRegex = /<Sequence\b([^>]*?)>/g;
+  const allSeqTags = [...dvBlock.matchAll(seqTagRegex)];
+
+  // Identify scene sequence tags (the ones that have durationInFrames or from)
+  const sceneTags = allSeqTags.filter(
+    (m) => m[1].includes('durationInFrames') || m[1].includes('from')
+  );
+
+  if (sceneTags.length === scenes.length) {
+    console.log(
+      `⏱️ Auto-resynchronizing ${sceneTags.length} visual scene sequence(s) to match exact Edge-TTS audio timing...`
+    );
+
+    let updatedDvBlock = dvBlock;
+    const oldDurations = [];
+
+    for (let i = sceneTags.length - 1; i >= 0; i--) {
+      const match = sceneTags[i];
+      const fullTag = match[0];
+      const attrs = match[1];
+
+      const oldDurMatch = attrs.match(/durationInFrames=\{?(\d+)\}?/);
+      const oldDur = oldDurMatch ? Number(oldDurMatch[1]) : 120;
+      oldDurations[i] = oldDur;
+
+      const newFrom = scenes[i].startFrame;
+      const newDur = scenes[i].durationInFrames;
+
+      let newAttrs = attrs;
+      if (/from=\{?[^}]*\}?/.test(newAttrs)) {
+        newAttrs = newAttrs.replace(/from=\{?[^}]*\}?/, `from={${newFrom}}`);
+      } else {
+        newAttrs += ` from={${newFrom}}`;
+      }
+
+      if (/durationInFrames=\{?[^}]*\}?/.test(newAttrs)) {
+        newAttrs = newAttrs.replace(/durationInFrames=\{?[^}]*\}?/, `durationInFrames={${newDur}}`);
+      } else {
+        newAttrs += ` durationInFrames={${newDur}}`;
+      }
+
+      updatedDvBlock = updatedDvBlock.replace(fullTag, `<Sequence${newAttrs}>`);
+    }
+
+    code = code.replace(dvBlock, updatedDvBlock);
+
+    // Resync exit fade interpolations: e.g. interpolate(frame, [100, 120], [1, 0])
+    for (let i = 0; i < scenes.length; i++) {
+      const oldDur = oldDurations[i];
+      const newDur = scenes[i].durationInFrames;
+      if (!oldDur || oldDur === newDur) continue;
+
+      const interpRegex = new RegExp(`\\[\\s*(\\d+)\\s*,\\s*${oldDur}\\s*\\]`, 'g');
+      code = code.replace(interpRegex, (_, startStr) => {
+        const oldStart = Number(startStr);
+        const pad = Math.max(10, oldDur - oldStart);
+        const newStart = Math.max(0, newDur - pad);
+        console.log(
+          `🎬 Scene ${i} exit transition retimed: [${oldStart}, ${oldDur}] -> [${newStart}, ${newDur}]`
+        );
+        return `[${newStart}, ${newDur}]`;
+      });
+    }
+  }
+
+  return code;
+}
+
 async function main() {
   let code = tsxB64
     ? Buffer.from(tsxB64, 'base64').toString('utf-8')
@@ -222,11 +298,24 @@ async function main() {
   code = await sanitizeLucideImports(code);
   code = await prefetchExternalMedia(code);
 
-  fs.writeFileSync('src/remotion/DynamicVideo.tsx', code, 'utf-8');
-
   const prevMeta = fs.existsSync('src/remotion/meta.json')
     ? JSON.parse(fs.readFileSync('src/remotion/meta.json', 'utf-8'))
     : {};
+
+  const telemetryPath = 'src/remotion/audio-telemetry.json';
+  let telemetry = null;
+  if (fs.existsSync(telemetryPath)) {
+    try {
+      telemetry = JSON.parse(fs.readFileSync(telemetryPath, 'utf-8'));
+    } catch {}
+  }
+
+  const scenes = Array.isArray(telemetry?.scenes) ? telemetry.scenes : [];
+  if (scenes.length > 0) {
+    code = resyncVisualScenes(code, scenes);
+  }
+
+  fs.writeFileSync('src/remotion/DynamicVideo.tsx', code, 'utf-8');
 
   // Respect durationInFrames, but ensure it covers full audio duration if voiceover exists
   const audioDuration = prevMeta.computedDurationInFrames || 0;
@@ -252,13 +341,9 @@ async function main() {
   // If voiceover was generated (audio-telemetry.json exists) but Gemini's TSX code forgot
   // to import/render <Audio>, dynamically update Root.tsx so Remotion always renders audio!
   const hasUserAudio = /<Audio[\s/>]/.test(code);
-  const telemetryPath = 'src/remotion/audio-telemetry.json';
-  if (!hasUserAudio && fs.existsSync(telemetryPath)) {
+  if (!hasUserAudio && scenes.length > 0) {
     try {
-      const telemetry = JSON.parse(fs.readFileSync(telemetryPath, 'utf-8'));
-      const scenes = Array.isArray(telemetry?.scenes) ? telemetry.scenes : [];
-      if (scenes.length > 0) {
-        console.log(`🎙️ Auto-injecting ${scenes.length} voiceover scene(s) into Root.tsx composition...`);
+      console.log(`🎙️ Auto-injecting ${scenes.length} voiceover scene(s) into Root.tsx composition...`);
         const rootTsxContent = `import React from 'react';
 import { Composition, Audio, Sequence, staticFile } from 'remotion';
 import { DynamicVideo } from './DynamicVideo';
@@ -298,7 +383,6 @@ export const RemotionRoot: React.FC = () => {
 `;
         fs.writeFileSync('src/remotion/Root.tsx', rootTsxContent, 'utf-8');
         console.log('✅ Root.tsx successfully patched with auto voiceover audio track!');
-      }
     } catch (e) {
       console.warn('⚠️ Could not auto-inject audio into Root.tsx:', e);
     }

@@ -88,18 +88,17 @@ jobs:
       - name: Install Python Edge-TTS, yt-dlp & Cloudflare WARP for Autonomous Audio Extraction
         run: |
           python -m pip install --upgrade edge-tts mutagen yt-dlp
-          # Setup WireGuard & Cloudflare WARP to bypass YouTube datacenter IP bot detection
-          sudo apt-get update -qq && sudo apt-get install -y -qq wireguard openresolv curl
-          sudo wget -q -O /usr/local/bin/wgcf https://github.com/ViRb3/wgcf/releases/download/v2.2.22/wgcf_2.2.22_linux_amd64
-          sudo chmod +x /usr/local/bin/wgcf
-          wgcf register --accept-tos || true
-          wgcf generate || true
-          if [ -f wgcf-profile.conf ]; then
-            sudo cp wgcf-profile.conf /etc/wireguard/wg0.conf
-            sudo wg-quick up wg0 || echo "WARP interface startup optional"
-            echo "🌐 Outbound IP routed via Cloudflare WARP:"
-            curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E "ip|warp" || true
-          fi
+          # Install official Cloudflare WARP client for Ubuntu 24.04 (noble)
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ noble main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq cloudflare-warp
+          sudo systemctl start warp-svc || true
+          sleep 2
+          warp-cli --accept-tos registration new || true
+          warp-cli --accept-tos connect || true
+          sleep 3
+          echo "🌐 Outbound IP routed via Cloudflare WARP:"
+          curl -s https://www.cloudflare.com/cdn-cgi/trace | grep -E "ip|warp" || true
 
       - name: Prepare YouTube Cookies if configured
         env:

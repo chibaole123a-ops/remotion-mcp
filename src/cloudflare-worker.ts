@@ -1012,6 +1012,35 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const galleryUrl = `${baseUrl}/gallery${secretQuery}`;
         const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
+        // Wait synchronously for initial render completion up to 25s (so Gemini can directly observe result or catch error in 1 call!)
+        const waitStart = Date.now();
+        let finalStatus = 'rendering_on_cloud';
+        let isSuccess = false;
+        let isFailed = false;
+        let errorDetails: string | undefined;
+
+        while (Date.now() - waitStart < 25000) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const check = await checkReleaseAssetsOnGitHub(env, jobId);
+          if (check.videoReady) {
+            isSuccess = true;
+            finalStatus = 'completed';
+            break;
+          }
+          if (check.errorLogText) {
+            isFailed = true;
+            finalStatus = 'failed';
+            errorDetails = check.errorLogText;
+            break;
+          }
+          const wf = await inspectGitHubWorkflowRun(env, jobId);
+          if (wf?.conclusion === 'failure') {
+            isFailed = true;
+            finalStatus = 'failed';
+            break;
+          }
+        }
+
         return {
           jsonrpc: '2.0',
           id,
@@ -1021,7 +1050,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 type: 'text',
                 text: JSON.stringify(
                   {
-                    status: 'video_dispatched_to_cloud',
+                    status: finalStatus,
                     jobId,
                     title,
                     specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames / ${(durationInFrames / fps).toFixed(1)}s)`,
@@ -1029,11 +1058,17 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     streamUrl,
                     galleryUrl,
                     directDownloadUrl: videoUrl,
-                    notes: warnings.length > 0 ? warnings : undefined,
-                    instructionsForAgent:
-                      `Present links cleanly in markdown: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${videoUrl}). Do NOT print raw long URLs.`,
-                    message:
-                      'Render job dispatched to GitHub Actions Cloud (16GB RAM)! Present links to user or call get_task_status with jobId to track progress.',
+                    errorDetails: errorDetails || undefined,
+                    instructionsForAgent: isSuccess
+                      ? `Render completed successfully! Present the video watch link to the user: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${videoUrl})`
+                      : isFailed
+                      ? `Render failed on cloud runner! Inspect "errorDetails" above, fix your React TSX code or assets, and re-call render_video.`
+                      : `Video is actively rendering on 16GB Cloud Runners (takes ~30-40s). Call get_task_status(jobId: "${jobId}") to monitor completion!`,
+                    message: isSuccess
+                      ? 'Render completed successfully!'
+                      : isFailed
+                      ? `Render failed with error: ${errorDetails || 'Runner failure'}. Check errorDetails to fix.`
+                      : 'Render job dispatched and actively rendering. Call get_task_status to wait for final MP4 link.',
                   },
                   null,
                   2

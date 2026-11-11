@@ -203,23 +203,25 @@ async function prefetchExternalMedia(code) {
   }
   const fnName = hasStaticFileImport ? 'staticFile' : '__remotionStaticFile';
 
-  updatedCode = updatedCode.replace(videoUrlRegex, (fullMatch, quote, url) => {
-    const localFile = urlToLocalFile.get(url);
-    if (!localFile) return fullMatch;
-    return `${fnName}('${localFile}')`;
-  });
+  // In JSX attributes (e.g. src="..."), replacing "https://..." with staticFile('...') causes invalid syntax: src=staticFile('...')
+  // It MUST be wrapped in curly braces: src={staticFile('...')}
+  function replaceUrlWithStaticFile(sourceCode, regex) {
+    return sourceCode.replace(regex, (fullMatch, quote, url, offset, fullStr) => {
+      const localFile = urlToLocalFile.get(url);
+      if (!localFile) return fullMatch;
 
-  updatedCode = updatedCode.replace(audioUrlRegex, (fullMatch, quote, url) => {
-    const localFile = urlToLocalFile.get(url);
-    if (!localFile) return fullMatch;
-    return `${fnName}('${localFile}')`;
-  });
+      // Check if preceding character is '=' (JSX prop assignment)
+      const prefix = fullStr.slice(Math.max(0, offset - 5), offset).trim();
+      if (prefix.endsWith('=')) {
+        return `{${fnName}('${localFile}')}`;
+      }
+      return `${fnName}('${localFile}')`;
+    });
+  }
 
-  updatedCode = updatedCode.replace(imageUrlRegex, (fullMatch, quote, url) => {
-    const localFile = urlToLocalFile.get(url);
-    if (!localFile) return fullMatch;
-    return `${fnName}('${localFile}')`;
-  });
+  updatedCode = replaceUrlWithStaticFile(updatedCode, videoUrlRegex);
+  updatedCode = replaceUrlWithStaticFile(updatedCode, audioUrlRegex);
+  updatedCode = replaceUrlWithStaticFile(updatedCode, imageUrlRegex);
 
   return updatedCode;
 }

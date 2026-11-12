@@ -1183,12 +1183,12 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       ? `Render completed successfully! Present the video watch link to the user: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${videoUrl})`
                       : isFailed
                       ? `Render failed on cloud runner! Inspect "errorDetails" above, fix your React TSX code or assets, and re-call render_video.`
-                      : `Video is still rendering. DO NOT END TURN YET! You MUST immediately call get_task_status(jobId: "${jobId}") in your next tool call to wait for the completed video!`,
+                      : `CRITICAL ACTION REQUIRED: Video is still rendering on Cloud Runner! DO NOT reply to the user yet and DO NOT say you are waiting. You MUST immediately execute the tool get_task_status(jobId: "${jobId}", waitForCompletion: true) right now until it returns status: "completed"!`,
                     message: isSuccess
                       ? 'Render completed successfully! Present watchPageUrl to user.'
                       : isFailed
                       ? `Render failed with error: ${errorDetails || 'Runner failure'}. Check errorDetails to fix.`
-                      : `Render is in progress on Cloud Runner. Call get_task_status(jobId: "${jobId}") now to get the completed video!`,
+                      : `RENDER IN PROGRESS: Do not finish your response! Call get_task_status(jobId: "${jobId}") now to retrieve the completed video link for the user.`,
                   },
                   null,
                   2

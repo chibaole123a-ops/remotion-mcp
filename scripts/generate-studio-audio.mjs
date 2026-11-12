@@ -75,41 +75,50 @@ function buildProportionalWords(text, totalDurationMs, fpsVal) {
 const pyScriptPath = 'scripts/_edge_word_tts.py';
 fs.writeFileSync(
   pyScriptPath,
-  `import sys, json, asyncio
+  `import sys, json, asyncio, time
 import edge_tts
+
+async def synthesize_with_retry(text, voice, rate, out_mp3, max_attempts=4):
+    last_err = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            comm = edge_tts.Communicate(text, voice, rate=rate)
+            words = []
+            max_end_ms = 0
+            has_audio = False
+            with open(out_mp3, "wb") as audio_f:
+                async for chunk in comm.stream():
+                    ctype = chunk.get("type")
+                    if ctype == "audio":
+                        audio_f.write(chunk["data"])
+                        has_audio = True
+                    elif ctype in ("WordBoundary", "SentenceBoundary"):
+                        offset_ms = round(chunk.get("offset", 0) / 10000)
+                        dur_ms = round(chunk.get("duration", 0) / 10000)
+                        end_ms = offset_ms + max(60, dur_ms)
+                        if end_ms > max_end_ms:
+                            max_end_ms = end_ms
+                        wtext = (chunk.get("text") or "").strip()
+                        if wtext:
+                            words.append({
+                                "type": ctype,
+                                "word": wtext,
+                                "startMs": offset_ms,
+                                "endMs": end_ms
+                            })
+            if has_audio:
+                return words, max_end_ms
+        except Exception as err:
+            last_err = err
+            await asyncio.sleep(0.8 * attempt)
+    raise last_err or Exception("Failed to synthesize after retries")
 
 async def main():
     txt_file, voice, rate, out_mp3, out_json = sys.argv[1:6]
     with open(txt_file, "r", encoding="utf-8") as f:
         text = f.read().strip()
 
-    try:
-        comm = edge_tts.Communicate(text, voice, rate=rate)
-    except Exception as err:
-        sys.stderr.write("Communicate init error: " + str(err) + "\\n")
-        sys.exit(1)
-
-    words = []
-    max_end_ms = 0
-    with open(out_mp3, "wb") as audio_f:
-        async for chunk in comm.stream():
-            ctype = chunk.get("type")
-            if ctype == "audio":
-                audio_f.write(chunk["data"])
-            elif ctype in ("WordBoundary", "SentenceBoundary"):
-                offset_ms = round(chunk.get("offset", 0) / 10000)
-                dur_ms = round(chunk.get("duration", 0) / 10000)
-                end_ms = offset_ms + max(60, dur_ms)
-                if end_ms > max_end_ms:
-                    max_end_ms = end_ms
-                wtext = (chunk.get("text") or "").strip()
-                if wtext:
-                    words.append({
-                        "type": ctype,
-                        "word": wtext,
-                        "startMs": offset_ms,
-                        "endMs": end_ms
-                    })
+    words, max_end_ms = await synthesize_with_retry(text, voice, rate, out_mp3)
 
     exact_dur_ms = max_end_ms
     try:
@@ -259,6 +268,10 @@ generateSilentAudioFile('public/bgm.mp3', 1);
 fs.copyFileSync('public/bgm.mp3', 'src/remotion/public/bgm.mp3');
 
 for (let i = 0; i < Math.max(segments.length, 15); i++) {
+  if (i > 0 && i < segments.length) {
+    // Small delay between segments to prevent WebSocket throttling from Edge-TTS servers
+    await new Promise((r) => setTimeout(r, 600));
+  }
   const seg = segments[i];
   const text = typeof seg === 'string' ? seg : seg?.text || '';
   const segVoice = (typeof seg === 'object' && seg?.voice) || voice;

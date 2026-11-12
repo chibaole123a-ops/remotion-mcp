@@ -79,7 +79,70 @@ export const DynamicVideo: React.FC = () => {
   );
 };
 \`\`\`
-`;
+
+---
+
+## 🚀 LONG-FORM VIDEO ARCHITECTURE (FOR ANY DURATION: 1 MIN, 3 MIN, 10+ MIN, FULL SONGS):
+
+You have **unlimited rendering capacity**. The cloud runners support videos of ANY length (1,800 to 30,000+ frames).
+Never truncate a video to 5-15 seconds unless the user explicitly requested a short preview!
+To write clean, concise React code that runs smoothly for long durations without running out of tokens:
+
+### 1. Data-Driven Scene Array (Write 100 lines of code for a 5-minute video):
+Instead of hardcoding 50 separate \`<Sequence>\` blocks, store your narrative in a structured scene array and map over it:
+\`\`\`tsx
+import React from 'react';
+import { AbsoluteFill, Sequence, Audio, staticFile, useCurrentFrame } from 'remotion';
+
+interface SceneData {
+  title: string;
+  subtitle: string;
+  tag: string;
+  durationSec: number;
+}
+
+const SCENES: SceneData[] = [
+  { title: "Chương 1: Khởi đầu", subtitle: "Bối cảnh lịch sử và nguyên nhân ra đời", tag: "Mở đầu", durationSec: 15 },
+  { title: "Chương 2: Phát triển", subtitle: "Các bước đột phá công nghệ quan trọng", tag: "Chi tiết", durationSec: 20 },
+  { title: "Chương 3: Thách thức", subtitle: "Những rào cản và giải pháp thực tế", tag: "Phân tích", durationSec: 25 },
+  // Add as many scenes as needed for 3-10 minutes!
+];
+
+export const DynamicVideo: React.FC = () => {
+  const fps = 30;
+  let accumulatedFrames = 0;
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#090d16', color: '#fff' }}>
+      <Audio src="https://www.youtube.com/watch?v=..." volume={0.8} />
+
+      {SCENES.map((scene, idx) => {
+        const fromFrame = accumulatedFrames;
+        const durFrames = scene.durationSec * fps;
+        accumulatedFrames += durFrames;
+
+        return (
+          <Sequence key={idx} from={fromFrame} durationInFrames={durFrames}>
+            <SceneCard scene={scene} durationInFrames={durFrames} />
+            <Audio src={staticFile(\`voice-\${idx}.mp3\`)} volume={1} />
+          </Sequence>
+        );
+      })}
+    </AbsoluteFill>
+  );
+};
+\`\`\`
+
+### 2. Cyclical / Looping Animations (Safe for 10,000+ frames):
+Never use unbounded linear values that overflow. Use modulo (\`frame % 180\`) or harmonic functions (\`Math.sin(frame / 30)\`):
+- **Ambient Particles / Gradients**: \`const bgHue = (frame * 0.2) % 360;\`
+- **Audio Visualizers / Waveforms**: Pulse elements using \`Math.sin(frame * 0.1)\` or \`evolvePath\`.
+- **Lyric / Text Scroll**: Use \`interpolate(frame, [start, end], [100, -100])\` per scene.
+
+### 3. Voiceover Timing Calculation:
+For videos with voice narration, ALWAYS invoke \`plan_speech_timing({ scenes: [...] })\` first.
+Use the returned \`totalDurationInFrames\` directly as your \`durationInFrames\` in \`render_video\`.
+\`;
 
 function toBase64Utf8(str: string): string {
   const bytes = new TextEncoder().encode(str);
@@ -559,7 +622,8 @@ const TOOLS = [
         },
         durationInFrames: {
           type: 'number',
-          description: 'Total duration in frames (seconds * fps). You freely decide this based on narrative pacing or speech telemetry.',
+          description:
+            'Total duration in frames (seconds * fps). You have unlimited rendering capacity for any length (e.g. 60s = 1800, 3 mins = 5400, 5 mins = 9000, 10 mins = 18000 frames). Match your narrative length or speech telemetry.',
           default: 300,
         },
         fps: {

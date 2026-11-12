@@ -145,11 +145,13 @@ jobs:
               --public-dir=public \
               --gl=swangle \
               --codec=h264 \
-              --crf=18 \
-              --preset=faster \
+              --crf=22 \
+              --preset=veryfast \
               --concurrency=100% \
+              --disposition=rm \
+              --memory-limit=4096 \
               --log=error \
-              --timeout=60000 \
+              --timeout=120000 \
               --chromium-options="--disable-dev-shm-usage --no-sandbox" 2> outputs/error-${{ inputs.jobId }}.txt
             EXIT_CODE=$?
           fi

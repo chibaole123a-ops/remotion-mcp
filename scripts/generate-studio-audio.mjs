@@ -369,24 +369,25 @@ if (isMasterSpineMode) {
     // inside a <Sequence from={startFrame}>, it plays ONLY that segment's speech and NEVER repeats the whole track!
     const sliceStartSec = (segStartFrame / fps).toFixed(3);
     const sliceDurSec = (segDurFrames / fps).toFixed(3);
+    const segOutFile = `public/voice-${i}.mp3`;
 
     try {
       execSync(
-        `npx remotion ffmpeg -y -ss ${sliceStartSec} -t ${sliceDurSec} -i "${masterOutFile}" -c copy "${outFile}"`,
+        `npx remotion ffmpeg -y -ss ${sliceStartSec} -t ${sliceDurSec} -i "${masterOutFile}" -c copy "${segOutFile}"`,
         { stdio: ['ignore', 'ignore', 'ignore'] }
       );
     } catch {
       try {
         execSync(
-          `ffmpeg -y -ss ${sliceStartSec} -t ${sliceDurSec} -i "${masterOutFile}" -c copy "${outFile}"`,
+          `ffmpeg -y -ss ${sliceStartSec} -t ${sliceDurSec} -i "${masterOutFile}" -c copy "${segOutFile}"`,
           { stdio: ['ignore', 'ignore', 'ignore'] }
         );
       } catch {
-        fs.copyFileSync(masterOutFile, outFile);
+        fs.copyFileSync(masterOutFile, segOutFile);
       }
     }
 
-    fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
+    fs.copyFileSync(segOutFile, `src/remotion/public/voice-${i}.mp3`);
     fs.writeFileSync(`public/captions-${i}.json`, JSON.stringify(segWords, null, 2), 'utf-8');
     fs.copyFileSync(`public/captions-${i}.json`, `src/remotion/public/captions-${i}.json`);
   }

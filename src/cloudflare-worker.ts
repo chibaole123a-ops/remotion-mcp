@@ -1207,14 +1207,15 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const galleryUrl = `${baseUrl}/gallery${secretQuery}`;
         const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
-        // Wait synchronously for render completion up to 45s so Gemini directly receives status: "completed" with the final watch URL!
+        // Wait synchronously for render completion up to 90s directly inside render_video!
+        // This ensures Gemini receives the final completed video link immediately without having to poll multiple times.
         const waitStart = Date.now();
         let finalStatus = 'rendering_on_cloud';
         let isSuccess = false;
         let isFailed = false;
         let errorDetails: string | undefined;
 
-        while (Date.now() - waitStart < 45000) {
+        while (Date.now() - waitStart < 95000) {
           await new Promise((r) => setTimeout(r, 4000));
           const check = await checkReleaseAssetsOnGitHub(env, jobId);
           if (check.videoReady) {
@@ -1232,6 +1233,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           if (wf?.conclusion === 'failure') {
             isFailed = true;
             finalStatus = 'failed';
+            errorDetails = 'GitHub Actions workflow failed during build or render step. Check logs with inspect_task_logs.';
             break;
           }
         }

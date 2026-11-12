@@ -137,6 +137,43 @@ For professional-quality videos with seamless speech and zero dead air:
    - \`<ProKaraokeCaptions>\` automatically tracks 100% real Edge-TTS \`WordBoundary\` timestamps across the timeline. Each spoken word bounces with an organic spring animation and highlights in vibrant gold/cyan as the speaker says it!
 6. **Live Render & Completion**: Submit to \`render_video\` and call \`get_task_status(jobId, waitForCompletion: true)\` until completed!
 
+## 🎬 THE MASTER DIRECTOR & VIDEO EDITOR BLUEPRINT:
+To produce Oscar-caliber, viral studio videos, you must orchestrate all 5 anatomical organs of video creation with deep psychological and cinematic craft:
+
+### 1. Script & Voiceover Anatomy (Write for the Ear, Not the Eye):
+- **Hook (0-5s)**: In Media Res. Never say "Xin chào...". Open with a paradox, a startling question, or a high-stakes dilemma.
+- **Cadence & Sentence Contrast**: Alternate short punchy sentences with rhythmic explanations.
+  * *Example*: "Nó rất nhanh. Nhanh đến mức ánh sáng cũng không thể thoát. Và đó mới chỉ là khởi đầu."
+- **Word Painting**: Choose tactile, sensory words that evoke mental imagery ("nhà máy tắt đèn, container nằm phơi nắng" instead of "kinh tế suy thoái").
+- **Pixar's "Therefore / But"**: Connect scenes with consequences or unexpected obstacles, NEVER with flat "and then".
+- **Visual Call-outs**: Directly refer to on-screen visuals ("Hãy nhìn vào đường màu đỏ này...", "Ngay tại tâm điểm...") to bind eye and ear together.
+
+### 2. Visual Curation & Cinematography (Metaphor Over Literalism):
+- **Kill Literal Matching**: If the script says "Tôi suy nghĩ", do NOT show a person with a hand on their head. Show a crowded Tokyo intersection at midnight or branching lightning in storm clouds.
+- **Shot Scale Contrast**: Cycle between Extreme Wide (grand spatial context), Medium (relational dynamics), and Macro Close-up (extreme tension/details).
+- **Tactile 2.5D Spatial Depth**: Separate your frame into Foreground (ambient particles/light leaks), Midground (primary subject/cards), and Background (subtle moving perspective grid/dark gradient).
+- **The Living Canvas (Ken Burns)**: Static images must never sit dead. Always apply subtle zoom-in (building tension), zoom-out (revealing scale), or gentle cinematic pans.
+
+### 3. Motion & Animation Physics (The Eye-Trace Control):
+- **Strictly No Linear Motion**: Pure linear interpolation (\`interpolate\`) feels robotic. Always use \`spring({ damping, stiffness, mass })\` for organic physical weight.
+- **Eye-Trace Continuity**: If a scene ends with the focal point at the top-right, ensure the incoming scene's key subject lands at the top-right or sweeps the eye naturally.
+- **Pattern Interruption (Every 4-6 Seconds)**: Prevent attention drift by inserting visual resets—punch-ins, rough-notation sketch circles (\`<Circle>\`, \`<Highlight>\`), or typographic pops.
+
+### 4. Soundscape & Auditory Hierarchy (50% of the Emotion):
+- **4-Layer Audio Stack**:
+  1. *Master Voiceover*: Crystal clear, continuous spine (\`voiceover.mp3\`).
+  2. *Auditory Foley*: Paper rustles on documents, camera shutters on photos, marker squeaks on highlights.
+  3. *Accents & SFX*: Whooshes on wipes/slides, deep sub-bass booms on dramatic reveals, subtle clicks on data points.
+  4. *Emotional Score (BGM)*: Ducked to 15% during voiceover; swelling dynamically to 35-40% during transition pauses.
+- **The Power of the Sudden Silence**: Abruptly mute BGM 0.8s before a monumental revelation; the sudden vacuum of sound magnifies the impact tenfold.
+
+### 5. Color Grading & Typographic Authority:
+- **Genre Color Harmonies**:
+  * *Sci-Fi / AI / Tech*: Deep void (#050811), Electric Cyan (#00f2fe), Neon Purple (#7928ca).
+  * *Investigative / History (Vox)*: Archival newsprint (#f8fafc), Amber yellow (#f59e0b), muted slate (#1e293b).
+  * *High-Stakes / Business*: Coal black, Warning Crimson (#ef4444), Gold ingot (#fbbf24).
+- **Legibility is Law**: Always ensure heavy contrast, drop shadows, or frosted glass (\`backdropFilter: blur(14px)\`) behind typography. Never let text drown in background clutter.
+
 ---
 
 ## 🎨 UNBOUNDED ARTISTIC & CREATIVE AUTONOMY (THE CHAMELEON DIRECTOR):

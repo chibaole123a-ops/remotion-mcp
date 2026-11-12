@@ -1310,7 +1310,7 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         let isFailed = false;
         let errorDetails: string | undefined;
 
-        while (Date.now() - waitStart < 95000) {
+        while (Date.now() - waitStart < 20000) {
           await new Promise((r) => setTimeout(r, 4000));
           const check = await checkReleaseAssetsOnGitHub(env, jobId);
           if (check.videoReady) {

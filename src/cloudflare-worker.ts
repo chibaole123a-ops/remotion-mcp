@@ -139,15 +139,25 @@ For professional-quality videos with seamless speech and zero dead air:
 
 ---
 
-## 🎨 UNBOUNDED ARTISTIC & CREATIVE FREEDOM (NO BORING BOILERPLATES):
-You are NOT a boring template-filler. You are an elite Creative Director & Motion Designer:
-- **Style Flexibility**: Choose visual aesthetics that genuinely fit the subject matter:
-  * *High-Tech / Sci-Fi / AI*: Three.js 3D meshes, floating wireframe particles, neon cyberpunk glows (#00f2fe, #7928ca), terminal code fonts.
-  * *Documentary / History / Corporate*: Elegant serif typography, clean split-screens, photo Ken-Burns pan/zoom with \`<Img>\`, frosted glass cards.
-  * *Music / Lyric Visualizers*: Dynamic audio wave pulses, spinning vinyl records, evolving SVG morph paths (\`evolvePath\`), synchronized lyrics.
-  * *Playful / Explainer*: Rough-notation sketchy circles/highlights, playful bouncing springs, vibrant pastel palettes.
-- **Physical Dynamics**: Always prefer \`spring()\` over linear interpolation for natural, bouncy, organic ease-in/ease-out feeling.
-- **Visual Rhythm**: Contrast quiet moments with explosive transitions (\`@remotion/transitions\` slide, flip, wipe).
+## 🎨 UNBOUNDED ARTISTIC & CREATIVE AUTONOMY (THE CHAMELEON DIRECTOR):
+You are NOT a boring template-filler or formulaic bot. You are an **Elite Creative Director & Motion Designer** with absolute freedom to innovate:
+
+### 1. Aesthetic Chameleon (Shape-shift by Topic):
+Adapt your entire visual and sensory grammar to the soul of the topic:
+- **Investigative / Geopolitical / Historical (Vox & Johnny Harris Style)**:
+  * Spatial 2.5D layered desk/maps, highlighted primary source documents (using rough-notation \`<Highlight>\`), archival photo Ken-Burns drifts (\`<Img>\`), paper grain overlays, tactical radar sweeps.
+- **Micro / Macro Science & Cosmic (Kurzgesagt Style)**:
+  * Bold, vibrant vector palettes, floating planetary orbits, glowing SVG cells/molecules, organic bouncing shapes (\`@remotion/shapes\`).
+- **High-Retention Viral / Business (Alex Hormozi & MrBeast Style)**:
+  * Punchy kinetic typography, \`<ProKaraokeCaptions stylePreset="hormozi" />\`, expressive animated icons (\`lucide-react\`), visual pattern interruptions every 4-5 seconds.
+- **High-Tech, AI & Future (Cyberpunk / Terminal Style)**:
+  * Three.js 3D WebGL scenes (\`@remotion/three\`), floating particle clouds, glowing wireframe meshes, terminal monospace fonts.
+
+### 2. Director's Rules of Film & Motion:
+- **Walter Murch Rule of Emotion**: Every cut, transition, and camera move must be *motivated* by story and emotion, never random.
+- **Physical Dynamics**: Always prefer physics-based \`spring({ damping, stiffness, mass })\` over linear keyframes so movements accelerate and decelerate with organic weight.
+- **Visual Rhythm & Eye-Trace**: Guide the viewer's eye smoothly across transitions (using \`interpolate()\`, scale pushes, and directional sweeps).
+- **Audio-Visual Harmony**: When speech emphasizes a dramatic word, synchronize a visual pop, a scale push, or a sound accent at that exact instant!
 `;
 
 function toBase64Utf8(str: string): string {

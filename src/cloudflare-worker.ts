@@ -1569,7 +1569,8 @@ export default {
     const isPublicMediaRoute =
       url.pathname === '/' ||
       pathParts[0] === 'still' ||
-      pathParts[0] === 'video';
+      pathParts[0] === 'video' ||
+      pathParts[0] === 'watch';
 
     if (env.MCP_SECRET && !isPublicMediaRoute) {
       const isValid =

@@ -662,19 +662,185 @@ export const ContinuousAudioTrack: React.FC<{ bgmVolume?: number; voiceVolume?: 
   );
 };
 
-export interface WordHighlightCaptionsProps {
-  sceneIndex?: number;
+export interface ProKaraokeCaptionsProps {
+  stylePreset?: 'hormozi' | 'glow' | 'minimal' | 'cyber';
   highlightColor?: string;
   activeBgColor?: string;
   textColor?: string;
   fontSize?: number;
   bottomOffset?: number;
-  combineTokensWithinMilliseconds?: number;
+  wordsPerPage?: number;
   style?: React.CSSProperties;
 }
 
 /**
- * Automatic Word-by-Word Karaoke Highlight Captions powered by Edge-TTS WordBoundary.
+ * 👑 PRO KARAOKE HIGHLIGHT CAPTIONS (Alex Hormozi / TikTok / MrBeast Studio Quality):
+ * Reads 100% real Edge-TTS WordBoundary telemetry timestamps across the master audio stream.
+ * Features dynamic spring pops on each active word, glowing neon drop-shadows, and auto-page wrapping!
+ */
+export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
+  stylePreset = 'hormozi',
+  highlightColor = '#facc15',
+  activeBgColor = 'rgba(250, 204, 21, 0.2)',
+  textColor = '#ffffff',
+  fontSize = 44,
+  bottomOffset = 90,
+  wordsPerPage = 5,
+  style,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  const allWords = useMemo(() => {
+    return (audioTelemetry?.allWords || []) as WordToken[];
+  }, []);
+
+  if (allWords.length === 0) return null;
+
+  // Group allWords into pages of 4-6 words for punchy high-retention reading
+  const pages = useMemo(() => {
+    const res: Array<{
+      pageIndex: number;
+      startFrame: number;
+      endFrame: number;
+      words: WordToken[];
+    }> = [];
+
+    for (let i = 0; i < allWords.length; i += wordsPerPage) {
+      const slice = allWords.slice(i, i + wordsPerPage);
+      if (slice.length > 0) {
+        const startFrame = slice[0].globalStartFrame ?? slice[0].startFrame;
+        const endFrame = slice[slice.length - 1].globalEndFrame ?? slice[slice.length - 1].endFrame;
+        res.push({
+          pageIndex: res.length,
+          startFrame,
+          endFrame: Math.max(endFrame, startFrame + 15),
+          words: slice,
+        });
+      }
+    }
+    return res;
+  }, [allWords, wordsPerPage]);
+
+  const activePage = pages.find((p, idx) => {
+    const nextP = pages[idx + 1];
+    const pageTail = nextP ? nextP.startFrame : p.endFrame + 18;
+    return frame >= p.startFrame && frame < pageTail;
+  });
+
+  if (!activePage) return null;
+
+  // Page entrance spring bounce
+  const pageEnterSpring = spring({
+    frame: Math.max(0, frame - activePage.startFrame),
+    fps,
+    config: { damping: 13, stiffness: 220, mass: 0.5 },
+  });
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: '5%',
+        right: '5%',
+        bottom: bottomOffset,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        pointerEvents: 'none',
+        zIndex: 150,
+        ...style,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '10px 14px',
+          maxWidth: 1200,
+          padding: '16px 32px',
+          borderRadius: 24,
+          backgroundColor:
+            stylePreset === 'minimal'
+              ? 'transparent'
+              : stylePreset === 'cyber'
+              ? 'rgba(6, 11, 25, 0.85)'
+              : 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: stylePreset === 'minimal' ? 'none' : 'blur(12px)',
+          border:
+            stylePreset === 'cyber'
+              ? '1px solid rgba(0, 242, 254, 0.35)'
+              : stylePreset === 'hormozi'
+              ? '1px solid rgba(255, 255, 255, 0.12)'
+              : 'none',
+          boxShadow:
+            stylePreset === 'cyber'
+              ? '0 0 35px rgba(0, 242, 254, 0.25)'
+              : '0 16px 45px rgba(0,0,0,0.6)',
+          transform: `scale(${interpolate(pageEnterSpring, [0, 1], [0.92, 1])}) translateY(${interpolate(
+            pageEnterSpring,
+            [0, 1],
+            [12, 0]
+          )}px)`,
+        }}
+      >
+        {activePage.words.map((w, idx) => {
+          const wStart = w.globalStartFrame ?? w.startFrame;
+          const wEnd = w.globalEndFrame ?? w.endFrame;
+          const isActive = frame >= wStart && frame <= wEnd;
+          const isPast = frame > wEnd;
+
+          // Word pop spring animation
+          const wordPop = spring({
+            frame: Math.max(0, frame - wStart),
+            fps,
+            config: { damping: 12, stiffness: 280, mass: 0.4 },
+          });
+
+          const activeScale = isActive ? interpolate(wordPop, [0, 1], [1.0, 1.18]) : 1.0;
+          const activeY = isActive ? -4 : 0;
+
+          const chosenHighlight =
+            stylePreset === 'hormozi'
+              ? idx % 2 === 0
+                ? '#facc15'
+                : '#38bdf8'
+              : stylePreset === 'cyber'
+              ? '#00f2fe'
+              : highlightColor;
+
+          return (
+            <span
+              key={`${wStart}-${idx}`}
+              style={{
+                display: 'inline-block',
+                fontFamily: 'Impact, "Arial Black", system-ui, sans-serif',
+                fontSize,
+                fontWeight: 900,
+                letterSpacing: 0.8,
+                textTransform: 'uppercase',
+                color: isActive ? chosenHighlight : isPast ? textColor : 'rgba(255, 255, 255, 0.55)',
+                backgroundColor: isActive ? activeBgColor : 'transparent',
+                padding: '4px 10px',
+                borderRadius: 12,
+                transform: `scale(${activeScale}) translateY(${activeY}px)`,
+                textShadow: isActive
+                  ? `0 0 25px ${chosenHighlight}aa, 0 3px 12px rgba(0,0,0,0.9)`
+                  : '0 3px 8px rgba(0,0,0,0.8)',
+                WebkitTextStroke: isActive ? '1.5px rgba(0,0,0,0.6)' : 'none',
+                transition: 'color 0.1s ease',
+              }}
+            >
+              {w.word}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
  * If `sceneIndex` is omitted, it automatically tracks the active narration segment across the global timeline!
  */
 export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({

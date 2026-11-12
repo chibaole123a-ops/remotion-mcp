@@ -169,12 +169,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="videos-store"
+          mkdir -p outputs
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "Rendered Videos Storage" --notes "Automated storage for Remotion MCP rendered MP4 files"
           fi
-          if [ -f "outputs/error-${{ inputs.jobId }}.txt" ]; then
-            gh release upload "$TAG" "outputs/error-${{ inputs.jobId }}.txt" --clobber || true
+          if [ ! -f "outputs/error-${{ inputs.jobId }}.txt" ]; then
+            echo "Workflow failed during step before Remotion render (e.g. dependencies, audio synthesis or preparation). Check GitHub run logs." > "outputs/error-${{ inputs.jobId }}.txt"
           fi
+          gh release upload "$TAG" "outputs/error-${{ inputs.jobId }}.txt" --clobber || true
 
       - name: Publish Video or Still to GitHub Release (Free Unlimited CDN Link)
         if: success()

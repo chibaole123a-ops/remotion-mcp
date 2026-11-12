@@ -344,11 +344,49 @@ async function inspectGitHubWorkflowRun(env: Env, jobId: string) {
     const runs: any[] = runsData?.workflow_runs || [];
     if (runs.length === 0) return null;
 
-    const targetRun = runs.find(
+    // Search across workflow runs for matching jobId in logs, jobs or most recent run
+    let targetRun = runs.find(
       (r) =>
         (typeof r.display_title === 'string' && r.display_title.includes(jobId)) ||
         (typeof r.name === 'string' && r.name.includes(jobId))
     );
+
+    // If not found in title, check the jobs of the recent runs (within last 30 minutes)
+    if (!targetRun) {
+      for (const r of runs.slice(0, 5)) {
+        try {
+          const jobsRes = await fetch(r.jobs_url, {
+            headers: {
+              Accept: 'application/vnd.github+json',
+              Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+              'User-Agent': 'Remotion-Cloudflare-MCP-Worker',
+            },
+          });
+          if (jobsRes.ok) {
+            const jobsData: any = await jobsRes.json();
+            const job0 = jobsData?.jobs?.[0];
+            const steps = job0?.steps || [];
+            // Check if any step or job matches or if this is the most recent active run
+            const hasJobIdInSteps = steps.some((s: any) => typeof s.name === 'string' && s.name.includes(jobId));
+            if (hasJobIdInSteps || (r.status === 'in_progress' || (Date.now() - new Date(r.created_at).getTime() < 1200000))) {
+              targetRun = r;
+              return {
+                runId: r.id,
+                status: r.status,
+                conclusion: r.conclusion,
+                htmlUrl: r.html_url,
+                steps: steps.map((s: any) => ({
+                  name: s.name,
+                  status: s.status,
+                  conclusion: s.conclusion,
+                })),
+              };
+            }
+          }
+        } catch {}
+      }
+    }
+
     if (!targetRun) return null;
 
     const jobsRes = await fetch(targetRun.jobs_url, {

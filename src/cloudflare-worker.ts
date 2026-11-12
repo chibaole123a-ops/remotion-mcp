@@ -124,7 +124,7 @@ export const DynamicVideo: React.FC = () => {
         return (
           <Sequence key={idx} from={fromFrame} durationInFrames={durFrames}>
             <SceneCard scene={scene} durationInFrames={durFrames} />
-            <Audio src={staticFile(\`voice-\${idx}.mp3\`)} volume={1} />
+            <Audio src={staticFile('voice-' + idx + '.mp3')} volume={1} />
           </Sequence>
         );
       })}
@@ -142,7 +142,7 @@ Never use unbounded linear values that overflow. Use modulo (\`frame % 180\`) or
 ### 3. Voiceover Timing Calculation:
 For videos with voice narration, ALWAYS invoke \`plan_speech_timing({ scenes: [...] })\` first.
 Use the returned \`totalDurationInFrames\` directly as your \`durationInFrames\` in \`render_video\`.
-\`;
+`;
 
 function toBase64Utf8(str: string): string {
   const bytes = new TextEncoder().encode(str);

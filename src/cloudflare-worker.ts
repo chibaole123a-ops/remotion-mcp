@@ -154,7 +154,12 @@ To produce Oscar-caliber, viral studio videos, you must orchestrate all 5 anatom
 - **Tactile 2.5D Spatial Depth**: Separate your frame into Foreground (ambient particles/light leaks), Midground (primary subject/cards), and Background (subtle moving perspective grid/dark gradient).
 - **The Living Canvas (Ken Burns)**: Static images must never sit dead. Always apply subtle zoom-in (building tension), zoom-out (revealing scale), or gentle cinematic pans.
 
-### 3. Motion & Animation Physics (The Eye-Trace Control):
+### 3. Motion & Animation Physics (The Eye-Trace Control & Anti-Slide Flow):
+- **BAN THE "POWERPOINT SLIDE" SYNDROME**: Never build disconnected slide cards that fade in, sit statically, and fade out. A professional video is a **Continuous Spatial Canvas (One-Take Cinematic Flow)**!
+- **Seamless Spatial Camera (Whip Pan / Zoom-Through)**:
+  * Instead of cutting to black, use continuous camera dollies, zooms through focal objects, or whip-pans across a single living universe.
+  * Wrap your world in \`<StoryboardCanvas>\` so background ambient grids, light leaks, and camera drifts travel seamlessly across scene changes without jarring jumps.
+- **Match Cuts & Continuous Hero Anchors**: Let a hero graphic (a glowing particle, a focal coordinate, a data line) travel across scene boundaries, morphing into the next subject.
 - **Strictly No Linear Motion**: Pure linear interpolation (\`interpolate\`) feels robotic. Always use \`spring({ damping, stiffness, mass })\` for organic physical weight.
 - **Eye-Trace Continuity**: If a scene ends with the focal point at the top-right, ensure the incoming scene's key subject lands at the top-right or sweeps the eye naturally.
 - **Pattern Interruption (Every 4-6 Seconds)**: Prevent attention drift by inserting visual resets—punch-ins, rough-notation sketch circles (\`<Circle>\`, \`<Highlight>\`), or typographic pops.

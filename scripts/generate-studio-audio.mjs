@@ -237,7 +237,10 @@ if (audioB64) {
   }
 }
 
-// Support any key format Gemini might produce: scenes, narrationSegments, segments, script, or dialogue
+// 1. Support Master Audio Mode: if config.masterAudio is true, or config.fullScript is provided,
+// or config.scenes is provided as a cohesive script, synthesize ONE single continuous voiceover.mp3
+// and extract fine-grained sentence/scene markers and word timestamps without any dead air!
+
 const rawList =
   config.scenes ||
   config.narrationSegments ||
@@ -252,112 +255,219 @@ let segments = Array.isArray(rawList)
   ? [{ text: rawList.trim() }]
   : [];
 
-// Also support single text field e.g. { voice: "...", text: "..." }
 if (segments.length === 0 && typeof config.text === 'string' && config.text.trim()) {
   segments = [{ text: config.text.trim(), voice: config.voice }];
+}
+
+if (segments.length === 0 && typeof config.fullScript === 'string' && config.fullScript.trim()) {
+  segments = [{ text: config.fullScript.trim(), voice: config.voice }];
 }
 
 console.log(`🎙️ Parsed ${segments.length} narration segment(s) for Studio Voiceover.`);
 const voice = config.voice || 'vi-VN-NamMinhNeural';
 const rate = config.rate || '+5%';
 const scenesTelemetry = [];
-let cumulativeFrames = 0;
 
-// 1. Always create a 100% silent placeholder for bgm.mp3 (no synthetic background sound!)
-generateSilentAudioFile('public/bgm.mp3', 1);
-fs.copyFileSync('public/bgm.mp3', 'src/remotion/public/bgm.mp3');
+// 1. Always create a 100% silent placeholder for bgm.mp3 if not already fetched
+if (!fs.existsSync('public/bgm.mp3') || fs.statSync('public/bgm.mp3').size < 100) {
+  generateSilentAudioFile('public/bgm.mp3', 1);
+  fs.copyFileSync('public/bgm.mp3', 'src/remotion/public/bgm.mp3');
+}
 
-for (let i = 0; i < Math.max(segments.length, 15); i++) {
-  if (i > 0 && i < segments.length) {
-    // Small delay between segments to prevent WebSocket throttling from Edge-TTS servers
-    await new Promise((r) => setTimeout(r, 600));
-  }
-  const seg = segments[i];
-  const text = typeof seg === 'string' ? seg : seg?.text || '';
-  const segVoice = (typeof seg === 'object' && seg?.voice) || voice;
-  const outFile = `public/voice-${i}.mp3`;
-  const rawJsonFile = `public/raw-words-${i}.json`;
+// Check if we should run in Master Audio Spine mode (Recommended default for seamless editing)
+// In Master Audio Spine mode: we combine the narration into one continuous voiceover.mp3 stream
+// and capture real SentenceBoundary & WordBoundary timestamps for precision cuts!
+const isMasterSpineMode = config.masterSpine !== false && segments.length > 0;
 
-  if (!text.trim()) {
-    generateSilentAudioFile(outFile, 0.5);
-    fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
-    continue;
-  }
+if (isMasterSpineMode) {
+  console.log(`✨ Master Audio Spine Mode active: Synthesizing continuous master voiceover track...`);
 
+  // Combine full text while preserving boundary markers per segment
+  const segmentTexts = segments.map((s) => (typeof s === 'string' ? s : s?.text || '').trim()).filter(Boolean);
+  const combinedText = segmentTexts.join('\n\n');
+
+  const masterOutFile = `public/voiceover.mp3`;
+  const masterRawJson = `public/raw-master-words.json`;
+  const masterTxt = `public/voiceover.txt`;
+  fs.writeFileSync(masterTxt, combinedText, 'utf-8');
+
+  let rawBoundaries = [];
+  let pyDurationMs = 0;
   try {
-    const tmpTxt = `public/voice-${i}.txt`;
-    fs.writeFileSync(tmpTxt, text.trim(), 'utf-8');
+    execSync(
+      `python3 "${pyScriptPath}" "${masterTxt}" "${voice}" "${rate}" "${masterOutFile}" "${masterRawJson}"`,
+      { stdio: 'inherit' }
+    );
+    if (fs.existsSync(masterRawJson)) {
+      const parsedPy = JSON.parse(fs.readFileSync(masterRawJson, 'utf-8'));
+      rawBoundaries = Array.isArray(parsedPy) ? parsedPy : parsedPy.words || [];
+      pyDurationMs = Number(parsedPy?.durationMs || 0);
+      fs.unlinkSync(masterRawJson);
+    }
+  } catch {
+    execSync(
+      `edge-tts --file "${masterTxt}" --voice "${voice}" --rate="${rate}" --write-media "${masterOutFile}"`,
+      { stdio: 'inherit' }
+    );
+  }
 
-    let rawBoundaries = [];
-    let pyDurationMs = 0;
-    try {
-      execSync(
-        `python3 "${pyScriptPath}" "${tmpTxt}" "${segVoice}" "${rate}" "${outFile}" "${rawJsonFile}"`,
-        { stdio: 'inherit' }
-      );
-      if (fs.existsSync(rawJsonFile)) {
-        const parsedPy = JSON.parse(fs.readFileSync(rawJsonFile, 'utf-8'));
-        rawBoundaries = Array.isArray(parsedPy) ? parsedPy : parsedPy.words || [];
-        pyDurationMs = Number(parsedPy?.durationMs || 0);
-        fs.unlinkSync(rawJsonFile);
+  if (fs.existsSync(masterTxt)) fs.unlinkSync(masterTxt);
+  fs.copyFileSync(masterOutFile, `src/remotion/public/voiceover.mp3`);
+
+  const masterAudioDurSec = resolveExactAudioDurationSec(masterOutFile, pyDurationMs);
+  const masterAudioDurMs = Math.round(masterAudioDurSec * 1000);
+  const totalVideoFrames = Math.ceil((masterAudioDurSec + 0.5) * fps);
+
+  // Now, map individual segment texts to their time ranges in the master audio stream
+  const allWords = normalizeWordBoundaries(combinedText, rawBoundaries, masterAudioDurMs, fps);
+
+  let wordCursor = 0;
+  let runningStartFrame = 0;
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const segText = typeof seg === 'string' ? seg : seg?.text || '';
+    const segTokens = segText.trim().split(/\s+/).filter(Boolean);
+    const segWordCount = segTokens.length;
+
+    const segWords = allWords.slice(wordCursor, wordCursor + segWordCount);
+    wordCursor += segWordCount;
+
+    let segStartFrame = runningStartFrame;
+    let segEndFrame = runningStartFrame;
+
+    if (segWords.length > 0) {
+      segStartFrame = segWords[0].startFrame;
+      segEndFrame = segWords[segWords.length - 1].endFrame;
+      // If this is the last segment, extend it to total video frames
+      if (i === segments.length - 1) {
+        segEndFrame = totalVideoFrames;
       }
-    } catch {
-      execSync(
-        `edge-tts --file "${tmpTxt}" --voice "${segVoice}" --rate="${rate}" --write-media "${outFile}"`,
-        { stdio: 'inherit' }
-      );
+    } else {
+      segEndFrame = segStartFrame + Math.ceil(3 * fps);
     }
 
-    if (fs.existsSync(tmpTxt)) fs.unlinkSync(tmpTxt);
-    fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
+    const segDurFrames = Math.max(Math.ceil(1.2 * fps), segEndFrame - segStartFrame);
 
-    const audioDurSec = resolveExactAudioDurationSec(outFile, pyDurationMs);
-    const audioDurMs = Math.round(audioDurSec * 1000);
-    // Tight, natural 0.25s pause between paragraphs so the story flows seamlessly
-    const sceneDurationFrames = Math.ceil((audioDurSec + 0.25) * fps);
-    const words = normalizeWordBoundaries(text.trim(), rawBoundaries, audioDurMs, fps);
+    scenesTelemetry.push({
+      sceneIndex: i,
+      text: segText.trim(),
+      audioDurationSec: Number((segDurFrames / fps).toFixed(3)),
+      durationInFrames: segDurFrames,
+      startFrame: segStartFrame,
+      endFrame: segStartFrame + segDurFrames,
+      words: segWords.map((w) => ({
+        ...w,
+        globalStartFrame: w.startFrame,
+        globalEndFrame: w.endFrame,
+      })),
+    });
 
-    fs.writeFileSync(`public/captions-${i}.json`, JSON.stringify(words, null, 2), 'utf-8');
+    runningStartFrame = segStartFrame + segDurFrames;
+
+    // Also write a slice audio file or link so legacy <Audio src={staticFile("voice-i.mp3")}> still works seamlessly
+    // By providing the master audio or segment slices
+    fs.copyFileSync(masterOutFile, `public/voice-${i}.mp3`);
+    fs.copyFileSync(masterOutFile, `src/remotion/public/voice-${i}.mp3`);
+    fs.writeFileSync(`public/captions-${i}.json`, JSON.stringify(segWords, null, 2), 'utf-8');
     fs.copyFileSync(`public/captions-${i}.json`, `src/remotion/public/captions-${i}.json`);
+  }
 
-    scenesTelemetry.push({
-      sceneIndex: i,
-      text: text.trim(),
-      audioDurationSec: Number(audioDurSec.toFixed(3)),
-      durationInFrames: sceneDurationFrames,
-      startFrame: cumulativeFrames,
-      endFrame: cumulativeFrames + sceneDurationFrames,
-      words: words.map((w) => ({
-        ...w,
-        globalStartFrame: cumulativeFrames + w.startFrame,
-        globalEndFrame: cumulativeFrames + w.endFrame,
-      })),
-    });
-    cumulativeFrames += sceneDurationFrames;
+  console.log(
+    `🎙️ Master Audio Spine generated: ${masterAudioDurSec.toFixed(2)}s (${totalVideoFrames} frames) for ${scenesTelemetry.length} scenes. 100% continuous speech!`
+  );
+} else {
+  // Legacy multi-chunk fallback
+  for (let i = 0; i < Math.max(segments.length, 15); i++) {
+    if (i > 0 && i < segments.length) {
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    const seg = segments[i];
+    const text = typeof seg === 'string' ? seg : seg?.text || '';
+    const segVoice = (typeof seg === 'object' && seg?.voice) || voice;
+    const outFile = `public/voice-${i}.mp3`;
+    const rawJsonFile = `public/raw-words-${i}.json`;
 
-    console.log(
-      `🎙️ Segment ${i}: ${outFile} (Exact: ${audioDurSec.toFixed(2)}s -> ${sceneDurationFrames} frames, ${words.length} synced words)`
-    );
-  } catch (err) {
-    console.warn(`Edge-TTS fallback for ${outFile}:`, err);
-    generateSilentAudioFile(outFile, 2);
-    fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
-    const fallbackFrames = Math.ceil(3.0 * fps);
-    const words = buildProportionalWords(text.trim(), 2800, fps);
-    scenesTelemetry.push({
-      sceneIndex: i,
-      text: text.trim(),
-      audioDurationSec: 2.8,
-      durationInFrames: fallbackFrames,
-      startFrame: cumulativeFrames,
-      endFrame: cumulativeFrames + fallbackFrames,
-      words: words.map((w) => ({
-        ...w,
-        globalStartFrame: cumulativeFrames + w.startFrame,
-        globalEndFrame: cumulativeFrames + w.endFrame,
-      })),
-    });
-    cumulativeFrames += fallbackFrames;
+    if (!text.trim()) {
+      generateSilentAudioFile(outFile, 0.5);
+      fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
+      continue;
+    }
+
+    try {
+      const tmpTxt = `public/voice-${i}.txt`;
+      fs.writeFileSync(tmpTxt, text.trim(), 'utf-8');
+
+      let rawBoundaries = [];
+      let pyDurationMs = 0;
+      try {
+        execSync(
+          `python3 "${pyScriptPath}" "${tmpTxt}" "${segVoice}" "${rate}" "${outFile}" "${rawJsonFile}"`,
+          { stdio: 'inherit' }
+        );
+        if (fs.existsSync(rawJsonFile)) {
+          const parsedPy = JSON.parse(fs.readFileSync(rawJsonFile, 'utf-8'));
+          rawBoundaries = Array.isArray(parsedPy) ? parsedPy : parsedPy.words || [];
+          pyDurationMs = Number(parsedPy?.durationMs || 0);
+          fs.unlinkSync(rawJsonFile);
+        }
+      } catch {
+        execSync(
+          `edge-tts --file "${tmpTxt}" --voice "${segVoice}" --rate="${rate}" --write-media "${outFile}"`,
+          { stdio: 'inherit' }
+        );
+      }
+
+      if (fs.existsSync(tmpTxt)) fs.unlinkSync(tmpTxt);
+      fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
+
+      const audioDurSec = resolveExactAudioDurationSec(outFile, pyDurationMs);
+      const audioDurMs = Math.round(audioDurSec * 1000);
+      const sceneDurationFrames = Math.ceil((audioDurSec + 0.25) * fps);
+      const words = normalizeWordBoundaries(text.trim(), rawBoundaries, audioDurMs, fps);
+
+      fs.writeFileSync(`public/captions-${i}.json`, JSON.stringify(words, null, 2), 'utf-8');
+      fs.copyFileSync(`public/captions-${i}.json`, `src/remotion/public/captions-${i}.json`);
+
+      scenesTelemetry.push({
+        sceneIndex: i,
+        text: text.trim(),
+        audioDurationSec: Number(audioDurSec.toFixed(3)),
+        durationInFrames: sceneDurationFrames,
+        startFrame: cumulativeFrames,
+        endFrame: cumulativeFrames + sceneDurationFrames,
+        words: words.map((w) => ({
+          ...w,
+          globalStartFrame: cumulativeFrames + w.startFrame,
+          globalEndFrame: cumulativeFrames + w.endFrame,
+        })),
+      });
+      cumulativeFrames += sceneDurationFrames;
+
+      console.log(
+        `🎙️ Segment ${i}: ${outFile} (Exact: ${audioDurSec.toFixed(2)}s -> ${sceneDurationFrames} frames, ${words.length} synced words)`
+      );
+    } catch (err) {
+      console.warn(`Edge-TTS fallback for ${outFile}:`, err);
+      generateSilentAudioFile(outFile, 2);
+      fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
+      const fallbackFrames = Math.ceil(3.0 * fps);
+      const words = buildProportionalWords(text.trim(), 2800, fps);
+      scenesTelemetry.push({
+        sceneIndex: i,
+        text: text.trim(),
+        audioDurationSec: 2.8,
+        durationInFrames: fallbackFrames,
+        startFrame: cumulativeFrames,
+        endFrame: cumulativeFrames + fallbackFrames,
+        words: words.map((w) => ({
+          ...w,
+          globalStartFrame: cumulativeFrames + w.startFrame,
+          globalEndFrame: cumulativeFrames + w.endFrame,
+        })),
+      });
+      cumulativeFrames += fallbackFrames;
+    }
   }
 }
 
@@ -368,7 +478,9 @@ if (fs.existsSync(pyScriptPath)) {
 }
 
 const computedDurationInFrames =
-  scenesTelemetry.length > 0 ? cumulativeFrames : defaultDurationFrames;
+  scenesTelemetry.length > 0
+    ? scenesTelemetry[scenesTelemetry.length - 1].endFrame
+    : defaultDurationFrames;
 
 const allGlobalWords = scenesTelemetry.flatMap((s) => s.words);
 const telemetryPayload = {

@@ -603,7 +603,52 @@ export const ChapterProgressSpine: React.FC<{
 };
 
 /**
- * Automatically plays all synthesized voiceover segments (`voice-0.mp3`, `voice-1.mp3`, ...)
+ * Master Voiceover Track (<MasterAudioTrack>):
+ * Plays the continuous master voiceover track (`voiceover.mp3` or legacy segment fallbacks)
+ * seamlessly across the entire video.
+ * Supports automated audio ducking for background music!
+ */
+export const MasterAudioTrack: React.FC<{
+  voiceVolume?: number;
+  bgmSrc?: string;
+  bgmVolume?: number;
+  enableDucking?: boolean;
+}> = ({
+  voiceVolume = 1.0,
+  bgmSrc,
+  bgmVolume = 0.2,
+  enableDucking = true,
+}) => {
+  const frame = useCurrentFrame();
+  const scenes = audioTelemetry?.scenes || [];
+
+  // Determine if voice is currently speaking at this frame
+  const isSpeaking = useMemo(() => {
+    return scenes.some((s) => frame >= s.startFrame && frame < s.endFrame);
+  }, [scenes, frame]);
+
+  // Dynamic ducking volume: lower when speaking, swell up when paused
+  const dynamicBgmVol = enableDucking
+    ? isSpeaking
+      ? bgmVolume * 0.4
+      : bgmVolume * 1.2
+    : bgmVolume;
+
+  return (
+    <>
+      {/* 1. Continuous Master Voiceover */}
+      <Audio src={staticFile('voiceover.mp3')} volume={voiceVolume} />
+
+      {/* 2. Optional Background Music with automated ducking */}
+      {bgmSrc && (
+        <Audio src={bgmSrc} volume={dynamicBgmVol} loop />
+      )}
+    </>
+  );
+};
+
+/**
+ * Automatically plays all synthesized voiceover segments (`voiceover.mp3` or fallback `voice-0.mp3`, `voice-1.mp3`, ...)
  * at their exact global start frames (100% pure crystal-clear voiceover, no synthetic BGM).
  */
 export const ContinuousAudioTrack: React.FC<{ bgmVolume?: number; voiceVolume?: number }> = ({
@@ -612,15 +657,7 @@ export const ContinuousAudioTrack: React.FC<{ bgmVolume?: number; voiceVolume?: 
   const scenes = audioTelemetry?.scenes || [];
   return (
     <>
-      {scenes.map((s) => (
-        <Sequence
-          key={s.sceneIndex}
-          from={s.startFrame}
-          durationInFrames={s.durationInFrames}
-        >
-          <Audio src={staticFile(`voice-${s.sceneIndex}.mp3`)} volume={voiceVolume} />
-        </Sequence>
-      ))}
+      <Audio src={staticFile('voiceover.mp3')} volume={voiceVolume} />
     </>
   );
 };

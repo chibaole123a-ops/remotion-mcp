@@ -139,10 +139,14 @@ Never use unbounded linear values that overflow. Use modulo (\`frame % 180\`) or
 - **Audio Visualizers / Waveforms**: Pulse elements using \`Math.sin(frame * 0.1)\` or \`evolvePath\`.
 - **Lyric / Text Scroll**: Use \`interpolate(frame, [start, end], [100, -100])\` per scene.
 
-### 3. Audio-Driven Storyboard & Timeline (Zero Guesswork):
-For videos with voice narration or songs, ALWAYS invoke \`plan_storyboard_timeline({ scenes: [...] })\` first.
-Pass your conceptual scenes to get exact \`startFrame\` and \`durationInFrames\` for each scene.
-Use the returned \`totalDurationInFrames\` directly as your \`durationInFrames\` in \`render_video\`.
+### 3. Master Audio Spine & Audio-Driven Dynamic Timeline:
+For professional-quality videos with seamless speech and zero dead air:
+1. **Script & Storyboard First**: Conceptualize the full narrative arc and scenes.
+2. **Audio & Media Sourcing**: Select or search matching BGM (\`search_soundtrack\`), sound effects, and visual assets.
+3. **Reflect & Re-Sync Script**: If discovering unique media (e.g. broken tree, dramatic graph, iconic landmark), adapt narration to directly refer to what is on screen!
+4. **Master Audio Spine**: Call \`plan_storyboard_timeline({ scenes: [...] })\` or \`synthesize_speech\`. The system synthesizes ONE continuous master audio stream (\`voiceover.mp3\`) with millisecond-precise sentence markers.
+5. **Timeline Assembly & Quality Audit**: Build your multi-track timeline in Remotion using the exact \`startFrame\` and \`durationInFrames\` returned. Mount \`<MasterAudioTrack voiceVolume={1} bgmSrc="..." enableDucking={true} />\` or \`<Audio src={staticFile("voiceover.mp3")} />\`.
+6. **Live Render & Completion**: Submit to \`render_video\` and call \`get_task_status(jobId, waitForCompletion: true)\` until completed!
 
 ---
 

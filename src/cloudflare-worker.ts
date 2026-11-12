@@ -139,9 +139,22 @@ Never use unbounded linear values that overflow. Use modulo (\`frame % 180\`) or
 - **Audio Visualizers / Waveforms**: Pulse elements using \`Math.sin(frame * 0.1)\` or \`evolvePath\`.
 - **Lyric / Text Scroll**: Use \`interpolate(frame, [start, end], [100, -100])\` per scene.
 
-### 3. Voiceover Timing Calculation:
-For videos with voice narration, ALWAYS invoke \`plan_speech_timing({ scenes: [...] })\` first.
+### 3. Audio-Driven Storyboard & Timeline (Zero Guesswork):
+For videos with voice narration or songs, ALWAYS invoke \`plan_storyboard_timeline({ scenes: [...] })\` first.
+Pass your conceptual scenes to get exact \`startFrame\` and \`durationInFrames\` for each scene.
 Use the returned \`totalDurationInFrames\` directly as your \`durationInFrames\` in \`render_video\`.
+
+---
+
+## 🎨 UNBOUNDED ARTISTIC & CREATIVE FREEDOM (NO BORING BOILERPLATES):
+You are NOT a boring template-filler. You are an elite Creative Director & Motion Designer:
+- **Style Flexibility**: Choose visual aesthetics that genuinely fit the subject matter:
+  * *High-Tech / Sci-Fi / AI*: Three.js 3D meshes, floating wireframe particles, neon cyberpunk glows (#00f2fe, #7928ca), terminal code fonts.
+  * *Documentary / History / Corporate*: Elegant serif typography, clean split-screens, photo Ken-Burns pan/zoom with \`<Img>\`, frosted glass cards.
+  * *Music / Lyric Visualizers*: Dynamic audio wave pulses, spinning vinyl records, evolving SVG morph paths (\`evolvePath\`), synchronized lyrics.
+  * *Playful / Explainer*: Rough-notation sketchy circles/highlights, playful bouncing springs, vibrant pastel palettes.
+- **Physical Dynamics**: Always prefer \`spring()\` over linear interpolation for natural, bouncy, organic ease-in/ease-out feeling.
+- **Visual Rhythm**: Contrast quiet moments with explosive transitions (\`@remotion/transitions\` slide, flip, wipe).
 `;
 
 function toBase64Utf8(str: string): string {
@@ -693,6 +706,58 @@ const TOOLS = [
     },
   },
   {
+    name: 'plan_storyboard_timeline',
+    description:
+      'STORYBOARD & TIMELINE ORCHESTRATOR: The premier pre-production tool for professional AI Video Directors.\n' +
+      'Pass your storyboard concepts, scene narrative texts, or song verses to receive a mathematically accurate frame-by-frame Timeline.\n' +
+      'Returns exact startFrame, durationInFrames, and cumulative timing for each scene so you can code your Remotion composition with 100% audio-visual synchronization without guessing!',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scenes: {
+          type: 'array',
+          description:
+            'Array of storyboard scenes. Each scene can specify narration text, visual concept notes, and custom voice.',
+          items: {
+            type: 'object',
+            properties: {
+              text: { type: 'string', description: 'Narration script or lyric lines for this scene' },
+              sceneName: { type: 'string', description: 'Optional scene name (e.g. "Hook", "Climax", "Outro")' },
+              visualConcept: { type: 'string', description: 'Your creative visual direction for this scene' },
+              voice: { type: 'string', description: 'Voice ID (e.g. "vi-VN-NamMinhNeural", "vi-VN-HoaiMyNeural")' },
+            },
+            required: ['text'],
+          },
+        },
+        text: {
+          type: 'string',
+          description: 'Alternative: single full script string to automatically slice and compute.',
+        },
+        voice: {
+          type: 'string',
+          description: 'Default voice for speech synthesis (default: "vi-VN-NamMinhNeural").',
+          default: 'vi-VN-NamMinhNeural',
+        },
+        rate: {
+          type: 'string',
+          description: 'Speech pace adjustment (e.g. "+0%", "+10%", "-5%").',
+          default: '+0%',
+        },
+        fps: {
+          type: 'number',
+          description: 'Frames per second of your composition (default: 30).',
+          default: 30,
+        },
+      },
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  {
     name: 'synthesize_speech',
     description:
       'AI VOICEOVER & TIMING CALCULATOR TOOL: Plan and calculate exact speech duration (seconds, frames, word timings) for Vietnamese or English voiceover scenes.\n' +
@@ -1000,7 +1065,12 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         };
       }
 
-      if (toolName === 'synthesize_speech' || toolName === 'plan_voiceover') {
+      if (
+        toolName === 'plan_storyboard_timeline' ||
+        toolName === 'synthesize_speech' ||
+        toolName === 'plan_voiceover' ||
+        toolName === 'plan_speech_timing'
+      ) {
         const scenesInput = args.scenes || args.text || [];
         const voice = args.voice || 'vi-VN-NamMinhNeural';
         const rate = args.rate || '+0%';
@@ -1014,7 +1084,30 @@ async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify(telemetry, null, 2),
+                text: JSON.stringify(
+                  {
+                    status: 'timeline_computed',
+                    fps: telemetry.fps,
+                    totalDurationSec: telemetry.totalDurationSec,
+                    totalDurationInFrames: telemetry.totalDurationInFrames,
+                    totalScenes: telemetry.totalScenes,
+                    timeline: telemetry.scenes.map((s: any) => ({
+                      sceneIndex: s.sceneIndex,
+                      startFrame: s.startFrame,
+                      endFrame: s.endFrame,
+                      durationInFrames: s.durationInFrames,
+                      durationSec: s.durationSec,
+                      text: s.text,
+                      audioFile: s.audioFileName,
+                      usageSnippet: `<Sequence from={${s.startFrame}} durationInFrames={${s.durationInFrames}}><Audio src={staticFile("${s.audioFileName}")} volume={1} /></Sequence>`,
+                    })),
+                    audioConfigPayload: telemetry.audioConfigPayload,
+                    instructionsForAgent:
+                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames). You have 100% creative freedom to design unique, non-repetitive visual motion for each scene! Pass durationInFrames: ${telemetry.totalDurationInFrames} and audioConfig to render_video.`,
+                  },
+                  null,
+                  2
+                ),
               },
             ],
           },

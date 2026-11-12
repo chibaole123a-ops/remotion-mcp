@@ -446,16 +446,19 @@ function calculateSpeechTelemetry(
     const words = text.split(/\s+/).filter(Boolean);
     const wordCount = words.length;
 
-    // Normal Vietnamese speed: ~155 words/min = 2.58 words/sec
-    const baseWps = 2.6;
+    // Neural Edge-TTS speed for Vietnamese (NamMinh / HoaiMy):
+    // Real-world measurements show neural TTS speaks at ~3.65 words/sec (220 words/minute).
+    // The previous 2.6 words/sec was overly slow and caused video scenes to be 50% longer than the speech,
+    // causing images and subtitles to lag far behind the spoken voiceover!
+    const baseWps = 3.65;
     const baseDur = wordCount > 0 ? wordCount / (baseWps * rateMultiplier) : 0;
 
-    // Only count punctuation at the end of words/sentences as speech pauses
+    // Small natural punctuation pauses
     const commas = (text.match(/[,;](\s|$)/g) || []).length;
     const periods = (text.match(/[.!?](\s|$)/g) || []).length;
-    const pauseDur = (commas * 0.25 + periods * 0.4) / rateMultiplier;
+    const pauseDur = (commas * 0.12 + periods * 0.22) / rateMultiplier;
 
-    const durationSec = Number(Math.max(1.5, baseDur + pauseDur + 0.25).toFixed(2));
+    const durationSec = Number(Math.max(1.2, baseDur + pauseDur + 0.15).toFixed(2));
     const durationInFrames = Math.ceil(durationSec * fps);
 
     const startFrame = cumulativeFrames;

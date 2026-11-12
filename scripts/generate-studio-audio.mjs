@@ -365,10 +365,28 @@ if (isMasterSpineMode) {
 
     runningStartFrame = segStartFrame + segDurFrames;
 
-    // Also write a slice audio file or link so legacy <Audio src={staticFile("voice-i.mp3")}> still works seamlessly
-    // By providing the master audio or segment slices
-    fs.copyFileSync(masterOutFile, `public/voice-${i}.mp3`);
-    fs.copyFileSync(masterOutFile, `src/remotion/public/voice-${i}.mp3`);
+    // Create accurate sliced audio for voice-i.mp3 using ffmpeg so if code mounts <Audio src={staticFile("voice-i.mp3")}>
+    // inside a <Sequence from={startFrame}>, it plays ONLY that segment's speech and NEVER repeats the whole track!
+    const sliceStartSec = (segStartFrame / fps).toFixed(3);
+    const sliceDurSec = (segDurFrames / fps).toFixed(3);
+
+    try {
+      execSync(
+        `npx remotion ffmpeg -y -ss ${sliceStartSec} -t ${sliceDurSec} -i "${masterOutFile}" -c copy "${outFile}"`,
+        { stdio: ['ignore', 'ignore', 'ignore'] }
+      );
+    } catch {
+      try {
+        execSync(
+          `ffmpeg -y -ss ${sliceStartSec} -t ${sliceDurSec} -i "${masterOutFile}" -c copy "${outFile}"`,
+          { stdio: ['ignore', 'ignore', 'ignore'] }
+        );
+      } catch {
+        fs.copyFileSync(masterOutFile, outFile);
+      }
+    }
+
+    fs.copyFileSync(outFile, `src/remotion/public/voice-${i}.mp3`);
     fs.writeFileSync(`public/captions-${i}.json`, JSON.stringify(segWords, null, 2), 'utf-8');
     fs.copyFileSync(`public/captions-${i}.json`, `src/remotion/public/captions-${i}.json`);
   }

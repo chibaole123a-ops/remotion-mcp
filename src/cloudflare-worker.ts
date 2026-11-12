@@ -50,35 +50,13 @@ No background scripts, heuristics, or hidden rules will modify or override your 
 - Your React TSX code is compiled and rendered **EXACTLY as you write it**.
 - You decide every detail: scene structure, timing, pacing, visual hierarchy, animations, and typography.
 
-### 🎙️ Full Control of Audio & Voiceover:
+### 🎙️ Audio & Voiceover Best Practices (Master Audio Spine):
 When you request voiceover in \`audioConfig.scenes\`:
-1. Microsoft Edge-TTS synthesizes high-fidelity audio files into your project: \`staticFile("voice-0.mp3")\`, \`staticFile("voice-1.mp3")\`, etc.
-2. **Remotion is React**: To play voiceover or music, **you mount \`<Audio>\` components directly in your JSX tree** wherever and whenever you choose:
-\`\`\`tsx
-import React from 'react';
-import { AbsoluteFill, Sequence, Audio, staticFile, useCurrentFrame } from 'remotion';
-
-export const DynamicVideo: React.FC = () => {
-  return (
-    <AbsoluteFill style={{ backgroundColor: '#090d16' }}>
-      {/* Background Music if desired */}
-      <Audio src={staticFile('bgm.mp3')} volume={0.15} loop />
-
-      {/* Scene 1: Visuals & Voiceover */}
-      <Sequence from={0} durationInFrames={180}>
-        <Scene1 />
-        <Audio src={staticFile('voice-0.mp3')} volume={1} />
-      </Sequence>
-
-      {/* Scene 2: Visuals & Voiceover */}
-      <Sequence from={180} durationInFrames={180}>
-        <Scene2 />
-        <Audio src={staticFile('voice-1.mp3')} volume={1} />
-      </Sequence>
-    </AbsoluteFill>
-  );
-};
-\`\`\`
+1. The system creates a single, continuous **Master Audio Spine** (\`staticFile("voiceover.mp3")\`) without any awkward pauses or dead air.
+2. It also slices individual segment files (\`staticFile("voice-0.mp3")\`, \`staticFile("voice-1.mp3")\`, ...) perfectly matching each scene's startFrame and duration.
+3. **Recommended Usage**:
+   - **Method A (Cleanest & Most Natural)**: Mount ONE single \`<Audio src={staticFile("voiceover.mp3")} volume={1} />\` at root level. Your scenes simply transition based on the telemetry frames!
+   - **Method B (Segmented)**: If you mount \`<Audio src={staticFile("voice-0.mp3")} />\` inside each \`<Sequence from={s.startFrame} durationInFrames={s.durationInFrames}>\`, each file is precisely trimmed to its segment. NEVER mount both Method A and Method B at the same time!
 
 ---
 

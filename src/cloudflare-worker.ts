@@ -122,8 +122,18 @@ For professional-quality videos with seamless speech and zero dead air:
 1. **Script & Storyboard First**: Conceptualize the full narrative arc and scenes.
 2. **Audio & Media Sourcing**: Select or search matching BGM (\`search_soundtrack\`), sound effects, and visual assets.
 3. **Reflect & Re-Sync Script**: If discovering unique media (e.g. broken tree, dramatic graph, iconic landmark), adapt narration to directly refer to what is on screen!
-4. **Master Audio Spine**: Call \`plan_storyboard_timeline({ scenes: [...] })\` or \`synthesize_speech\`. The system synthesizes ONE continuous master audio stream (\`voiceover.mp3\`) with millisecond-precise sentence markers.
-5. **Timeline Assembly & Quality Audit**: Build your multi-track timeline in Remotion using the exact \`startFrame\` and \`durationInFrames\` returned. Mount \`<MasterAudioTrack voiceVolume={1} bgmSrc="..." enableDucking={true} />\` or \`<Audio src={staticFile("voiceover.mp3")} />\`.
+4. **Master Audio Spine**: Call \`plan_storyboard_timeline({ scenes: [...] })\`.
+5. **Frame-Perfect Sync with \`<SyncedScene>\`**:
+   - Remotion provides the powerful helper component \`<SyncedScene sceneIndex={i}>\` from \`./audio-sync\`!
+   - Instead of hardcoding fixed static frames that risk drifting, wrap each scene in:
+     \`\`\`tsx
+     import { SyncedScene, MasterAudioTrack } from './audio-sync';
+     // In your DynamicVideo:
+     <MasterAudioTrack voiceVolume={1} />
+     <SyncedScene sceneIndex={0}><Scene0 /></SyncedScene>
+     <SyncedScene sceneIndex={1}><Scene1 /></SyncedScene>
+     \`\`\`
+   - \`<SyncedScene>\` automatically reads the actual synthesized speech telemetry on the runner and locks each visual scene 100% to the exact millisecond when the narrator starts and finishes that sentence!
 6. **Live Render & Completion**: Submit to \`render_video\` and call \`get_task_status(jobId, waitForCompletion: true)\` until completed!
 
 ---

@@ -379,8 +379,18 @@ async function main() {
     ? JSON.parse(fs.readFileSync('src/remotion/meta.json', 'utf-8'))
     : {};
 
-  // Gemini has full authority over video duration
-  const finalDuration = durationEnv > 0 ? durationEnv : 300;
+  // 1. Read actual telemetry from audio synthesis if present
+  let finalDuration = durationEnv > 0 ? durationEnv : 300;
+  if (fs.existsSync('src/remotion/audio-telemetry.json')) {
+    try {
+      const telem = JSON.parse(fs.readFileSync('src/remotion/audio-telemetry.json', 'utf-8'));
+      if (telem && typeof telem.totalFrames === 'number' && telem.totalFrames > 60) {
+        // Auto-lock video duration to real synthesized audio telemetry!
+        finalDuration = telem.totalFrames;
+        console.log(`🎯 Locked composition duration directly to audio telemetry: ${finalDuration} frames (${(finalDuration / fpsEnv).toFixed(2)}s)`);
+      }
+    } catch {}
+  }
 
   fs.writeFileSync(
     'src/remotion/meta.json',

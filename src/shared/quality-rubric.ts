@@ -410,6 +410,7 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
     usesVariedTransitions: new Set(transitionStyleMatches).size >= 2,
     usesCameraVariety:
       kenBurnsMatches.some((t) => /\b(?:zoomFrom|zoomTo|panX|panY)\s*=/.test(t)) ||
+      /\b(?:zoomFrom|zoomTo|panXFrom|panYFrom)\s*=/.test(activeCode) ||
       /\bCameraRig\b|\bParallaxDepthLayers\b/.test(activeCode),
     usesStoryboardCanvas: /StoryboardCanvas|SyncedScene/.test(activeCode),
     usesCaptions: /ProKaraokeCaptions|WordHighlightCaptions/.test(activeCode),

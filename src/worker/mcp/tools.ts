@@ -155,7 +155,7 @@ export const TOOLS = [
   {
     name: 'search_sfx',
     description:
-      'STAGE 2C — SOUND EFFECTS & FOLEY LIBRARY: Discover verified built-in `@remotion/sfx` exports (exact import names like whoosh, whip, pageTurn, uiSwitch, mouseClick, ding, shutterModern, vineBoom, dramaticBoomer, recordScratch) and optional real-world foley/ambience URLs from Internet Archive.',
+      'STAGE 2C — SOUND EFFECTS & AMBIENCE FOLEY LIBRARY: Discover built-in `@remotion/sfx` exports (whoosh, whip, pageTurn, uiSwitch, mouseClick, ding, shutterModern, vineBoom, dramaticBoomer, recordScratch) AND real-world environment ambience / room tone URLs from Internet Archive when `includeWebFoley: true` (e.g. cave wind, ocean waves, rain forest, space drone, city street at low volume 0.08-0.12 for true 5-layer film audio).',
     inputSchema: {
       type: 'object',
       properties: {

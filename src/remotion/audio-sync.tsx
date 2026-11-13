@@ -408,6 +408,7 @@ const SyncedSceneInner: React.FC<{
   durationInFrames: number;
   enterFrames: number;
   exitFrames: number;
+  overlapFrames: number;
   isFirst: boolean;
   isLast: boolean;
   transitionStyle: SceneTransitionStyle;
@@ -417,6 +418,7 @@ const SyncedSceneInner: React.FC<{
   durationInFrames,
   enterFrames,
   exitFrames,
+  overlapFrames,
   isFirst,
   isLast,
   transitionStyle,
@@ -429,11 +431,16 @@ const SyncedSceneInner: React.FC<{
     return <AbsoluteFill style={style}>{children}</AbsoluteFill>;
   }
 
-  const inFrames = isFirst ? Math.min(10, enterFrames) : enterFrames;
-  const outFrames = isLast ? Math.min(12, exitFrames) : exitFrames;
-  const exitStart = Math.max(inFrames + 4, durationInFrames - outFrames);
+  // Ensure incoming scene reaches full opacity before the previous overlapped scene unmounts (prevents flicker & ghost overlap)
+  const effectiveInFrames = isFirst
+    ? Math.min(10, enterFrames)
+    : overlapFrames > 0
+    ? Math.min(enterFrames, Math.max(4, overlapFrames))
+    : enterFrames;
+  const outFrames = isLast ? Math.min(12, exitFrames) : Math.max(6, exitFrames);
+  const exitStart = Math.max(effectiveInFrames + 4, durationInFrames - outFrames);
 
-  const enterProgress = interpolate(frame, [0, inFrames], [0, 1], {
+  const enterProgress = interpolate(frame, [0, effectiveInFrames], [0, 1], {
     easing: Easing.bezier(0.22, 1, 0.36, 1),
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
@@ -445,28 +452,39 @@ const SyncedSceneInner: React.FC<{
     extrapolateRight: 'clamp',
   });
 
-  // Never fade first scene to 0 on frame 0 or dip mid-cut to black when overlapped
-  const enterOpacity = isFirst ? 1 : enterProgress;
-  const exitOpacity = isLast ? 1 : 1 - exitProgress;
-  let opacity = enterOpacity * exitOpacity;
+  // Never fade Scene 0 at frame 0; keep overlapped outgoing scenes opaque underneath so cuts never dip dark or double-expose ghost text
+  let opacity = isFirst ? 1 : enterProgress;
   let transform = 'none';
   let clipPath: string | undefined;
 
   if (transitionStyle === 'whip-pan') {
-    const enterX = isFirst ? 0 : interpolate(enterProgress, [0, 1], [320, 0]);
-    const exitX = isLast ? 0 : interpolate(exitProgress, [0, 1], [0, -240]);
-    const scale = isLast ? 1 : interpolate(exitProgress, [0, 1], [1, 0.96]);
+    const enterX = isFirst ? 0 : interpolate(enterProgress, [0, 1], [680, 0]);
+    const exitX = isLast ? 0 : interpolate(exitProgress, [0, 1], [0, -260]);
+    const scale = isLast ? 1 : interpolate(exitProgress, [0, 1], [1, 0.97]);
+    if (!isFirst) {
+      opacity = interpolate(frame, [0, Math.min(3, effectiveInFrames)], [0.25, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
+    }
     transform = `translate3d(${(enterX + exitX).toFixed(1)}px, 0, 0) scale(${scale.toFixed(4)})`;
   } else if (transitionStyle === 'zoom-through') {
-    const enterScale = isFirst ? 1 : interpolate(enterProgress, [0, 1], [0.92, 1]);
-    const exitScale = isLast ? 1 : interpolate(exitProgress, [0, 1], [1, 1.09]);
+    const enterScale = isFirst ? 1 : interpolate(enterProgress, [0, 1], [0.94, 1]);
+    const exitScale = isLast ? 1 : interpolate(exitProgress, [0, 1], [1, 1.08]);
+    if (!isFirst) {
+      opacity = interpolate(frame, [0, Math.max(4, Math.round(effectiveInFrames * 0.65))], [0, 1], {
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
+    }
     transform = `scale(${(enterScale * exitScale).toFixed(4)})`;
   } else if (transitionStyle === 'wipe') {
     if (!isFirst && enterProgress < 1) {
       const rightPct = ((1 - enterProgress) * 100).toFixed(2);
       clipPath = `inset(0 ${rightPct}% 0 0)`;
-      opacity = exitOpacity;
     }
+    opacity = 1;
   } else {
     const scale =
       (isFirst ? 1 : interpolate(enterProgress, [0, 1], [0.985, 1])) *
@@ -516,6 +534,7 @@ export const SyncedScene: React.FC<SyncedSceneProps> = ({
         durationInFrames={actualDur}
         enterFrames={enterFrames}
         exitFrames={exitFrames}
+        overlapFrames={actualOverlap}
         isFirst={isFirst}
         isLast={isLast}
         transitionStyle={transitionStyle}

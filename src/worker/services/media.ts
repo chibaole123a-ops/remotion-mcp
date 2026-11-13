@@ -2,7 +2,7 @@ const USER_AGENT = 'Remotion-Cloud-MCP-Studio/7.0 (https://github.com/chibaole12
 
 export interface VisualMediaItem {
   id: string;
-  source: 'wikimedia' | 'openverse' | 'internet_archive';
+  source: 'wikimedia' | 'openverse' | 'internet_archive' | 'pexels' | 'pixabay';
   mediaType: 'image' | 'video';
   title: string;
   url: string;
@@ -210,15 +210,142 @@ async function searchInternetArchiveVideos(query: string, limit: number): Promis
   return items;
 }
 
+async function searchPexelsMedia(
+  query: string,
+  mediaType: 'all' | 'image' | 'video',
+  limit: number,
+  apiKey?: string
+): Promise<VisualMediaItem[]> {
+  if (!apiKey) return [];
+  const items: VisualMediaItem[] = [];
+  const headers = { Authorization: apiKey, 'User-Agent': USER_AGENT };
+
+  const fetchList = async (url: string) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(url, { headers, signal: controller.signal });
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  if (mediaType === 'all' || mediaType === 'video') {
+    const vData: any = await fetchList(
+      `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${Math.min(5, limit)}&orientation=landscape`
+    );
+    for (const v of vData?.videos || []) {
+      const hd =
+        (v.video_files || []).find((f: any) => f.file_type === 'video/mp4' && Number(f.width) >= 1280 && Number(f.width) <= 1920) ||
+        (v.video_files || []).find((f: any) => f.file_type === 'video/mp4');
+      if (!hd?.link) continue;
+      items.push({
+        id: `pexels-vid-${v.id}`,
+        source: 'pexels',
+        mediaType: 'video',
+        title: v.user?.name ? `Pexels B-Roll by ${v.user.name}` : `Pexels Video ${v.id}`,
+        url: hd.link,
+        thumbnailUrl: v.image,
+        width: hd.width || v.width,
+        height: hd.height || v.height,
+        license: 'Pexels License',
+      });
+    }
+  }
+
+  if ((mediaType === 'all' || mediaType === 'image') && items.length < limit) {
+    const pData: any = await fetchList(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${Math.min(5, limit)}`
+    );
+    for (const p of pData?.photos || []) {
+      const url = p?.src?.large2x || p?.src?.original;
+      if (!url) continue;
+      items.push({
+        id: `pexels-img-${p.id}`,
+        source: 'pexels',
+        mediaType: 'image',
+        title: p.alt || `Pexels Photo ${p.id}`,
+        url,
+        thumbnailUrl: p?.src?.medium || url,
+        width: p.width,
+        height: p.height,
+        license: 'Pexels License',
+      });
+    }
+  }
+  return items.slice(0, limit);
+}
+
+async function searchPixabayMedia(
+  query: string,
+  mediaType: 'all' | 'image' | 'video',
+  limit: number,
+  apiKey?: string
+): Promise<VisualMediaItem[]> {
+  if (!apiKey) return [];
+  const items: VisualMediaItem[] = [];
+
+  if (mediaType === 'all' || mediaType === 'video') {
+    const vData = await fetchJsonWithTimeout(
+      `https://pixabay.com/api/videos/?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}&per_page=${Math.min(5, limit)}`,
+      5000
+    );
+    for (const hit of vData?.hits || []) {
+      const vid = hit?.videos?.large || hit?.videos?.medium;
+      if (!vid?.url) continue;
+      items.push({
+        id: `pixabay-vid-${hit.id}`,
+        source: 'pixabay',
+        mediaType: 'video',
+        title: hit.tags || `Pixabay Video ${hit.id}`,
+        url: vid.url,
+        thumbnailUrl: hit.userImageURL || undefined,
+        width: vid.width,
+        height: vid.height,
+        license: 'Pixabay Content License',
+      });
+    }
+  }
+
+  if ((mediaType === 'all' || mediaType === 'image') && items.length < limit) {
+    const pData = await fetchJsonWithTimeout(
+      `https://pixabay.com/api/?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}&image_type=photo&min_width=1200&per_page=${Math.min(5, limit)}`,
+      5000
+    );
+    for (const hit of pData?.hits || []) {
+      const url = hit?.largeImageURL || hit?.webformatURL;
+      if (!url) continue;
+      items.push({
+        id: `pixabay-img-${hit.id}`,
+        source: 'pixabay',
+        mediaType: 'image',
+        title: hit.tags || `Pixabay Photo ${hit.id}`,
+        url,
+        thumbnailUrl: hit.previewURL || url,
+        width: hit.imageWidth,
+        height: hit.imageHeight,
+        license: 'Pixabay Content License',
+      });
+    }
+  }
+  return items.slice(0, limit);
+}
+
 export async function searchVisualMedia(
   query: string,
   mediaType: 'all' | 'image' | 'video' = 'all',
   limit = 5,
-  attachVisionThumbnails = true
+  attachVisionThumbnails = true,
+  apiKeys?: { pexelsKey?: string; pixabayKey?: string }
 ): Promise<VisualMediaSearchResult> {
   const clampedLimit = Math.max(1, Math.min(8, limit));
 
   const tasks: Array<Promise<VisualMediaItem[]>> = [
+    ...(apiKeys?.pexelsKey ? [searchPexelsMedia(query, mediaType, clampedLimit, apiKeys.pexelsKey)] : []),
+    ...(apiKeys?.pixabayKey ? [searchPixabayMedia(query, mediaType, clampedLimit, apiKeys.pixabayKey)] : []),
     searchWikimediaMedia(query, mediaType, clampedLimit),
   ];
   if (mediaType === 'all' || mediaType === 'image') {
@@ -229,7 +356,7 @@ export async function searchVisualMedia(
   }
 
   const settled = await Promise.all(tasks);
-  const merged: VisualMediaItem[] = [];
+  const pool: VisualMediaItem[] = [];
   const seenUrls = new Set<string>();
 
   const pushUnique = (lists: VisualMediaItem[][]) => {
@@ -237,17 +364,15 @@ export async function searchVisualMedia(
       for (const item of list) {
         if (seenUrls.has(item.url)) continue;
         seenUrls.add(item.url);
-        merged.push(item);
-        if (merged.length >= clampedLimit) break;
+        pool.push(item);
       }
-      if (merged.length >= clampedLimit) break;
     }
   };
 
   pushUnique(settled);
 
   // Broaden fallback automatically when a multi-word descriptive query returns 0 hits
-  if (merged.length === 0) {
+  if (pool.length === 0) {
     const tokens = query
       .replace(/[^\p{L}\p{N}\s]/gu, ' ')
       .trim()
@@ -264,6 +389,15 @@ export async function searchVisualMedia(
       pushUnique(await Promise.all(retryTasks));
     }
   }
+
+  // Rank HD landscape assets first so full-frame Ken Burns shots never pixelate
+  const scoreResolution = (it: VisualMediaItem) => {
+    const w = Number(it.width || 0);
+    const h = Number(it.height || 0);
+    const isLandscape = w > 0 && h > 0 ? w >= h : true;
+    return (it.mediaType === 'video' ? 40 : 0) + (w >= 1200 ? 30 : w >= 800 ? 15 : 0) + (isLandscape ? 10 : 0);
+  };
+  const merged = pool.sort((a, b) => scoreResolution(b) - scoreResolution(a)).slice(0, clampedLimit);
 
   const imageBlocks: Array<{ type: 'image'; data: string; mimeType: string; mime_type: string }> = [];
 
@@ -363,7 +497,8 @@ export async function searchSfxCatalog(
     usageSnippet: string;
   }> = [];
 
-  if (includeWebFoley || rankedBuiltin.length === 0) {
+  const shouldSearchFoley = includeWebFoley || category === 'ambience' || rankedBuiltin.length === 0;
+  if (shouldSearchFoley) {
     const cleanQ = query.replace(/[^\p{L}\p{N}\s]/gu, ' ').trim();
     if (cleanQ) {
       const iaUrl =
@@ -399,5 +534,7 @@ export async function searchSfxCatalog(
     builtinMatches: rankedBuiltin,
     allBuiltinNames: REMOTION_BUILTIN_SFX.map((s) => s.name),
     webFoleyMatches: webFoley,
+    mixingTip:
+      '5-Layer Studio Mix: layer subtle ambience/room-tone at volume 0.08-0.14 behind Voiceover (1.0) + smooth-ducked BGM + lead-in transition SFX (-5 frames) + impact/hit SFX.',
   };
 }

@@ -136,9 +136,9 @@ export const TOOLS = [
         },
         category: {
           type: 'string',
-          enum: ['all', 'transition', 'ui', 'camera', 'emphasis', 'comedy'],
+          enum: ['all', 'transition', 'ui', 'camera', 'emphasis', 'comedy', 'ambience'],
           default: 'all',
-          description: 'Optional built-in category filter.',
+          description: 'Optional category filter ("ambience" searches room-tone/foley soundscapes for 5-layer depth).',
         },
         includeWebFoley: {
           type: 'boolean',

@@ -12,6 +12,7 @@ import {
   random,
   staticFile,
 } from 'remotion';
+import { fitTextOnNLines } from '@remotion/layout-utils';
 import rawTelemetry from './audio-telemetry.json';
 
 export interface Caption {
@@ -713,11 +714,74 @@ export const ChapterProgressSpine: React.FC<{
   );
 };
 
+export interface SmoothDuckingOptions {
+  highVolume?: number;
+  lowVolume?: number;
+  attackFrames?: number;
+  releaseFrames?: number;
+  minGapToReleaseFrames?: number;
+}
+
+/**
+ * Studio-grade smooth BGM ducking envelope using attack/release ramps around active speech scenes
+ * (eliminates abrupt 1-frame volume steps).
+ */
+export function getSmoothDuckingVolume(
+  frame: number,
+  options: SmoothDuckingOptions = {}
+): number {
+  const highVolume = options.highVolume ?? 0.24;
+  const lowVolume = options.lowVolume ?? 0.11;
+  const attackFrames = Math.max(2, options.attackFrames ?? 14);
+  const releaseFrames = Math.max(2, options.releaseFrames ?? 22);
+  const minGap = Math.max(4, options.minGapToReleaseFrames ?? attackFrames + releaseFrames + 4);
+
+  const scenes = audioTelemetry?.scenes || [];
+  if (scenes.length === 0) return highVolume;
+
+  // Merge speech windows whose gap is too small for BGM to meaningfully swell up and duck back down
+  const windows: Array<{ start: number; end: number }> = [];
+  for (const s of scenes) {
+    const start = Math.max(0, s.startFrame);
+    const end = Math.max(start + 1, s.endFrame);
+    const prev = windows[windows.length - 1];
+    if (prev && start - prev.end < minGap) {
+      prev.end = Math.max(prev.end, end);
+    } else {
+      windows.push({ start, end });
+    }
+  }
+
+  let duckAmount = 0; // 0 = full highVolume, 1 = full ducked lowVolume
+  for (const w of windows) {
+    const rampDownStart = w.start - attackFrames;
+    const rampUpEnd = w.end + releaseFrames;
+    if (frame < rampDownStart || frame > rampUpEnd) continue;
+
+    let amt = 1;
+    if (frame < w.start) {
+      amt = interpolate(frame, [rampDownStart, w.start], [0, 1], {
+        easing: Easing.bezier(0.4, 0, 0.2, 1),
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
+    } else if (frame > w.end) {
+      amt = interpolate(frame, [w.end, rampUpEnd], [1, 0], {
+        easing: Easing.bezier(0.4, 0, 0.2, 1),
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
+    }
+    if (amt > duckAmount) duckAmount = amt;
+  }
+
+  return interpolate(duckAmount, [0, 1], [highVolume, lowVolume]);
+}
+
 /**
  * Master Voiceover Track (<MasterAudioTrack>):
- * Plays the continuous master voiceover track (`voiceover.mp3` or legacy segment fallbacks)
- * seamlessly across the entire video.
- * Supports automated audio ducking for background music!
+ * Plays the continuous master voiceover track (`voiceover.mp3`) seamlessly across the entire video.
+ * Supports automated smooth attack/release audio ducking for background music!
  */
 export const MasterAudioTrack: React.FC<{
   voiceVolume?: number;
@@ -731,18 +795,15 @@ export const MasterAudioTrack: React.FC<{
   enableDucking = true,
 }) => {
   const frame = useCurrentFrame();
-  const scenes = audioTelemetry?.scenes || [];
 
-  // Determine if voice is currently speaking at this frame
-  const isSpeaking = useMemo(() => {
-    return scenes.some((s) => frame >= s.startFrame && frame < s.endFrame);
-  }, [scenes, frame]);
-
-  // Dynamic ducking volume: lower when speaking, swell up when paused
+  // Smooth studio ducking envelope: lower during speech, swell gently on true pauses
   const dynamicBgmVol = enableDucking
-    ? isSpeaking
-      ? bgmVolume * 0.4
-      : bgmVolume * 1.2
+    ? getSmoothDuckingVolume(frame, {
+        lowVolume: bgmVolume * 0.45,
+        highVolume: Math.min(0.4, bgmVolume * 1.15),
+        attackFrames: 14,
+        releaseFrames: 22,
+      })
     : bgmVolume;
 
   return (
@@ -750,7 +811,7 @@ export const MasterAudioTrack: React.FC<{
       {/* 1. Continuous Master Voiceover */}
       <Audio src={staticFile('voiceover.mp3')} volume={voiceVolume} />
 
-      {/* 2. Optional Background Music with automated ducking */}
+      {/* 2. Optional Background Music with smooth automated ducking */}
       {bgmSrc && (
         <Audio src={bgmSrc} volume={dynamicBgmVol} loop />
       )}
@@ -810,28 +871,21 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
 
   if (allWords.length === 0) return null;
 
-  // Group words into punchy pages that NEVER cross a sentence boundary or pause gap (> 8 frames)
+  // Group words into natural spoken phrases: respect sentence/clause boundaries and avoid 1-word orphans
   const pages = useMemo(() => {
-    const res: Array<{
-      pageIndex: number;
-      startFrame: number;
-      endFrame: number;
+    const rawPages: Array<{
       words: WordToken[];
+      endedWithSentence: boolean;
     }> = [];
 
     let buffer: WordToken[] = [];
-    const flush = () => {
+    const flushRaw = (endedWithSentence: boolean) => {
       if (buffer.length === 0) return;
-      const startFrame = buffer[0].globalStartFrame ?? buffer[0].startFrame;
-      const endFrame = buffer[buffer.length - 1].globalEndFrame ?? buffer[buffer.length - 1].endFrame;
-      res.push({
-        pageIndex: res.length,
-        startFrame,
-        endFrame: Math.max(endFrame, startFrame + 10),
-        words: buffer,
-      });
+      rawPages.push({ words: buffer, endedWithSentence });
       buffer = [];
     };
+
+    const softBreakThreshold = Math.max(2, Math.floor(wordsPerPage * 0.6));
 
     for (let i = 0; i < allWords.length; i++) {
       const w = allWords[i];
@@ -845,14 +899,36 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
           typeof prev.sentenceIndex === 'number' &&
           w.sentenceIndex !== prev.sentenceIndex;
         const endedSentence = /[.?!…]$/.test(prev.word);
-        if (buffer.length >= wordsPerPage || crossedSentence || endedSentence || pauseGap > 8) {
-          flush();
+        const endedClause = /[,;—–:]$/.test(prev.word) && buffer.length >= softBreakThreshold;
+
+        if (buffer.length >= wordsPerPage || crossedSentence || endedSentence || endedClause || pauseGap > 8) {
+          flushRaw(crossedSentence || endedSentence || pauseGap > 8);
         }
       }
       buffer.push(w);
     }
-    flush();
-    return res;
+    flushRaw(true);
+
+    // Anti-orphan balancing: prevent a 1-word orphan card at the end of a phrase when preceded by >= 3 words
+    for (let i = 1; i < rawPages.length; i++) {
+      const curr = rawPages[i];
+      const prev = rawPages[i - 1];
+      if (curr.words.length === 1 && !prev.endedWithSentence && prev.words.length >= 3) {
+        const moved = prev.words.pop();
+        if (moved) curr.words.unshift(moved);
+      }
+    }
+
+    return rawPages.map((p, pageIndex) => {
+      const startFrame = p.words[0].globalStartFrame ?? p.words[0].startFrame;
+      const endFrame = p.words[p.words.length - 1].globalEndFrame ?? p.words[p.words.length - 1].endFrame;
+      return {
+        pageIndex,
+        startFrame,
+        endFrame: Math.max(endFrame, startFrame + 10),
+        words: p.words,
+      };
+    });
   }, [allWords, wordsPerPage]);
 
   const activePage = pages.find((p, idx) => {
@@ -1375,6 +1451,301 @@ export const CinematicLightSweep: React.FC<CinematicLightSweepProps> = ({
           filter: 'blur(28px)',
         }}
       />
+    </AbsoluteFill>
+  );
+};
+
+// ============================================================================
+// V8 STUDIO CINEMA KIT (Motion Physics, Parallax, Auto-Fit Type & Film Finish)
+// ============================================================================
+
+export interface StaggerRevealProps {
+  index?: number;
+  staggerFrames?: number;
+  baseDelayFrames?: number;
+  direction?: 'up' | 'down' | 'left' | 'right' | 'scale';
+  distance?: number;
+  overshoot?: boolean;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Motion-physics staggered entrance implementing Delay Stagger, Anticipation, and Overshoot spring.
+ */
+export const StaggerReveal: React.FC<StaggerRevealProps> = ({
+  index = 0,
+  staggerFrames = 5,
+  baseDelayFrames = 0,
+  direction = 'up',
+  distance = 28,
+  overshoot = true,
+  children,
+  style,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const delay = Math.max(0, baseDelayFrames + index * staggerFrames);
+  const localF = Math.max(0, frame - delay);
+
+  const prog = spring({
+    frame: localF,
+    fps,
+    config: overshoot
+      ? { damping: 12, stiffness: 145, mass: 0.7 }
+      : { damping: 20, stiffness: 110, mass: 0.9 },
+  });
+
+  const opacity = interpolate(localF, [0, 7], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+
+  let transform = '';
+  if (direction === 'up') {
+    transform = `translateY(${(1 - prog) * distance}px)`;
+  } else if (direction === 'down') {
+    transform = `translateY(${(1 - prog) * -distance}px)`;
+  } else if (direction === 'left') {
+    transform = `translateX(${(1 - prog) * distance}px)`;
+  } else if (direction === 'right') {
+    transform = `translateX(${(1 - prog) * -distance}px)`;
+  } else {
+    transform = `scale(${0.86 + prog * 0.14})`;
+  }
+
+  return (
+    <div style={{ opacity, transform, ...style }}>
+      {children}
+    </div>
+  );
+};
+
+export interface CameraRigProps {
+  zoomFrom?: number;
+  zoomTo?: number;
+  panX?: number;
+  panY?: number;
+  rotateDeg?: number;
+  handheldStrength?: number;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Inertial scene camera rig adding smooth push-in/pull-out + subtle organic micro-handheld breathing.
+ */
+export const CameraRig: React.FC<CameraRigProps> = ({
+  zoomFrom = 1.0,
+  zoomTo = 1.06,
+  panX = 0,
+  panY = 0,
+  rotateDeg = 0,
+  handheldStrength = 0.35,
+  children,
+  style,
+}) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const dur = Math.max(2, durationInFrames);
+
+  const easeProg = interpolate(frame, [0, dur], [0, 1], {
+    easing: Easing.bezier(0.22, 0.1, 0.25, 1),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+
+  const scale = interpolate(easeProg, [0, 1], [zoomFrom, zoomTo]);
+  const baseX = interpolate(easeProg, [0, 1], [0, panX]);
+  const baseY = interpolate(easeProg, [0, 1], [0, panY]);
+  const baseRot = interpolate(easeProg, [0, 1], [0, rotateDeg]);
+
+  const microX = handheldStrength * 6 * Math.sin(frame / 41);
+  const microY = handheldStrength * 4 * Math.cos(frame / 33);
+  const microRot = handheldStrength * 0.25 * Math.sin(frame / 53);
+
+  return (
+    <AbsoluteFill
+      style={{
+        transform: `translate(${baseX + microX}px, ${baseY + microY}px) scale(${scale}) rotate(${baseRot + microRot}deg)`,
+        transformOrigin: 'center center',
+        ...style,
+      }}
+    >
+      {children}
+    </AbsoluteFill>
+  );
+};
+
+export interface ParallaxDepthLayersProps {
+  background?: React.ReactNode;
+  midground?: React.ReactNode;
+  foreground?: React.ReactNode;
+  driftX?: number;
+  driftY?: number;
+  style?: React.CSSProperties;
+}
+
+/**
+ * 3-plane Z-depth spatial container (0.25x background, 1.0x midground, 1.65x foreground parallax).
+ */
+export const ParallaxDepthLayers: React.FC<ParallaxDepthLayersProps> = ({
+  background,
+  midground,
+  foreground,
+  driftX = 28,
+  driftY = 12,
+  style,
+}) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const dur = Math.max(2, durationInFrames);
+
+  const p = interpolate(frame, [0, dur], [-0.5, 0.5], {
+    easing: Easing.inOut(Easing.sin),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', ...style }}>
+      {background ? (
+        <AbsoluteFill style={{ transform: `translate(${p * driftX * 0.25}px, ${p * driftY * 0.25}px) scale(1.04)` }}>
+          {background}
+        </AbsoluteFill>
+      ) : null}
+      {midground ? (
+        <AbsoluteFill style={{ transform: `translate(${p * driftX}px, ${p * driftY}px)` }}>
+          {midground}
+        </AbsoluteFill>
+      ) : null}
+      {foreground ? (
+        <AbsoluteFill style={{ pointerEvents: 'none', transform: `translate(${p * driftX * 1.65}px, ${p * driftY * 1.65}px)` }}>
+          {foreground}
+        </AbsoluteFill>
+      ) : null}
+    </AbsoluteFill>
+  );
+};
+
+export interface AutoFitTitleProps {
+  text: string;
+  maxWidth: number;
+  maxLines?: number;
+  maxFontSize?: number;
+  minFontSize?: number;
+  fontFamily?: string;
+  fontWeight?: number | string;
+  lineHeight?: number;
+  color?: string;
+  letterSpacing?: string;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Automatically sizes and breaks multi-line headlines using @remotion/layout-utils so titles never overflow.
+ */
+export const AutoFitTitle: React.FC<AutoFitTitleProps> = ({
+  text,
+  maxWidth,
+  maxLines = 2,
+  maxFontSize = 84,
+  minFontSize = 32,
+  fontFamily = 'BeVietnamPro, sans-serif',
+  fontWeight = 900,
+  lineHeight = 1.08,
+  color = '#ffffff',
+  letterSpacing = '-0.02em',
+  style,
+}) => {
+  const fitted = useMemo(() => {
+    try {
+      const res = fitTextOnNLines({
+        text: String(text || ''),
+        maxLines,
+        maxBoxWidth: Math.max(200, maxWidth),
+        fontFamily,
+        fontWeight,
+        letterSpacing,
+        maxFontSize,
+        validateFontIsLoaded: false,
+      });
+      return {
+        fontSize: Math.max(minFontSize, Math.min(maxFontSize, res.fontSize)),
+        lines: res.lines,
+      };
+    } catch {
+      return { fontSize: maxFontSize, lines: [String(text || '')] };
+    }
+  }, [text, maxLines, maxWidth, fontFamily, fontWeight, letterSpacing, maxFontSize, minFontSize]);
+
+  return (
+    <div
+      style={{
+        fontFamily,
+        fontSize: fitted.fontSize,
+        fontWeight,
+        lineHeight,
+        color,
+        letterSpacing,
+        maxWidth,
+        ...style,
+      }}
+    >
+      {fitted.lines.map((line, i) => (
+        <div key={i}>{line}</div>
+      ))}
+    </div>
+  );
+};
+
+export interface CinematicFinishProps {
+  vignette?: number;
+  grainOpacity?: number;
+  colorMood?: 'clean' | 'cinema-teal' | 'warm-film' | 'noir';
+  style?: React.CSSProperties;
+}
+
+/**
+ * Subtle studio optical finishing layer: lightweight vignette + bitrate-safe anti-banding grain + optional mood tint.
+ */
+export const CinematicFinish: React.FC<CinematicFinishProps> = ({
+  vignette = 0.34,
+  grainOpacity = 0.032,
+  colorMood = 'clean',
+  style,
+}) => {
+  const moodGradient =
+    colorMood === 'cinema-teal'
+      ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(251, 146, 60, 0.05) 100%)'
+      : colorMood === 'warm-film'
+      ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(120, 53, 15, 0.06) 100%)'
+      : colorMood === 'noir'
+      ? 'linear-gradient(180deg, rgba(15, 23, 42, 0.14) 0%, rgba(2, 6, 23, 0.22) 100%)'
+      : null;
+
+  return (
+    <AbsoluteFill style={{ pointerEvents: 'none', zIndex: 120, ...style }}>
+      {moodGradient ? <AbsoluteFill style={{ background: moodGradient, mixBlendMode: 'soft-light' }} /> : null}
+      {vignette > 0 ? (
+        <AbsoluteFill
+          style={{
+            background: `radial-gradient(ellipse at center, rgba(0,0,0,0) 54%, rgba(0,0,0,${Math.min(0.75, vignette)}) 100%)`,
+          }}
+        />
+      ) : null}
+      {grainOpacity > 0 ? (
+        <svg
+          width="100%"
+          height="100%"
+          style={{ position: 'absolute', inset: 0, opacity: Math.min(0.12, grainOpacity), mixBlendMode: 'overlay' }}
+        >
+          <filter id="v8StudioGrain">
+            <feTurbulence type="fractalNoise" baseFrequency="0.72" numOctaves="2" stitchTiles="stitch" />
+          </filter>
+          <rect width="100%" height="100%" filter="url(#v8StudioGrain)" />
+        </svg>
+      ) : null}
     </AbsoluteFill>
   );
 };

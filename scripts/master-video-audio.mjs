@@ -34,15 +34,29 @@ function hasAudioStream(filePath) {
   }
 }
 
+function ensureFaststartRemux() {
+  execFileSync(
+    'ffmpeg',
+    ['-y', '-i', videoPath, '-c', 'copy', '-movflags', '+faststart', masteredTmp],
+    { stdio: ['ignore', 'ignore', 'pipe'] }
+  );
+  if (fs.existsSync(masteredTmp) && fs.statSync(masteredTmp).size > 1024) {
+    fs.renameSync(masteredTmp, videoPath);
+    console.log('⚡ Applied MP4 +faststart web-streaming optimization.');
+  }
+}
+
 function main() {
   if (!jobId || !fs.existsSync(videoPath)) return;
   const cfg = parseMasteringConfig();
   if (!cfg.enabled) {
     console.log('ℹ️ Audio mastering disabled by caller.');
+    ensureFaststartRemux();
     return;
   }
   if (!hasAudioStream(videoPath)) {
     console.log('ℹ️ Video has no audio stream; skipping audio mastering.');
+    ensureFaststartRemux();
     return;
   }
 
@@ -106,6 +120,8 @@ function main() {
       '192k',
       '-ar',
       '48000',
+      '-movflags',
+      '+faststart',
       masteredTmp,
     ],
     { stdio: ['ignore', 'ignore', 'pipe'] }

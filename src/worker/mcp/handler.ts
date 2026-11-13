@@ -125,7 +125,10 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const limit = Number(args.limit || 5);
         const attachVision = args.attachVisionThumbnails !== false;
 
-        const result = await searchVisualMedia(query, mediaType, limit, attachVision);
+        const result = await searchVisualMedia(query, mediaType, limit, attachVision, {
+          pexelsKey: env.PEXELS_API_KEY,
+          pixabayKey: env.PIXABAY_API_KEY,
+        });
 
         const contentBlocks: any[] = [
           {

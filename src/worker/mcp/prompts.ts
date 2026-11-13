@@ -35,7 +35,7 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
   - \`<MasterAudioTrack voiceVolume={1} bgmSrc={...} bgmVolume={0.2} enableDucking={true} />\` — mounts \`voiceover.mp3\` cleanly (NEVER also mount \`voice-i.mp3\` when using \`<MasterAudioTrack />\`).
   - \`<ProKaraokeCaptions stylePreset="minimal" | "hormozi" | "glow" | "cyber" fontFamily={...} fontSize={42} bottomOffset={64} wordsPerPage={5} highlightColor="#facc15" />\` — real MMS-300M CTC acoustic word-level captions (\`"minimal"\` renders clean borderless cinema subtitles with zero dark footer box; \`wordsPerPage={4}\` or \`5\` keeps Vietnamese phrases crisp).
   - \`getWordTrigger(sceneIndex, "keyword", frame, transitionDurationFrames)\` & \`getWordProgress(sceneIndex, "startWord", "endWord", frame)\` — trigger animations on the exact spoken word!
-  - **Optional Cinema Primitives (\`./audio-sync\`)**: \`<KenBurnsMedia src={...} scrimGradient={...} />\`, \`<AtmosphericParticles count={36} color="#38bdf8" direction="up" | "down" | "drift" />\`, \`<CinematicLightSweep color="..." />\`, and \`interpolateSceneMilestones(globalFrame, [{ sceneIndex: 0, value: 0 }, { sceneIndex: 1, value: 200 }])\` (ensures live numbers/HUDs dwell around each scene's milestone while spoken instead of drifting ahead).
+  - **Optional Cinema Primitives (\`./audio-sync\`)**: \`<KenBurnsMedia />\`, \`<AtmosphericParticles />\`, \`<CinematicLightSweep />\`, \`<StaggerReveal index={i} direction="up" | "scale" overshoot />\`, \`<CameraRig zoomFrom={1} zoomTo={1.06} handheldStrength={0.35} />\`, \`<ParallaxDepthLayers background={...} midground={...} foreground={...} />\`, \`<AutoFitTitle text={...} maxWidth={1000} />\`, \`<CinematicFinish vignette={0.32} grainOpacity={0.032} colorMood="clean" | "cinema-teal" | "warm-film" | "noir" />\`, \`interpolateSceneMilestones(...)\` (dwells HUD/metrics per scene), and \`getSmoothDuckingVolume(f, { lowVolume: 0.12, highVolume: 0.26 })\` (smooth attack/release BGM fades).
 - **Vietnamese Typography**: Always import \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'\` (PascalCase — NEVER kebab-case like \`be-vietnam-pro\`) when script contains Vietnamese diacritics and pass \`fontFamily\` to \`<ProKaraokeCaptions />\`.
 - **3D & Vector**: \`@remotion/three\` (\`ThreeCanvas\`), \`@react-three/fiber\`, \`@react-three/drei\`, \`@remotion/shapes\`, \`@remotion/paths\` (\`evolvePath\`, \`interpolatePath\`), \`@remotion/skia\`, \`@remotion/lottie\`, \`@remotion/rive\`.
 - **Transitions, Blur & Light**: \`@remotion/transitions\` (\`TransitionSeries\`, \`slide\`, \`fade\`, \`wipe\`, \`flip\`), \`@remotion/motion-blur\` (\`CameraMotionBlur\`, \`Trail\`), \`@remotion/light-leaks\` (\`LightLeak\`), \`@remotion/noise\` (\`noise2D\`, \`noise3D\`).
@@ -48,10 +48,10 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
 
 ## 🎬 THE DIRECTOR & EDITOR CRAFT (CREATIVITY WITHOUT RIGID TEMPLATES):
 * **Audio-First Storytelling**: Write for the Ear with tactile imagery, varied sentence cadence, Curiosity Gap hooks, and *Therefore / But* narrative causality.
-* **Walter Murch's Rule of Six**: Emotion (51%), Story (23%), Rhythm (10%), Eye-Trace (7%), 2D/3D Space (9%).
+* **Walter Murch's Rule of Six & 12 Motion Principles**: Emotion (51%), Story (23%), Rhythm (10%), Eye-Trace (7%), 2D/3D Space (9%). Replace flat linear motion with **Anticipation**, **Spring Overshoot**, **Stagger (3–6 frames)**, and **Secondary Action** (particles, flares, underlines).
 * **Visual Rhythm & Creative Freedom**: Avoid static frames sitting unchanged for 8–12s and fading to black between scenes, and avoid adding top/bottom duration-running progress bars (like \`<ChapterProgressSpine />\`, timeline bars, or heavy boxed footer bars) unless the prompt or topic specifically benefits from them. Every layout choice inside the scene — cards, split-screens, data grids, 3D worlds, kinetic typography, or open-canvas cinema — is **100% yours to design** based on the user's request, topic, and creative idea. Evolve visual beats every **2.5–3.5s** inside each scene (camera push/zoom -> visual metaphor morph -> kinetic callout -> cutaway), keep a persistent spatial world/3D motif alive across cuts, and use \`transitionStyle="whip-pan" | "zoom-through" | "wipe"\` or \`@remotion/transitions\` \`TransitionSeries\`.
-* **Spatial Depth & Visual Metaphor**: Separate Foreground (particles, light leaks), Midground (focal subject/media), and Background (ambient space/grid). Use Ken Burns motion on still images so every frame breathes.
-* **Audio Hierarchy**: Master Voiceover → Tactile Foley/SFX → Dynamic BGM (ducked during speech, lifted on pauses, or cut abruptly for dramatic *Sudden Silence*).
+* **Optical Polish & Safe Typography**: Prevent dark-gradient H.264 banding and flat CG look with subtle vignette/grain (\`<CinematicFinish />\`) and soft readability scrims behind text over busy footage. Keep essential text inside broadcast safe margins and fit long titles with \`<AutoFitTitle />\` / \`@remotion/layout-utils\`.
+* **5-Layer Studio Audio Hierarchy**: Voiceover (priority) → Smooth-Ducked BGM (\`getSmoothDuckingVolume\` attack/release fades, or abrupt *Sudden Silence* for climax) → Lead-In Transition SFX (\`-4 to -6 frames\` before cut) → Impact/Hit SFX at lockup → Subtle Ambience / Room Tone (\`volume 0.08–0.14\`).
 * **Aesthetic Chameleon**: Freely adapt style to the topic — investigative documentary (Vox/Johnny Harris), vibrant science (Kurzgesagt), kinetic viral (Hormozi/MrBeast), 3D sci-fi/cyberpunk, or serene poetic minimalism.
 
 ${DIRECTOR_EVALUATION_FRAMEWORK}
@@ -68,7 +68,7 @@ export const DIRECTOR_CODE_BLUEPRINT = `
    - \`ChapterProgressSpine\`: optional — omit by default so there are no top/bottom duration progress bars; use ONLY if the user's topic/request benefits from chapter progress indicators.
    - \`MasterAudioTrack\`: \`voiceVolume={1}\` (OR pass \`bgmSrc={...} bgmVolume={0.2} enableDucking={true}\` directly; NEVER mount \`voice-X.mp3\` alongside \`MasterAudioTrack\`)
    - \`SceneAnchoredSequence\`: \`sceneIndex\`, \`offsetFrames={0}\`, \`durationInFrames={45}\`, \`fromEnd={false}\` (anchors SFX to exact speech boundaries)
-   - Helpers & Cinema Primitives: \`getWordTrigger\`, \`getWordProgress\`, \`getSceneTiming\`, \`getTelemetryTotalFrames\`, \`interpolateSceneMilestones\`, \`KenBurnsMedia\`, \`AtmosphericParticles\`, \`CinematicLightSweep\`
+   - Helpers & V8 Cinema Kit (\`./audio-sync\`): \`getWordTrigger\`, \`getWordProgress\`, \`getSceneTiming\`, \`getTelemetryTotalFrames\`, \`interpolateSceneMilestones\`, \`getSmoothDuckingVolume\`, \`KenBurnsMedia\`, \`AtmosphericParticles\`, \`CinematicLightSweep\`, \`StaggerReveal\`, \`CameraRig\`, \`ParallaxDepthLayers\`, \`AutoFitTitle\`, \`CinematicFinish\`
 
 3. **Vietnamese Font & Strictly Increasing \`interpolate\` Safety**:
    - Load font for Vietnamese captions & titles (note PascalCase module name): \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily: bodyFont } = loadFont();\`
@@ -82,8 +82,8 @@ import { ThreeCanvas } from '@remotion/three';
 import { whoosh, vineBoom } from '@remotion/sfx';
 import { loadFont } from '@remotion/google-fonts/BeVietnamPro';
 import {
-  StoryboardCanvas, SyncedScene, MasterAudioTrack,
-  SceneAnchoredSequence, ProKaraokeCaptions, getWordTrigger, getSceneTiming, getTelemetryTotalFrames
+  StoryboardCanvas, SyncedScene, MasterAudioTrack, CinematicFinish,
+  SceneAnchoredSequence, ProKaraokeCaptions, getWordTrigger, getSmoothDuckingVolume, getTelemetryTotalFrames
 } from './audio-sync';
 
 const { fontFamily: bodyFont } = loadFont();
@@ -91,7 +91,6 @@ const { fontFamily: bodyFont } = loadFont();
 export const DynamicVideo: React.FC = () => {
   const frame = useCurrentFrame();
   const totalFrames = getTelemetryTotalFrames(900);
-  const s0 = getSceneTiming(0);
 
   return (
     <StoryboardCanvas ambientColor="#38bdf8" style={{ fontFamily: bodyFont }}>
@@ -101,16 +100,17 @@ export const DynamicVideo: React.FC = () => {
       </AbsoluteFill>
 
       <SyncedScene sceneIndex={0} transitionStyle="zoom-through">
-        <Scene0SubBeats />{/* Inside, use local useCurrentFrame() + getWordTrigger(0, "keyword", f) every ~3s */}
+        <Scene0SubBeats />{/* Use local useCurrentFrame() + StaggerReveal + getWordTrigger(0, "keyword", f) */}
       </SyncedScene>
       <SyncedScene sceneIndex={1} transitionStyle="whip-pan">
-        <Scene1MediaLayer />{/* <Img src="verified_url" /> with Ken Burns drift — choose whatever layout, cards, or 3D composition fits the topic */}
+        <Scene1MediaLayer />{/* <KenBurnsMedia src="verified_url" /> + compose cards/3D freely for the topic */}
       </SyncedScene>
 
+      <CinematicFinish vignette={0.3} grainOpacity={0.03} colorMood="clean" />
       <ProKaraokeCaptions stylePreset="minimal" fontFamily={bodyFont} bottomOffset={56} wordsPerPage={5} />
       <MasterAudioTrack voiceVolume={1} />
-      <Audio src={BGM_URL} loop volume={(f) => (f >= s0.startFrame && f < totalFrames - 18 ? 0.14 : 0.28)} />
-      <SceneAnchoredSequence sceneIndex={1} offsetFrames={-6} durationInFrames={36}>
+      <Audio src={BGM_URL} loop volume={(f) => getSmoothDuckingVolume(f, { lowVolume: 0.13, highVolume: 0.28 })} />
+      <SceneAnchoredSequence sceneIndex={1} offsetFrames={-5} durationInFrames={36}>
         <Audio src={whoosh} volume={0.45} />
       </SceneAnchoredSequence>
     </StoryboardCanvas>

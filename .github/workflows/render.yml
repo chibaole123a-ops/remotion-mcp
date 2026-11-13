@@ -213,8 +213,8 @@ jobs:
               --public-dir=public \
               --gl=swangle \
               --codec=h264 \
-              --crf=22 \
-              --preset=veryfast \
+              --crf=19 \
+              --preset=fast \
               --concurrency=100% \
               --disposition=rm \
               --memory-limit=4096 \

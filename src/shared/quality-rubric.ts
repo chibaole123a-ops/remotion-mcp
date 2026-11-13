@@ -165,7 +165,16 @@ export function validateTsxComposition(tsxCode: string, ctx: ValidationContext =
     });
     if (loudStaticBgm) {
       warnings.push(
-        'ADVISORY: Detected background `<Audio>` with static volume >= 0.35 alongside active voiceover scenes. Prefer dynamic ducking `volume={(f) => ...}` or `0.12–0.22` so BGM does not mask narration.'
+        'ADVISORY: Detected background `<Audio>` with static volume >= 0.35 alongside active voiceover scenes. Prefer smooth ducking `volume={(f) => getSmoothDuckingVolume(f, { lowVolume: 0.12, highVolume: 0.26 })}` so BGM never masks narration.'
+      );
+    }
+
+    const usesStepDucking =
+      /<Audio\b[^>]*volume\s*=\s*\{\s*\(?[a-zA-Z_]\w*\)?\s*=>\s*[^}]*\?\s*0?\.\d+\s*:\s*0?\.\d+/.test(activeCode) &&
+      !/\bgetSmoothDuckingVolume\s*\(/.test(activeCode);
+    if (usesStepDucking) {
+      warnings.push(
+        'DIRECTOR_NOTE: Background `<Audio>` uses an abrupt 1-frame step ternary (`? low : high`). For smooth studio fades, replace it with `getSmoothDuckingVolume(f, { lowVolume: 0.12, highVolume: 0.26 })` from `./audio-sync` (or pass `bgmSrc` directly to `<MasterAudioTrack />`).'
       );
     }
 

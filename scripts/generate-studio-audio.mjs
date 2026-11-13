@@ -356,6 +356,53 @@ function normalizeWordBoundaries(originalText, rawBoundaries, actualDurationMs, 
   return buildWeightedWordsInWindow(originalTokens, 50, Math.max(400, actualDurationMs - 80), fpsVal);
 }
 
+/**
+ * Run batch CTC Acoustic Forced Alignment (MMS-300M via ctc_align_batch.py) once per render.
+ * Falls back silently to SentenceBoundary timing when no aligner runtime is installed (e.g. PREVIEW_MODE).
+ */
+function runBatchAcousticForcedAlignment(manifestItems) {
+  if (!Array.isArray(manifestItems) || manifestItems.length === 0) return {};
+  const alignScript = 'scripts/ctc_align_batch.py';
+  if (!fs.existsSync(alignScript)) return {};
+
+  const candidates = [process.env.ALIGNER_PYTHON, 'python3', 'python'].filter(Boolean);
+  let activePy = null;
+  for (const pyBin of candidates) {
+    try {
+      execSync(`"${pyBin}" -c "import ctc_forced_aligner"`, { stdio: 'ignore', timeout: 10000 });
+      activePy = pyBin;
+      break;
+    } catch {}
+  }
+  if (!activePy) {
+    console.log('ℹ️ CTC Forced Aligner not installed in current runner; keeping V7.2 SentenceBoundary timing.');
+    return {};
+  }
+
+  const manifestFile = 'public/_align-manifest.json';
+  const resultFile = 'public/_align-results.json';
+  try {
+    fs.writeFileSync(manifestFile, JSON.stringify(manifestItems, null, 2), 'utf-8');
+    console.log(`🎯 Running Acoustic Forced Alignment (MMS-300M CTC) on ${manifestItems.length} scene(s)...`);
+    execSync(`"${activePy}" "${alignScript}" "${manifestFile}" "${resultFile}"`, {
+      stdio: 'inherit',
+      timeout: 180000,
+    });
+    if (fs.existsSync(resultFile)) {
+      const parsed = JSON.parse(fs.readFileSync(resultFile, 'utf-8'));
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    }
+  } catch (err) {
+    console.warn('⚠️ Acoustic Forced Alignment failed; keeping SentenceBoundary fallback:', err?.message || err);
+  } finally {
+    try {
+      if (fs.existsSync(manifestFile)) fs.unlinkSync(manifestFile);
+      if (fs.existsSync(resultFile)) fs.unlinkSync(resultFile);
+    } catch {}
+  }
+  return {};
+}
+
 let config = {
   voice: 'vi-VN-NamMinhNeural',
   rate: '+5%',
@@ -458,9 +505,11 @@ if (isPreviewMode && segments.length > 0) {
     cursorFrame += segFrames;
   }
 } else if (isMasterSpineMode) {
-  console.log(`✨ Master Audio Spine V7.2 active: Synthesizing sentence-locked segments & lossless-aligning voiceover.mp3...`);
+  console.log(`✨ Master Audio Spine V7.3 active: Synthesizing segments, CTC acoustic alignment & lossless voiceover.mp3...`);
 
   const wavInputs = [];
+  const alignManifest = [];
+  const sceneOffsetMsMap = new Map();
   let cumulativeMs = 0;
 
   for (let i = 0; i < segments.length; i++) {
@@ -531,12 +580,21 @@ if (isPreviewMode && segments.length > 0) {
     // Copy per-scene mp3 cleanly
     fs.copyFileSync(rawMp3, `src/remotion/public/voice-${i}.mp3`);
 
-    // Align tokens strictly inside THAT segment's real SentenceBoundary windows!
+    // Baseline alignment strictly inside THAT segment's real SentenceBoundary windows (fallback if aligner is disabled/skipped)
     const localWords = normalizeWordBoundaries(segText, rawBoundaries, speechDurMs, fps);
     const segStartFrame = Math.round((cumulativeMs / 1000) * fps);
     const nextCumulativeMs = cumulativeMs + segTotalMs;
     const segEndFrame = Math.round((nextCumulativeMs / 1000) * fps);
     const segDurFrames = Math.max(Math.ceil(1.2 * fps), segEndFrame - segStartFrame);
+
+    sceneOffsetMsMap.set(i, cumulativeMs);
+    alignManifest.push({
+      index: i,
+      audioPath: rawMp3,
+      text: segText,
+      voice: segVoice,
+      durationMs: speechDurMs,
+    });
 
     const globalWords = localWords.map((w) => {
       const gStartMs = cumulativeMs + w.startMs;
@@ -564,10 +622,65 @@ if (isPreviewMode && segments.length > 0) {
     fs.copyFileSync(`public/captions-${i}.json`, `src/remotion/public/captions-${i}.json`);
 
     console.log(
-      `🎙️ Scene ${i}: exact=${exactWavDurSec.toFixed(2)}s (${segStartFrame}->${segStartFrame + segDurFrames}f), ${rawBoundaries.filter((b) => b.type === 'SentenceBoundary').length} SentenceBoundary, ${globalWords.length} synced words`
+      `🎙️ Scene ${i}: exact=${exactWavDurSec.toFixed(2)}s (${segStartFrame}->${segStartFrame + segDurFrames}f), ${rawBoundaries.filter((b) => b.type === 'SentenceBoundary').length} SentenceBoundary, ${globalWords.length} baseline words`
     );
 
     cumulativeMs = nextCumulativeMs;
+  }
+
+  // Upgrade word timings with true MMS-300M CTC Acoustic Forced Alignment (when runtime is present)
+  const alignedByScene = runBatchAcousticForcedAlignment(alignManifest);
+  for (const sceneObj of scenesTelemetry) {
+    const idxKey = String(sceneObj.sceneIndex);
+    const alignedWords = alignedByScene?.[idxKey];
+    const sceneOffsetMs = sceneOffsetMsMap.get(sceneObj.sceneIndex) || 0;
+    if (!Array.isArray(alignedWords) || alignedWords.length !== sceneObj.words.length || alignedWords.length === 0) {
+      continue;
+    }
+
+    const updatedLocal = [];
+    const updatedGlobal = sceneObj.words.map((prevWord, wIdx) => {
+      const aw = alignedWords[wIdx];
+      const startMs = Math.max(0, Number(aw.startMs || 0));
+      const endMs = Math.max(startMs + 40, Number(aw.endMs || startMs + 80));
+      const timestampMs = Math.round((startMs + endMs) / 2);
+      const startFrame = Math.floor((startMs / 1000) * fps);
+      const endFrame = Math.ceil((endMs / 1000) * fps);
+
+      const localEntry = {
+        word: prevWord.word,
+        text: prevWord.text,
+        startMs,
+        endMs,
+        timestampMs,
+        confidence: 1,
+        startFrame,
+        endFrame,
+        alignSource: 'ctc-mms-fa',
+        ...(typeof prevWord.sentenceIndex === 'number' ? { sentenceIndex: prevWord.sentenceIndex } : {}),
+      };
+      updatedLocal.push(localEntry);
+
+      const gStartMs = sceneOffsetMs + startMs;
+      const gEndMs = sceneOffsetMs + endMs;
+      return {
+        ...localEntry,
+        globalStartMs: gStartMs,
+        globalEndMs: gEndMs,
+        globalStartFrame: Math.floor((gStartMs / 1000) * fps),
+        globalEndFrame: Math.ceil((gEndMs / 1000) * fps),
+      };
+    });
+
+    sceneObj.words = updatedGlobal;
+    fs.writeFileSync(`public/captions-${sceneObj.sceneIndex}.json`, JSON.stringify(updatedLocal, null, 2), 'utf-8');
+    fs.copyFileSync(
+      `public/captions-${sceneObj.sceneIndex}.json`,
+      `src/remotion/public/captions-${sceneObj.sceneIndex}.json`
+    );
+    console.log(
+      `🎯 Acoustic Forced Alignment [Scene ${sceneObj.sceneIndex}]: aligned ${updatedGlobal.length}/${updatedGlobal.length} words via MMS-300M CTC`
+    );
   }
 
   // Gapless PCM->MP3 concat into single continuous public/voiceover.mp3 (0 cumulative drift!)
@@ -589,7 +702,7 @@ if (isPreviewMode && segments.length > 0) {
 
   const totalVideoFrames = scenesTelemetry.length > 0 ? scenesTelemetry[scenesTelemetry.length - 1].endFrame : defaultDurationFrames;
   console.log(
-    `🎙️ Master Audio Spine V7.2 generated: ${(cumulativeMs / 1000).toFixed(2)}s (${totalVideoFrames} frames) for ${scenesTelemetry.length} scenes. Sentence-locked zero-drift sync!`
+    `🎙️ Master Audio Spine V7.3 generated: ${(cumulativeMs / 1000).toFixed(2)}s (${totalVideoFrames} frames) for ${scenesTelemetry.length} scenes.`
   );
 } else {
   // Legacy multi-chunk fallback

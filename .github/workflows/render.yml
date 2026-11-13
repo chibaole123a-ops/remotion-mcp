@@ -107,6 +107,33 @@ jobs:
           sleep 3
           curl -s http://127.0.0.1:4416/ping || echo "POT provider initialized"
 
+      - name: Cache CTC Forced Aligner & HuggingFace MMS Model
+        if: inputs.mode != 'still'
+        id: cache_ctc
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ctc-aligner-venv
+            ~/.cache/huggingface
+          key: ctc-aligner-cpu-v1-${{ runner.os }}
+
+      - name: Setup CTC Acoustic Forced Aligner (CPU MMS-300M, Video Render Only)
+        if: inputs.mode != 'still'
+        run: |
+          VENV_DIR="$HOME/.ctc-aligner-venv"
+          if [ ! -f "$VENV_DIR/bin/python" ] || ! "$VENV_DIR/bin/python" -c "import ctc_forced_aligner" 2>/dev/null; then
+            (
+              python -m venv "$VENV_DIR"
+              "$VENV_DIR/bin/pip" install --upgrade pip wheel setuptools pybind11
+              "$VENV_DIR/bin/pip" install --upgrade --no-cache-dir torch torchcodec --index-url https://download.pytorch.org/whl/cpu
+              "$VENV_DIR/bin/pip" install --upgrade --no-cache-dir git+https://github.com/MahmoudAshraf97/ctc-forced-aligner.git
+            ) || echo "⚠️ CTC Forced Aligner install failed; falling back to SentenceBoundary word alignment."
+          fi
+          if [ -f "$VENV_DIR/bin/python" ] && "$VENV_DIR/bin/python" -c "import ctc_forced_aligner" 2>/dev/null; then
+            echo "ALIGNER_PYTHON=$VENV_DIR/bin/python" >> "$GITHUB_ENV"
+            echo "✅ CTC Acoustic Forced Aligner ready: $VENV_DIR/bin/python"
+          fi
+
       - name: Prepare YouTube Cookies if configured
         env:
           YT_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}

@@ -151,10 +151,12 @@ export function validateTsxComposition(tsxCode: string, ctx: ValidationContext =
   }
 
   if (hasVoiceoverScenes) {
-    // Detect static high volume on external/non-voiceover <Audio> tags (e.g. volume={0.5} or volume={0.8})
+    // Detect static high volume on background music <Audio> tags while exempting voiceovers and short SFX cues
+    const sfxPattern = /\b(?:whoosh|whip|pageTurn|uiSwitch|mouseClick|ding|snapchatNotification|shutterModern|shutterOld|vineBoom|dramaticBoomer|recordScratch|windowsXpError|loadingLag|animeWow|yippee|bruh|triggered|sfx)\b/i;
     const audioTags = activeCode.match(/<Audio\b[^>]*>/g) || [];
     const loudStaticBgm = audioTags.some((tag) => {
       if (/voiceover\.mp3|voice-|MasterAudioTrack/.test(tag)) return false;
+      if (sfxPattern.test(tag)) return false;
       const volMatch = tag.match(/\bvolume\s*=\s*\{\s*(0?\.\d+|1(?:\.0+)?)\s*\}/);
       if (!volMatch) return false;
       const vol = Number(volMatch[1]);
@@ -211,6 +213,12 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
     input.height > input.width;
 
   const activeCode = stripTsxComments(input.tsxCode || '');
+  const hasInlineDucking = /\bvolume\s*=\s*\{\s*\(?[a-zA-Z_]\w*\)?\s*=>/.test(activeCode);
+  const volumeFnRefMatch = activeCode.match(/\bvolume\s*=\s*\{\s*([a-zA-Z_$][\w$]*)\s*\}/);
+  const hasNamedDucking =
+    Boolean(volumeFnRefMatch) &&
+    new RegExp(`\\b(?:const|let|function)\\s+${volumeFnRefMatch![1]}\\b`).test(activeCode);
+
   const detectedSignals = {
     usesSpringPhysics: /\bspring\s*\(/.test(activeCode),
     usesInterpolation: /\binterpolate\s*\(/.test(activeCode),
@@ -218,7 +226,7 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
     usesTransitions: /TransitionSeries|@remotion\/transitions/.test(activeCode),
     usesStoryboardCanvas: /StoryboardCanvas|SyncedScene/.test(activeCode),
     usesCaptions: /ProKaraokeCaptions|WordHighlightCaptions/.test(activeCode),
-    usesDynamicAudioDucking: /\bvolume\s*=\s*\{\s*\(?[a-zA-Z_]\w*\)?\s*=>/.test(activeCode),
+    usesDynamicAudioDucking: hasInlineDucking || hasNamedDucking,
     usesGoogleFontsOrCustomFont: /loadFont|@remotion\/google-fonts|@remotion\/fonts/.test(activeCode),
   };
 

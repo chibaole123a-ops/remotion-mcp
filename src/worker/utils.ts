@@ -50,16 +50,20 @@ export function validateTsxCode(tsxCode: string, ctx: ValidationContext = {}): s
 const STOPWORDS = new Set([
   'và', 'là', 'của', 'có', 'trong', 'một', 'những', 'các', 'cho', 'được', 'với', 'khi',
   'này', 'đó', 'để', 'như', 'từ', 'về', 'trên', 'đến', 'ra', 'vào', 'lại', 'đã', 'đang',
+  'từng', 'mỗi', 'nhiều', 'rất', 'không', 'cũng', 'hãy', 'chỉ', 'thành', 'bằng', 'giữa', 'cùng',
+  'nên', 'đều', 'sẽ', 'hơn', 'lên', 'xuống', 'nếu', 'nhưng', 'rồi', 'hay', 'hoặc', 'dòng',
   'the', 'and', 'for', 'that', 'with', 'from', 'this', 'into', 'are', 'was', 'were',
 ]);
 
 export function extractAnchorKeywords(text: string, maxKeywords = 3): string[] {
-  const tokens = text
+  const rawTokens = text
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
     .map((t) => t.trim())
     .filter((t) => t.length >= 3 && !STOPWORDS.has(t.toLowerCase()));
 
+  const longTokens = rawTokens.filter((t) => t.length >= 4);
+  const tokens = longTokens.length >= maxKeywords ? longTokens : rawTokens;
   if (tokens.length === 0) return [];
   const step = Math.max(1, Math.floor(tokens.length / maxKeywords));
   const picks: string[] = [];

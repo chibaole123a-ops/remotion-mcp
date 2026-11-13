@@ -48,7 +48,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         },
         serverInfo: {
           name: 'remotion-cloud-mcp',
-          version: '7.0.0',
+          version: '7.1.0',
         },
       },
     };
@@ -387,7 +387,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
             fps,
             width,
             height,
-            {},
+            audioConfig,
             {
               mode: 'still',
               stillFrame: resolvedFrames[0],

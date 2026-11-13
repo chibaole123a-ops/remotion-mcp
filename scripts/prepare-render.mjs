@@ -118,7 +118,7 @@ async function prefetchExternalMedia(code) {
             // Connect to local BotGuard PO Token provider via official youtubepot-bgutilhttp argument
             const extractorArgs = '--extractor-args "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416;youtube:player-client=web,web_safari,mweb"';
             try {
-              execSync(`python3 -m yt_dlp ${cookieFlag} ${extractorArgs} -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
+              execSync(`python3 -m yt_dlp --js-runtimes node ${cookieFlag} ${extractorArgs} -x --audio-format mp3 --audio-quality 0 -o "${outPath}" "${url}"`, {
                 stdio: ['ignore', 'inherit', 'inherit'],
                 timeout: 90000,
               });
@@ -300,16 +300,20 @@ async function prefetchExternalMedia(code) {
   }
   const fnName = hasStaticFileImport ? 'staticFile' : '__remotionStaticFile';
 
-  // In JSX attributes (e.g. src="..."), replacing "https://..." with staticFile('...') causes invalid syntax: src=staticFile('...')
-  // It MUST be wrapped in curly braces: src={staticFile('...')}
+  // In JSX attributes (e.g. <Img src="..." />), wrap with curly braces: src={staticFile('...')}.
+  // Never wrap JS assignments like `const URL = 'https://...'`, `obj.url = '...'`, or comparisons `=== '...'`.
   function replaceUrlWithStaticFile(sourceCode, regex) {
     return sourceCode.replace(regex, (fullMatch, quote, url, offset, fullStr) => {
       const localFile = urlToLocalFile.get(url);
       if (!localFile) return fullMatch;
 
-      // Check if preceding character is '=' (JSX prop assignment)
-      const prefix = fullStr.slice(Math.max(0, offset - 5), offset).trim();
-      if (prefix.endsWith('=')) {
+      const lookback = fullStr.slice(Math.max(0, offset - 200), offset).trimEnd();
+      const isJsAssignmentOrComparison =
+        /\b(?:const|let|var|type|interface)\s+[a-zA-Z_$][\w$]*\s*(?::[^=]+)?=\s*$/.test(lookback) ||
+        /\.[a-zA-Z_$][\w$]*\s*=\s*$/.test(lookback) ||
+        /===\s*$|!==\s*$|==\s*$|!=\s*$/.test(lookback);
+
+      if (lookback.endsWith('=') && !isJsAssignmentOrComparison) {
         return `{${fnName}('${localFile}')}`;
       }
       return `${fnName}('${localFile}')`;

@@ -173,6 +173,40 @@ export function getSegmentStartFrame(sceneIndex: number, fallbackStartFrame = 0)
 }
 
 /**
+ * Get total video duration in frames measured from `audio-telemetry.json`, falling back safely.
+ */
+export function getTelemetryTotalFrames(fallbackFrames = 300): number {
+  const tf = audioTelemetry?.totalFrames;
+  return typeof tf === 'number' && tf > 0 ? tf : fallbackFrames;
+}
+
+/**
+ * Get the exact global end frame of segment `sceneIndex` on the master timeline.
+ */
+export function getSceneEndFrame(sceneIndex: number, fallbackEndFrame = 180): number {
+  const scene = audioTelemetry?.scenes?.[sceneIndex];
+  if (scene && typeof scene.endFrame === 'number' && scene.endFrame > 0) return scene.endFrame;
+  const start = getSegmentStartFrame(sceneIndex, -1);
+  const dur = getSceneFrames(sceneIndex, -1);
+  if (start >= 0 && dur > 0) return start + dur;
+  return fallbackEndFrame;
+}
+
+/**
+ * Get exact measured { startFrame, endFrame, durationInFrames } for `sceneIndex` with safe fallbacks.
+ */
+export function getSceneTiming(
+  sceneIndex: number,
+  fallbackStart = 0,
+  fallbackDur = 180
+): { startFrame: number; endFrame: number; durationInFrames: number } {
+  const startFrame = getSegmentStartFrame(sceneIndex, fallbackStart);
+  const durationInFrames = getSceneFrames(sceneIndex, fallbackDur);
+  const endFrame = getSceneEndFrame(sceneIndex, startFrame + durationInFrames);
+  return { startFrame, endFrame, durationInFrames };
+}
+
+/**
  * Get a proportional beat frame based on actual spoken words in `sceneIndex`.
  * For example, `getBeatFrame(0, 1, 3)` returns the startFrame of the word at 1/3rd through scene 0.
  */
@@ -444,6 +478,39 @@ export const SyncedScene: React.FC<SyncedSceneProps> = ({
       >
         {children}
       </SyncedSceneInner>
+    </Sequence>
+  );
+};
+
+export interface SceneAnchoredSequenceProps {
+  sceneIndex: number;
+  offsetFrames?: number;
+  durationInFrames: number;
+  fromEnd?: boolean;
+  fallbackStartFrame?: number;
+  fallbackDurationInFrames?: number;
+  children: React.ReactNode;
+}
+
+/**
+ * Mounts an SFX or overlay `<Sequence>` anchored dynamically to a scene's real telemetry boundary
+ * so timing never drifts even when TTS speech speed shifts relative to initial estimates.
+ */
+export const SceneAnchoredSequence: React.FC<SceneAnchoredSequenceProps> = ({
+  sceneIndex,
+  offsetFrames = 0,
+  durationInFrames,
+  fromEnd = false,
+  fallbackStartFrame = 0,
+  fallbackDurationInFrames = 180,
+  children,
+}) => {
+  const timing = getSceneTiming(sceneIndex, fallbackStartFrame, fallbackDurationInFrames);
+  const anchor = fromEnd ? timing.endFrame : timing.startFrame;
+  const from = Math.max(0, Math.round(anchor + offsetFrames));
+  return (
+    <Sequence from={from} durationInFrames={durationInFrames}>
+      {children}
     </Sequence>
   );
 };

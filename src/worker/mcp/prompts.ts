@@ -10,11 +10,11 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
 1. **Script & Timeline Lock (\`plan_storyboard_timeline\`)**: Expand the idea into a compelling arc (**Hook → Build-up → Climax → Outro**). Call \`plan_storyboard_timeline\` FIRST to lock exact \`startFrame\`, \`durationInFrames\`, \`audioConfigPayload\`, and \`anchorKeywords\`.
 2. **Visual & Audio Sourcing**:
    - Call \`search_visual_media\` to discover real photos/videos (.jpg/.png/.mp4) and inspect thumbnails directly with Vision.
-   - Call \`search_soundtrack\` for mood-matched BGM (returns reachability & clash risk) and \`search_sfx\` for exact \`@remotion/sfx\` exports or ambient foley.
+   - Call \`search_soundtrack\` for mood-matched BGM (prefer \`directMp3: true\` studio CDN tracks for 100% reliability on Cloud runners) and \`search_sfx\` for exact \`@remotion/sfx\` exports or ambient foley.
 3. **Multi-Layer Cinematic Craft (\`DynamicVideo.tsx\`)**:
    - Wrap scenes inside \`<StoryboardCanvas>\` (for continuous 2.5D camera drift) + \`<SyncedScene sceneIndex={i}>\` + \`<ChapterProgressSpine />\`.
    - Combine real media (\`<Img>\` / \`<OffthreadVideo>\`), 3D (\`ThreeCanvas\`), vector shapes/paths, \`@remotion/light-leaks\` (\`<LightLeak>\`), \`@remotion/motion-blur\` (\`<CameraMotionBlur>\`, \`<Trail>\`), \`@remotion/rough-notation\`, \`lucide-react\`, and \`<ProKaraokeCaptions>\` / \`<WordHighlightCaptions>\`.
-   - Sync visual beats to exact spoken words using \`getWordTrigger(sceneIndex, "keyword", frame)\` from \`./audio-sync\`.
+   - Sync visual beats to exact spoken words using \`getWordTrigger(sceneIndex, "keyword", frame)\`, and anchor SFX/ducking cues dynamically to measured TTS boundaries using \`<SceneAnchoredSequence sceneIndex={i}>\` or \`getSceneTiming(i)\` / \`getTelemetryTotalFrames()\` from \`./audio-sync\`.
    - Mix audio cleanly: use dynamic BGM ducking (\`volume={(f) => ...}\`) when voiceover is active and layer verified \`@remotion/sfx\` (\`whoosh\`, \`whip\`, \`pageTurn\`, \`uiSwitch\`, \`mouseClick\`, \`ding\`, \`shutterModern\`, \`vineBoom\`, \`dramaticBoomer\`, \`recordScratch\`).
 4. **Pre-Flight Quality & Multi-Frame Preview**:
    - Optionally call \`evaluate_video_quality\` to verify Tier-1 technical invariants and your 5-pillar intent alignment.
@@ -30,6 +30,8 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
   - \`<StoryboardCanvas ambientColor="#38bdf8">\` — continuous spatial camera drift across scenes.
   - \`<ChapterProgressSpine />\` — Vox-style chapter progress bar.
   - \`<SyncedScene sceneIndex={i}>\` — auto-locks scene \`from\` and \`durationInFrames\` to real TTS telemetry.
+  - \`<SceneAnchoredSequence sceneIndex={i} offsetFrames={...} durationInFrames={...} fromEnd={false}>\` — anchors SFX & cues dynamically to real telemetry scene boundaries!
+  - \`getSceneTiming(i)\` & \`getTelemetryTotalFrames()\` — inspect exact measured scene & total frame counts dynamically inside BGM ducking curves.
   - \`<MasterAudioTrack voiceVolume={1} />\` — mounts \`voiceover.mp3\` cleanly (NEVER also mount \`voice-i.mp3\` when using \`<MasterAudioTrack />\`).
   - \`<ProKaraokeCaptions stylePreset="hormozi" />\` / \`<WordHighlightCaptions />\` — real \`WordBoundary\` captions.
   - \`getWordTrigger(sceneIndex, "keyword", frame)\` & \`getWordProgress(sceneIndex, "keyword", frame, durFrames)\` — trigger animations on the exact spoken word!

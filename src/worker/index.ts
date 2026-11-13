@@ -300,7 +300,7 @@ export default {
         }
       }
 
-      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '7.0.0' }), {
+      return new Response(JSON.stringify({ status: 'ok', transport: 'streamable-http', version: '7.1.0' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -309,7 +309,7 @@ export default {
     return new Response(
       JSON.stringify({
         status: 'online_24_7',
-        version: '7.0.0 (Pro Editor & Director Cloud Studio)',
+        version: '7.1.0 (Pro Editor & Director Cloud Studio)',
         platform: 'Cloudflare Workers + GitHub Actions (16GB RAM Cloud)',
         repository: repo,
         tools: TOOLS.map((t) => t.name),

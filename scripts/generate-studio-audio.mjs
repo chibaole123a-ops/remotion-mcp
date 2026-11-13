@@ -35,6 +35,21 @@ function generateSilentAudioFile(filePath, durationSec = 1) {
   fs.writeFileSync(filePath, buffer);
 }
 
+// Generate a warm stereo ambient Cmaj9 pad (30s) via FFmpeg for resilient BGM fallback when external streams fail.
+function generateAmbientFallbackBgm(filePath, durationSec = 30) {
+  try {
+    execSync(
+      `ffmpeg -y -f lavfi -i "aevalsrc='0.14*sin(2*PI*130.81*t)+0.10*sin(2*PI*196.00*t)+0.08*sin(2*PI*246.94*t)+0.06*sin(2*PI*293.66*t)':s=44100:d=${durationSec}" -af "lowpass=f=680,tremolo=f=0.25:d=0.35,afade=t=in:st=0:d=1.5,afade=t=out:st=${Math.max(1, durationSec - 1.5)}:d=1.5" -ac 2 -c:a libmp3lame -q:a 4 "${filePath}"`,
+      { stdio: ['ignore', 'ignore', 'ignore'], timeout: 15000 }
+    );
+    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 2048) {
+      console.log(`🎼 Synthesized warm ambient BGM pad fallback (${durationSec}s) -> ${filePath}`);
+      return;
+    }
+  } catch {}
+  generateSilentAudioFile(filePath, 1);
+}
+
 // Fallback proportional syllable/word splitter when raw text needs word-level timestamps
 function buildProportionalWords(text, totalDurationMs, fpsVal) {
   const rawTokens = text
@@ -268,9 +283,14 @@ const voice = config.voice || 'vi-VN-NamMinhNeural';
 const rate = config.rate || '+5%';
 const scenesTelemetry = [];
 
-// 1. Always create a 100% silent placeholder for bgm.mp3 if not already fetched
+// 1. Always create an audible ambient pad placeholder for bgm.mp3 if not already fetched
+const isPreviewMode = process.env.PREVIEW_MODE === 'true';
 if (!fs.existsSync('public/bgm.mp3') || fs.statSync('public/bgm.mp3').size < 100) {
-  generateSilentAudioFile('public/bgm.mp3', 1);
+  if (isPreviewMode) {
+    generateSilentAudioFile('public/bgm.mp3', 1);
+  } else {
+    generateAmbientFallbackBgm('public/bgm.mp3', 30);
+  }
   fs.copyFileSync('public/bgm.mp3', 'src/remotion/public/bgm.mp3');
 }
 
@@ -279,7 +299,46 @@ if (!fs.existsSync('public/bgm.mp3') || fs.statSync('public/bgm.mp3').size < 100
 // and capture real SentenceBoundary & WordBoundary timestamps for precision cuts!
 const isMasterSpineMode = config.masterSpine !== false && segments.length > 0;
 
-if (isMasterSpineMode) {
+if (isPreviewMode && segments.length > 0) {
+  console.log(`⚡ PREVIEW_MODE active: Building fast synthetic telemetry for Contact Sheet captions & spine...`);
+  generateSilentAudioFile('public/voiceover.mp3', 1);
+  fs.copyFileSync('public/voiceover.mp3', 'src/remotion/public/voiceover.mp3');
+  let rateMultiplier = 1.0;
+  const rm = String(rate || '').match(/([+-]?\d+)%/);
+  if (rm) rateMultiplier = Math.max(0.5, Math.min(2.0, 1.0 + Number(rm[1]) / 100));
+
+  let cursorFrame = 0;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const segText = (typeof seg === 'string' ? seg : seg?.text || '').trim();
+    const wc = segText.split(/\s+/).filter(Boolean).length;
+    const estSec = Math.max(1.2, (wc / (3.65 * rateMultiplier)) + 0.35);
+    const segFrames = Math.ceil(estSec * fps);
+    const localWords = buildProportionalWords(segText, Math.round(estSec * 1000), fps);
+    const globalWords = localWords.map((w) => ({
+      ...w,
+      startMs: Math.round((cursorFrame / fps) * 1000) + w.startMs,
+      endMs: Math.round((cursorFrame / fps) * 1000) + w.endMs,
+      timestampMs: Math.round((cursorFrame / fps) * 1000) + w.timestampMs,
+      globalStartFrame: cursorFrame + w.startFrame,
+      globalEndFrame: cursorFrame + w.endFrame,
+    }));
+    scenesTelemetry.push({
+      sceneIndex: i,
+      text: segText,
+      audioDurationSec: Number(estSec.toFixed(3)),
+      durationInFrames: segFrames,
+      startFrame: cursorFrame,
+      endFrame: cursorFrame + segFrames,
+      words: globalWords,
+    });
+    generateSilentAudioFile(`public/voice-${i}.mp3`, 0.5);
+    fs.copyFileSync(`public/voice-${i}.mp3`, `src/remotion/public/voice-${i}.mp3`);
+    fs.writeFileSync(`public/captions-${i}.json`, JSON.stringify(globalWords, null, 2), 'utf-8');
+    fs.copyFileSync(`public/captions-${i}.json`, `src/remotion/public/captions-${i}.json`);
+    cursorFrame += segFrames;
+  }
+} else if (isMasterSpineMode) {
   console.log(`✨ Master Audio Spine Mode active: Synthesizing continuous master voiceover track...`);
 
   // Combine full text while preserving boundary markers per segment

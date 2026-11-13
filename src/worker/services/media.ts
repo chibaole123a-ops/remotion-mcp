@@ -98,7 +98,7 @@ async function searchWikimediaMedia(query: string, mediaType: 'all' | 'image' | 
   const apiUrl =
     `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6` +
     `&gsrsearch=${encodeURIComponent(query + suffix)}&gsrlimit=${Math.min(12, limit * 2)}` +
-    `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=512&format=json&origin=*`;
+    `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=360&format=json&origin=*`;
 
   const data = await fetchJsonWithTimeout(apiUrl, 6000);
   const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
@@ -232,14 +232,37 @@ export async function searchVisualMedia(
   const merged: VisualMediaItem[] = [];
   const seenUrls = new Set<string>();
 
-  for (const list of settled) {
-    for (const item of list) {
-      if (seenUrls.has(item.url)) continue;
-      seenUrls.add(item.url);
-      merged.push(item);
+  const pushUnique = (lists: VisualMediaItem[][]) => {
+    for (const list of lists) {
+      for (const item of list) {
+        if (seenUrls.has(item.url)) continue;
+        seenUrls.add(item.url);
+        merged.push(item);
+        if (merged.length >= clampedLimit) break;
+      }
       if (merged.length >= clampedLimit) break;
     }
-    if (merged.length >= clampedLimit) break;
+  };
+
+  pushUnique(settled);
+
+  // Broaden fallback automatically when a multi-word descriptive query returns 0 hits
+  if (merged.length === 0) {
+    const tokens = query
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.length >= 3);
+    if (tokens.length > 2) {
+      const relaxedQuery = tokens.slice(0, 2).join(' ');
+      const retryTasks: Array<Promise<VisualMediaItem[]>> = [
+        searchWikimediaMedia(relaxedQuery, mediaType, clampedLimit),
+      ];
+      if (mediaType === 'all' || mediaType === 'image') {
+        retryTasks.push(searchOpenverseImages(relaxedQuery, clampedLimit));
+      }
+      pushUnique(await Promise.all(retryTasks));
+    }
   }
 
   const imageBlocks: Array<{ type: 'image'; data: string; mimeType: string; mime_type: string }> = [];

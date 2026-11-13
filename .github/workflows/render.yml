@@ -121,6 +121,7 @@ jobs:
           AUDIO_B64: ${{ inputs.audioConfigBase64 }}
           FPS: ${{ inputs.fps }}
           DURATION: ${{ inputs.durationInFrames }}
+          PREVIEW_MODE: ${{ inputs.mode == 'still' && 'true' || 'false' }}
         run: |
           mkdir -p public src/remotion/public
           node scripts/generate-studio-audio.mjs
@@ -208,14 +209,14 @@ jobs:
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "Rendered Videos Storage" --notes "Automated storage for Remotion MCP rendered MP4 files"
           fi
-          if [ -f "outputs/video-${{ inputs.jobId }}.mp4" ]; then
-            gh release upload "$TAG" "outputs/video-${{ inputs.jobId }}.mp4" --clobber
-          fi
           if [ -f "outputs/qc-${{ inputs.jobId }}.json" ]; then
             gh release upload "$TAG" "outputs/qc-${{ inputs.jobId }}.json" --clobber || true
           fi
           if [ -f "outputs/project-${{ inputs.jobId }}.json" ]; then
             gh release upload "$TAG" "outputs/project-${{ inputs.jobId }}.json" --clobber || true
+          fi
+          if [ -f "outputs/video-${{ inputs.jobId }}.mp4" ]; then
+            gh release upload "$TAG" "outputs/video-${{ inputs.jobId }}.mp4" --clobber
           fi
           if [ -f "outputs/still-${{ inputs.jobId }}.png" ]; then
             gh release upload "$TAG" "outputs/still-${{ inputs.jobId }}.png" --clobber

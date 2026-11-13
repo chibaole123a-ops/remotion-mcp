@@ -1,6 +1,11 @@
 import type { Env } from "../types.js";
 import { TOOLS } from "./tools.js";
-import { ECOSYSTEM_DOCS, DIRECTOR_CODE_BLUEPRINT, SERVER_INSTRUCTIONS } from "./prompts.js";
+import {
+  ECOSYSTEM_DOCS,
+  DIRECTOR_CODE_BLUEPRINT,
+  SERVER_INSTRUCTIONS,
+  PRO_EDITOR_CRAFT_PLAYBOOK,
+} from "./prompts.js";
 import {
   randomJobId,
   sanitizeJobId,
@@ -69,6 +74,10 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
             name: 'director_workflow',
             description: 'Streamlined 4-step AI Video Director workflow, Autonomous Defaults from a bare topic, Remotion API blueprint, Vietnamese fonts, and Safe-Zone rules.',
           },
+          {
+            name: 'editor_craft_playbook',
+            description: 'Senior film editor craft playbook: Frame-0 cold open, shot-size progression, eye-trace continuity, 60-30-10 typography restraint, J-cut/micro-silence pacing, and stock color cohesion.',
+          },
         ],
       },
     };
@@ -76,6 +85,24 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
   if (method === 'prompts/get') {
     const promptName = params?.name;
+    if (promptName === 'editor_craft_playbook') {
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          description: 'Senior Film Editor Craft Playbook',
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: PRO_EDITOR_CRAFT_PLAYBOOK,
+              },
+            },
+          ],
+        },
+      };
+    }
     if (promptName !== 'director_workflow') {
       return {
         jsonrpc: '2.0',
@@ -515,6 +542,12 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       audioSyncRule: isAdaptiveChapters
                         ? 'LONG-FORM OPTIONS: You have full creative freedom to choose Option A (Adaptive Chapters via adaptiveChapterPlan + stitch_video_chapters with masterBgmUrl sidechain ducking for heavy/long multi-act films) OR Option B (Single render_video if lightweight 2D/lyrics/ambient where one React timeline is cleaner; payloads > 36 KB offload automatically).'
                         : 'Mount ONLY ONE voiceover method (either <MasterAudioTrack /> OR segmented <Audio src={staticFile("voice-X.mp3")} />), and duck BGM during speech.',
+                      proEditorChecklist: [
+                        'Frame 0 Cold Open: start with immediate kinetic motion/hook (no slow fade-in from black on Scene 0).',
+                        'Shot & Camera Contrast: vary shot sizes (Wide -> Medium -> Macro/HUD), alternate KenBurns directions (zoomFrom/zoomTo/panX), and mix transitionStyles.',
+                        'Eye-Trace & Restraint: align exit->entry focal zone; limit on-screen headline/stat to 1 concise anchor (<= 6 words) above ProKaraokeCaptions.',
+                        'Audio Craft & Grading: lead cuts with -5f SFX (J-cut), use brief climax silence before key hits, and unify stock clips with CinematicFinish + matching contrast/tint.',
+                      ],
                       creativeFreedom:
                         'Design any visual style, pacing, 2D/3D medium, or camera flow that best serves your narrative intent.',
                     },

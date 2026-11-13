@@ -4,6 +4,7 @@ export const SERVER_INSTRUCTIONS = `
 You are connected to Remotion Cloud Studio MCP (v7.4). Even if the user provides ONLY a brief topic or raw idea (without mentioning voice, subtitles, aspect ratio, music, or footage), autonomously deliver studio-grade output unless the user explicitly requests otherwise:
 - Narrative & Audio Defaults: Write a tight Hook -> Build-up -> Climax -> Outro script in the user's language, and enable AI voiceover (e.g. vi-VN-NamMinhNeural / vi-VN-HoaiMyNeural for Vietnamese), @remotion/google-fonts/BeVietnamPro for Vietnamese diacritics, word-synced <ProKaraokeCaptions />, smooth-ducked BGM via search_soundtrack, and @remotion/sfx transitions.
 - Aspect Ratio Defaults: Choose 1080x1920 (9:16 portrait with full-bleed background + <SafeAreaLayer>) for short/viral/social discovery topics (<60s), or 1920x1080 (16:9) for deep documentaries, histories, and wide explainers.
+- Pro Editor Craft: Hook immediately at Frame 0 (never fade in from black), vary shot scales & Ken Burns vectors across cuts (wide -> medium -> macro/HUD), keep 1 clear focal anchor (<= 6 headline words + 60-30-10 color hierarchy) above captions, and use J-cut audio pre-lap + brief climax silence.
 - Streamlined 4-Step Pipeline:
   1) plan_storyboard_timeline (returns exact timings, audioConfigPayload, and availableBuiltinSfx)
   2) search_visual_media(queries: [...]) (inspect attached Vision images directly; verify custom URLs with verify_external_asset) + search_soundtrack(directMp3: true)
@@ -68,10 +69,38 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
 * **Visual Rhythm & Creative Freedom**: Avoid static frames sitting unchanged for 8–12s and fading to black between scenes, and avoid adding top/bottom duration-running progress bars (like \`<ChapterProgressSpine />\`, timeline bars, or heavy boxed footer bars) unless the prompt or topic specifically benefits from them. Every layout choice inside the scene — cards, split-screens, data grids, 3D worlds, kinetic typography, or open-canvas cinema — is **100% yours to design** based on the user's request, topic, and creative idea. Evolve visual beats every **2.5–3.5s** inside each scene (camera push/zoom -> visual metaphor morph -> kinetic callout -> cutaway), keep a persistent spatial world/3D motif alive across cuts, and use \`transitionStyle="whip-pan" | "zoom-through" | "wipe"\` or \`@remotion/transitions\` \`TransitionSeries\`.
 * **Optical Polish & Safe Typography**: Prevent dark-gradient H.264 banding and flat CG look with subtle vignette/grain (\`<CinematicFinish />\`) and soft readability scrims behind text over busy footage. Keep essential text inside broadcast safe margins and fit long titles with \`<AutoFitTitle />\` / \`@remotion/layout-utils\`.
 * **5-Layer Studio Audio Hierarchy**: Voiceover (priority) → Smooth-Ducked BGM (\`getSmoothDuckingVolume\` attack/release fades, or abrupt *Sudden Silence* for climax) → Lead-In Transition SFX (\`-4 to -6 frames\` before cut) → Impact/Hit SFX at lockup → Subtle Ambience / Room Tone (\`volume 0.08–0.14\`).
+* **Pro Editor Discipline (6 Film-Room Habits)**:
+  1. *Cold Open (Frame 0)*: Land at full kinetic presence on Frame 0 (never fade in slowly from black on Scene 0); deliver visual + curiosity impact within the first 2.5s.
+  2. *Shot-Size & Motion Contrast*: Alternate shot scales across consecutive scenes (**Wide Establishing → Medium Context → Close-Up/Macro → Data/HUD Cutaway**) and vary \`<KenBurnsMedia>\` vectors (\`zoomFrom/zoomTo\`, \`panX\`, pull-out vs push-in) + \`transitionStyle\` instead of repeating identical zooms.
+  3. *Eye-Trace Continuity*: Align the focal exit zone or whip/zoom vector of Scene A with Scene B's entry focal point so the eye transitions effortlessly.
+  4. *Typography Restraint & 60-30-10*: Since \`<ProKaraokeCaptions />\` already carries narration, limit simultaneous overlay titles/stats to **1 clear anchor (<= 6 words or 1 punchy metric)** in a 60% dark/breathing plate, 30% media/subject, 10% accent ratio.
+  5. *J-Cut Pre-Lap & Tension Micro-Silence*: Lead cuts with \`-4 to -6f\` audio pre-lap, cut sub-beats on stressed words via \`getWordTrigger\`, and carve a brief **0.35–0.6s micro-silence** right before climaxes so reveals hit harder.
+  6. *Stock Media Grading Unity*: Harmonize mixed-source stock clips/photos with consistent CSS contrast/tint filters, shared \`<CinematicLightSweep />\`, and mood-appropriate \`<CinematicFinish colorMood="..." />\`.
 * **Aesthetic Chameleon**: Freely adapt style to the topic — investigative documentary (Vox/Johnny Harris), vibrant science (Kurzgesagt), kinetic viral (Hormozi/MrBeast), 3D sci-fi/cyberpunk, or serene poetic minimalism.
 
 ${DIRECTOR_EVALUATION_FRAMEWORK}
 `;
+
+export const PRO_EDITOR_CRAFT_PLAYBOOK = `
+# 🎞️ PRO VIDEO EDITOR CRAFT PLAYBOOK (THINK LIKE A SENIOR FILM EDITOR)
+
+Use this editorial playbook alongside full creative freedom — style is yours, craft is timeless:
+
+1. **Cold Open & Frame-0 Hook (0–3s Thumb-Stop)**
+   - Never begin Scene 0 with a slow fade-in from black (\`transitionStyle="fade"\` or slow \`opacity: 0 -> 1\` on the root). Frame 0 must already carry motion, contrast, and an immediate visual question or striking statistic within the first 1.5–2.5 seconds.
+2. **Shot-Size Progression & Camera Direction Contrast**
+   - Real editors build visual momentum by changing scale and camera energy across every cut: **Wide Establishing → Medium Action → Macro/Detail Crop → Graphic/HUD Cutaway**.
+   - Never leave every scene on identical default \`<KenBurnsMedia />\` push-ins. Alternate \`zoomFrom\`/\`zoomTo\` (push-in vs pull-out), \`panX\`/\`panY\`, and \`transitionStyle\` (\`zoom-through\`, \`whip-pan\`, \`wipe\`, or decisive \`cut\`) motivated by narrative energy.
+3. **Eye-Trace & Motion Vector Continuity (Walter Murch)**
+   - Track where the viewer's eyes rest at the end of Scene A; place Scene B's opening focal point or \`whip-pan\`/motion vector along that natural trajectory so the eye never hunts randomly across the frame.
+4. **Typography Restraint & 60–30–10 Visual Hierarchy**
+   - \`<ProKaraokeCaptions />\` already delivers the full spoken sentence. Never repeat full sentences in multi-card walls of text.
+   - Keep at most **1 visual anchor per beat** (1 bold stat or **<= 6 headline words**) inside safe zones, respecting **60% breathing plate/scrim, 30% rich footage/3D, 10% accent highlight**.
+5. **J-Cut / L-Cut Rhythm, Word-Stress Cuts & Climax Micro-Silence**
+   - Let sound lead the eye: trigger transition SFX \`-4 to -6 frames\` early (\`<SceneAnchoredSequence offsetFrames={-5} />\`), lock kinetic reveals onto stressed spoken keywords via \`getWordTrigger\`, and drop BGM/noise for **0.35–0.6s** right before key revelations so the impact lands twice as hard.
+6. **Color Cohesion Across Mixed Stock Media**
+   - Unify lighting and tone across stock photos/videos from different sources via matched scrims, subtle CSS \`filter\` (\`contrast/saturate/hue-rotate\`), directional \`<CinematicLightSweep />\`, and act-matched \`<CinematicFinish colorMood="clean | cinema-teal | warm-film | noir" />\`.
+`.trim();
 
 export const DIRECTOR_CODE_BLUEPRINT = `
 ### 🎬 VERIFIED REMOTION STUDIO BLUEPRINT (USE DIRECTLY IN DynamicVideo.tsx)

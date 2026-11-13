@@ -275,6 +275,33 @@ export function validateTsxComposition(tsxCode: string, ctx: ValidationContext =
     );
   }
 
+  // Pro Editor Craft checks (non-blocking pacing & visual variety nudges)
+  const scene0FadeOpen = /<SyncedScene\b[^>]*\bsceneIndex\s*=\s*\{\s*0\s*\}[^>]*\btransitionStyle\s*=\s*['"]fade['"]/.test(activeCode);
+  if (scene0FadeOpen) {
+    warnings.push(
+      'DIRECTOR_NOTE: Scene 0 uses `transitionStyle="fade"` — for stronger Cold Open retention in the first 2 seconds, land with immediate kinetic motion on Frame 0 instead of fading in from black.'
+    );
+  }
+
+  const transitionStyles = [...activeCode.matchAll(/<SyncedScene\b[^>]*\btransitionStyle\s*=\s*['"]([a-z-]+)['"]/g)].map(
+    (m) => m[1]
+  );
+  if (transitionStyles.length >= 3 && new Set(transitionStyles).size === 1 && transitionStyles[0] !== 'cut') {
+    warnings.push(
+      `DIRECTOR_NOTE: All ${transitionStyles.length} scenes repeat the same \`transitionStyle="${transitionStyles[0]}"\`. Consider contrasting cut energy (e.g. mixing \`zoom-through\`, \`whip-pan\`, \`wipe\`, or decisive \`cut\`) unless uniform pacing is intentional.`
+    );
+  }
+
+  const kenBurnsTags = activeCode.match(/<KenBurnsMedia\b[^>]*>/g) || [];
+  if (
+    kenBurnsTags.length >= 3 &&
+    kenBurnsTags.every((tag) => !/\b(?:zoomFrom|zoomTo|panX|panY)\s*=/.test(tag))
+  ) {
+    warnings.push(
+      `DIRECTOR_NOTE: Detected ${kenBurnsTags.length} \`<KenBurnsMedia />\` shots all using default camera motion. Vary \`zoomFrom\`/\`zoomTo\` (push-in vs pull-out) and \`panX\`/\`panY\` across scenes for editorial shot contrast.`
+    );
+  }
+
   return warnings;
 }
 
@@ -369,6 +396,10 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
     new RegExp(`\\b(?:const|let|function)\\s+${volumeFnRefMatch![1]}\\b`).test(activeCode);
 
   const sceneParity = analyzeSceneVisualParity(activeCode);
+  const transitionStyleMatches = [
+    ...activeCode.matchAll(/<SyncedScene\b[^>]*\btransitionStyle\s*=\s*['"]([a-z-]+)['"]/g),
+  ].map((m) => m[1]);
+  const kenBurnsMatches = activeCode.match(/<KenBurnsMedia\b[^>]*>/g) || [];
 
   const detectedSignals = {
     usesSpringPhysics: /\bspring\s*\(/.test(activeCode),
@@ -376,6 +407,10 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
     usesMilestoneSync: /\b(?:interpolateSceneMilestones|getWordTrigger|getWordProgress)\s*\(/.test(activeCode),
     uses3DOrCanvas: /ThreeCanvas|@remotion\/three/.test(activeCode),
     usesTransitions: /TransitionSeries|@remotion\/transitions|\btransitionStyle\s*=/.test(activeCode),
+    usesVariedTransitions: new Set(transitionStyleMatches).size >= 2,
+    usesCameraVariety:
+      kenBurnsMatches.some((t) => /\b(?:zoomFrom|zoomTo|panX|panY)\s*=/.test(t)) ||
+      /\bCameraRig\b|\bParallaxDepthLayers\b/.test(activeCode),
     usesStoryboardCanvas: /StoryboardCanvas|SyncedScene/.test(activeCode),
     usesCaptions: /ProKaraokeCaptions|WordHighlightCaptions/.test(activeCode),
     usesDynamicAudioDucking: hasInlineDucking || hasNamedDucking,

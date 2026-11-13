@@ -95,6 +95,12 @@ jobs:
       - name: Ensure Remotion Browser
         run: npx remotion browser ensure --quiet
 
+      - name: Ensure FFmpeg CLI (Shared for Previews & Mastering)
+        run: |
+          if ! command -v ffmpeg &> /dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl
+          fi
+
       - name: Cache Python Audio Tools (Edge-TTS & yt-dlp, Video Render Only)
         if: inputs.mode != 'still'
         id: cache_tts
@@ -108,9 +114,6 @@ jobs:
         env:
           TSX_B64: ${{ inputs.tsxCodeBase64 }}
         run: |
-          if ! command -v ffmpeg &> /dev/null; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl || true
-          fi
           TTS_VENV="$HOME/.tts-venv"
           if [ "${{ steps.cache_tts.outputs.cache-hit }}" != "true" ] || [ ! -f "$TTS_VENV/bin/edge-tts" ]; then
             python -m venv "$TTS_VENV"

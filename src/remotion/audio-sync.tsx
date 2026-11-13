@@ -1653,7 +1653,7 @@ export const AutoFitTitle: React.FC<AutoFitTitleProps> = ({
   minFontSize = 32,
   fontFamily = 'BeVietnamPro, sans-serif',
   fontWeight = 900,
-  lineHeight = 1.08,
+  lineHeight = 1.16,
   color = '#ffffff',
   letterSpacing = '-0.02em',
   style,

@@ -842,6 +842,13 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         const activeStep = workflowInfo?.steps?.find((s: any) => s.status === 'in_progress')?.name;
         const isFailed = Boolean(errorLogText) || workflowInfo?.conclusion === 'failure';
+        const fallbackCount = Array.isArray(qcTelemetry?.assetFallbackWarnings)
+          ? qcTelemetry.assetFallbackWarnings.length
+          : 0;
+        const fallbackNotice =
+          fallbackCount > 0
+            ? ` ⚠️ ASSET WARNING: ${fallbackCount} external asset(s) failed to download and fell back (check qcTelemetry.assetFallbackWarnings). Replace blocked URLs or re-verify before delivering!`
+            : '';
 
         const contentBlocks: any[] = [
           {
@@ -872,8 +879,8 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                   ? isStill
                     ? 'Preview Contact Sheet is ready! Audit every tile against visionInspectionCriteria + frameNarrationContext: (1) verify numbers/HUDs match the spoken sentence at that frame, (2) compare the weakest tile vs strongest tile for balanced visual depth across all scenes, (3) do 1 polish edit + preview_frames if any tile feels under-crafted or out-of-sync, otherwise proceed to render_video.'
                     : finalSheetBase64
-                    ? 'Video is completed, mastered (-14 LUFS), and ready! Review the attached 2x2 final MP4 Contact Sheet (showing real CTC subtitles) against Vision criteria before delivering the watch link.'
-                    : 'Video is completed, mastered, and ready to watch or download!'
+                    ? `Video is completed, mastered (-14 LUFS), and ready! Review the attached 2x2 final MP4 Contact Sheet (showing real CTC subtitles) against Vision criteria before delivering the watch link.${fallbackNotice}`
+                    : `Video is completed, mastered, and ready to watch or download!${fallbackNotice}`
                   : isFailed
                   ? 'Render job failed on GitHub Actions. Call inspect_task_logs or read compilerErrorDetails to see error trace, fix tsxCode and re-call render_video.'
                   : 'Job is actively rendering on GitHub Actions Cloud. Continue polling get_task_status(jobId, waitForCompletion: true) until completed.',

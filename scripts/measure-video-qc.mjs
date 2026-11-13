@@ -69,11 +69,22 @@ function main() {
     }
   }
 
+  let assetFallbackWarnings;
+  if (fs.existsSync('outputs/asset-warnings.json')) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync('outputs/asset-warnings.json', 'utf8'));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        assetFallbackWarnings = parsed;
+      }
+    } catch {}
+  }
+
   const qcReport = {
     jobId,
     measuredAt: new Date().toISOString(),
     durationSec: format.duration ? Number(Number(format.duration).toFixed(2)) : null,
     fileSizeMB: format.size ? Number((Number(format.size) / (1024 * 1024)).toFixed(2)) : null,
+    assetFallbackWarnings,
     video: videoStream
       ? {
           codec: videoStream.codec_name || null,

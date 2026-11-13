@@ -70,32 +70,60 @@ function writeFallbackSvg(filePath, index) {
   fs.writeFileSync(filePath, svg, 'utf-8');
 }
 
-async function fetchWithTimeout(url, timeoutMs = 15000, acceptHeader = 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8') {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        Accept: acceptHeader,
-      },
-      redirect: 'follow',
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const arrayBuffer = await res.arrayBuffer();
-    return {
-      buffer: Buffer.from(arrayBuffer),
-      contentType: (res.headers.get('content-type') || '').toLowerCase(),
-    };
-  } finally {
-    clearTimeout(timer);
+function buildFetchHeaders(url, acceptHeader) {
+  const isWikimedia = /wikimedia\.org|wikipedia\.org/i.test(url);
+  return {
+    'User-Agent': isWikimedia
+      ? 'RemotionCloudStudio/7.4 (https://github.com/chibaole123a-ops/remotion-mcp)'
+      : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    Accept: acceptHeader,
+  };
+}
+
+async function fetchWithTimeout(url, timeoutMs = 15000, acceptHeader = 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8', retries = 2) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        headers: buildFetchHeaders(url, acceptHeader),
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+      if ((res.status === 429 || res.status === 503) && attempt < retries) {
+        const retryAfterSec = Number(res.headers.get('retry-after') || 0);
+        const waitMs = Math.min(5000, Math.max(1200 * (attempt + 1), retryAfterSec > 0 ? retryAfterSec * 1000 : 0));
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const arrayBuffer = await res.arrayBuffer();
+      return {
+        buffer: Buffer.from(arrayBuffer),
+        contentType: (res.headers.get('content-type') || '').toLowerCase(),
+      };
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastErr || new Error('Fetch failed');
 }
 
 async function prefetchExternalMedia(code) {
   let updatedCode = code;
+  const assetWarnings = [];
+  fs.mkdirSync('outputs', { recursive: true });
+  try {
+    fs.mkdirSync(MEDIA_CACHE_DIR, { recursive: true });
+  } catch {}
+  let cacheUpdated = false;
 
   // 1. Pre-fetch external video URLs (.mp4, .webm, .mov, .ogv) so <OffthreadVideo> plays from local SSD at 60fps
   const videoUrlRegex = /(['"`])(https?:\/\/[^\s'"`]+\.(?:mp4|webm|mov|ogv)(?:\?[^\s'"`]*)?)\1/gi;
@@ -104,11 +132,6 @@ async function prefetchExternalMedia(code) {
   const urlToLocalFile = new Map();
 
   if (uniqueVideoUrls.length > 0) {
-    try {
-      fs.mkdirSync(MEDIA_CACHE_DIR, { recursive: true });
-    } catch {}
-    let cacheUpdated = false;
-
     await Promise.all(
       uniqueVideoUrls.map(async (url, idx) => {
         const extMatch = url.match(/\.(mp4|webm|mov|ogv)(?:\?|$)/i);
@@ -144,14 +167,12 @@ async function prefetchExternalMedia(code) {
             return;
           }
         } catch (err) {
-          console.warn(`⚠️ Video pre-fetch warning for ${url.slice(0, 60)}:`, err?.message || err);
+          const msg = err?.message || String(err);
+          console.warn(`⚠️ Video pre-fetch warning for ${url.slice(0, 60)}:`, msg);
+          assetWarnings.push({ type: 'video_prefetch_failed', url, reason: msg });
         }
       })
     );
-
-    if (cacheUpdated) {
-      pruneMediaCache(MEDIA_CACHE_DIR);
-    }
   }
 
   // 2. Pre-fetch external audio URLs (.mp3, .wav, .m4a, .aac, .ogg), TikTok videos/sounds, or YouTube via yt-dlp / Zing MP3
@@ -292,7 +313,9 @@ async function prefetchExternalMedia(code) {
             throw new Error(`Audio file was not written or empty`);
           }
         } catch (err) {
-          console.warn(`⚠️ Audio pre-fetch warning for ${url.slice(0, 60)}:`, err?.message || err);
+          const msg = err?.message || String(err);
+          console.warn(`⚠️ Audio pre-fetch warning for ${url.slice(0, 60)}:`, msg);
+          assetWarnings.push({ type: 'audio_fallback_bgm', url, reason: msg });
           // Safe fallback: if an external stream fails to download, alias it to the studio bgm so Remotion never crashes and is never silent!
           if (fs.existsSync('public/bgm.mp3')) {
             fs.copyFileSync('public/bgm.mp3', outPath);
@@ -305,55 +328,107 @@ async function prefetchExternalMedia(code) {
     );
   }
 
-  // 3. Pre-fetch external image URLs (Wikimedia, Openverse, Liveflickr, NASA, Unsplash, Pollinations, etc.)
+  // 3. Pre-fetch external image URLs with persistent cache & Wikimedia-safe throttling
   const imageUrlRegex = /(['"`])(https?:\/\/(?:image\.pollinations\.ai\/[^\s'"`]+|images\.unsplash\.com\/[^\s'"`]+|picsum\.photos\/[^\s'"`]+|upload\.wikimedia\.org\/[^\s'"`]+|live\.staticflickr\.com\/[^\s'"`]+|[^\s'"`]+\.(?:png|jpg|jpeg|webp|gif|svg)(?:\?[^\s'"`]*)?))\1/gi;
   const imageMatches = [...updatedCode.matchAll(imageUrlRegex)];
   const uniqueImageUrls = [...new Set(imageMatches.map((m) => m[2]))].filter(
     (u) => !urlToLocalFile.has(u) && !/\.(?:mp4|webm|mov|ogv)(?:\?|$)/i.test(u)
   );
 
-  if (uniqueImageUrls.length > 0) {
-    await Promise.all(
-      uniqueImageUrls.map(async (url, idx) => {
-        let fileName = `cached-img-${idx}.jpg`;
-        let outPath = `public/${fileName}`;
-        try {
-          let resObj;
-          try {
-            resObj = await fetchWithTimeout(url, 14000);
-          } catch {
-            resObj = await fetchWithTimeout(url, 14000);
-          }
-          if (
-            resObj &&
-            resObj.buffer &&
-            resObj.buffer.length > 256 &&
-            !resObj.contentType.includes('text/html')
-          ) {
-            if (resObj.contentType.includes('svg')) {
-              fileName = `cached-img-${idx}.svg`;
-              outPath = `public/${fileName}`;
-            } else if (resObj.contentType.includes('png')) {
-              fileName = `cached-img-${idx}.png`;
-              outPath = `public/${fileName}`;
-            }
-            fs.writeFileSync(outPath, resObj.buffer);
-            fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
-            urlToLocalFile.set(url, fileName);
-            console.log(`🖼️ Pre-fetched external image [${idx}]: ${url.slice(0, 70)}... -> ${fileName}`);
-            return;
-          }
-        } catch (err) {
-          console.warn(`⚠️ Image pre-fetch fallback for ${url.slice(0, 60)}:`, err?.message || err);
-        }
-        // Fallback to sleek SVG so Remotion never hangs or shows a broken image
-        fileName = `cached-img-${idx}.svg`;
-        outPath = `public/${fileName}`;
-        writeFallbackSvg(outPath, idx);
+  const imageExts = ['jpg', 'png', 'webp', 'svg', 'gif'];
+  async function fetchAndCacheImage(url, idx) {
+    for (const cachedExt of imageExts) {
+      const candidate = getCachedMediaPath(url, cachedExt);
+      if (fs.existsSync(candidate) && fs.statSync(candidate).size > 256) {
+        const fileName = `cached-img-${idx}.${cachedExt}`;
+        const outPath = `public/${fileName}`;
+        fs.copyFileSync(candidate, outPath);
         fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
         urlToLocalFile.set(url, fileName);
-      })
-    );
+        const kb = (fs.statSync(candidate).size / 1024).toFixed(0);
+        console.log(`⚡ Image cache HIT [${idx}]: ${url.slice(0, 65)}... -> ${fileName} (${kb} KB)`);
+        return;
+      }
+    }
+
+    let lastReason = 'empty_or_html_response';
+    try {
+      const resObj = await fetchWithTimeout(url, 18000);
+      if (
+        resObj &&
+        resObj.buffer &&
+        resObj.buffer.length > 256 &&
+        !resObj.contentType.includes('text/html')
+      ) {
+        const resolvedExt = resObj.contentType.includes('svg')
+          ? 'svg'
+          : resObj.contentType.includes('png')
+          ? 'png'
+          : resObj.contentType.includes('webp')
+          ? 'webp'
+          : resObj.contentType.includes('gif')
+          ? 'gif'
+          : 'jpg';
+        const fileName = `cached-img-${idx}.${resolvedExt}`;
+        const outPath = `public/${fileName}`;
+        fs.writeFileSync(outPath, resObj.buffer);
+        fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
+        try {
+          fs.writeFileSync(getCachedMediaPath(url, resolvedExt), resObj.buffer);
+          cacheUpdated = true;
+        } catch {}
+        urlToLocalFile.set(url, fileName);
+        console.log(
+          `🖼️ Pre-fetched external image [${idx}]: ${url.slice(0, 70)}... -> ${fileName} (${(
+            resObj.buffer.length / 1024
+          ).toFixed(0)} KB)`
+        );
+        return;
+      }
+    } catch (err) {
+      lastReason = err?.message || String(err);
+      console.warn(`⚠️ Image pre-fetch fallback for ${url.slice(0, 60)}:`, lastReason);
+    }
+
+    assetWarnings.push({ type: 'image_fallback_svg', url, reason: lastReason });
+    const fileName = `cached-img-${idx}.svg`;
+    const outPath = `public/${fileName}`;
+    writeFallbackSvg(outPath, idx);
+    fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
+    urlToLocalFile.set(url, fileName);
+  }
+
+  if (uniqueImageUrls.length > 0) {
+    const indexedUrls = uniqueImageUrls.map((url, idx) => ({ url, idx }));
+    const wikimediaQueue = indexedUrls.filter((x) => /wikimedia\.org|wikipedia\.org/i.test(x.url));
+    const parallelQueue = indexedUrls.filter((x) => !/wikimedia\.org|wikipedia\.org/i.test(x.url));
+
+    await Promise.all([
+      ...parallelQueue.map((item) => fetchAndCacheImage(item.url, item.idx)),
+      (async () => {
+        for (let i = 0; i < wikimediaQueue.length; i++) {
+          const item = wikimediaQueue[i];
+          await fetchAndCacheImage(item.url, item.idx);
+          if (i + 1 < wikimediaQueue.length) {
+            await new Promise((r) => setTimeout(r, 350));
+          }
+        }
+      })(),
+    ]);
+  }
+
+  if (cacheUpdated) {
+    pruneMediaCache(MEDIA_CACHE_DIR);
+  }
+
+  const assetWarningsPath = 'outputs/asset-warnings.json';
+  if (assetWarnings.length > 0) {
+    fs.writeFileSync(assetWarningsPath, JSON.stringify(assetWarnings, null, 2));
+    console.warn(`⚠️ Recorded ${assetWarnings.length} asset fallback warning(s) -> ${assetWarningsPath}`);
+  } else if (fs.existsSync(assetWarningsPath)) {
+    try {
+      fs.unlinkSync(assetWarningsPath);
+    } catch {}
   }
 
   if (urlToLocalFile.size === 0) return updatedCode;

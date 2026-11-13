@@ -178,6 +178,58 @@ function resolveExactAudioDurationSec(filePath, pyReportedDurationMs) {
   return 4.5;
 }
 
+// Count approximate spoken syllables in a token (1 token = 1 syllable in Vietnamese, vowel clusters in English)
+function estimateTokenSyllables(token) {
+  const clean = String(token || '').replace(/[^\p{L}\p{N}]/gu, '');
+  if (!clean) return 1;
+  // Vietnamese tokens contain diacritics or are <= 4 chars and are monosyllabic
+  if (/[\u00C0-\u024F\u1E00-\u1EFF]/.test(clean) || clean.length <= 4) {
+    const commaPause = /[,;:—–-]$/.test(token) ? 0.9 : 0;
+    const periodPause = /[.!?…]$/.test(token) ? 1.5 : 0;
+    return 1.0 + commaPause + periodPause;
+  }
+  const clusters = clean.toLowerCase().match(/[aeiouy]+/g);
+  const base = Math.max(1, clusters ? clusters.length : Math.ceil(clean.length / 3));
+  const pause = /[,;:—–-]$/.test(token) ? 0.9 : /[.!?…]$/.test(token) ? 1.5 : 0;
+  return base + pause;
+}
+
+// Spread tokens within a known [startMs, endMs] span using spoken syllable & punctuation weights
+function buildWeightedWordsInWindow(tokens, windowStartMs, windowEndMs, fpsVal) {
+  if (!tokens || tokens.length === 0) return [];
+  const safeStart = Math.max(0, Math.round(windowStartMs));
+  const safeSpan = Math.max(180 * tokens.length, Math.round(windowEndMs - safeStart));
+  const actualEnd = Math.max(safeStart + tokens.length * 70, Math.round(windowEndMs));
+  const span = Math.max(160, actualEnd - safeStart);
+
+  const weights = tokens.map((w) => estimateTokenSyllables(w));
+  const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+  let cursor = safeStart;
+
+  return tokens.map((w, idx) => {
+    const dur = (weights[idx] / totalWeight) * span;
+    const sMs = Math.round(cursor);
+    const eMs = idx === tokens.length - 1 ? Math.max(sMs + 80, actualEnd) : Math.round(cursor + dur);
+    cursor += dur;
+    return {
+      word: w,
+      text: idx === 0 ? w : ` ${w}`,
+      startMs: sMs,
+      endMs: eMs,
+      timestampMs: Math.round((sMs + eMs) / 2),
+      confidence: 1,
+      startFrame: Math.floor((sMs / 1000) * fpsVal),
+      endFrame: Math.ceil((eMs / 1000) * fpsVal),
+    };
+  });
+}
+
+function normalizeTokenText(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '');
+}
+
 function normalizeWordBoundaries(originalText, rawBoundaries, actualDurationMs, fpsVal) {
   const originalTokens = originalText
     .trim()
@@ -186,7 +238,9 @@ function normalizeWordBoundaries(originalText, rawBoundaries, actualDurationMs, 
   if (originalTokens.length === 0) return [];
 
   const wordEvents = (rawBoundaries || []).filter((b) => b.type === 'WordBoundary');
+  const sentenceEvents = (rawBoundaries || []).filter((b) => b.type === 'SentenceBoundary');
 
+  // Case 1: Fine-grained WordBoundary events available (e.g. English Edge-TTS voices)
   if (wordEvents.length >= Math.max(1, Math.floor(originalTokens.length * 0.5))) {
     const expanded = [];
     for (const ev of wordEvents) {
@@ -209,14 +263,21 @@ function normalizeWordBoundaries(originalText, rawBoundaries, actualDurationMs, 
       }
     }
 
-    const count = originalTokens.length;
+    // Sequential token alignment (handles punctuation/hyphen drift cleanly)
+    let evCursor = 0;
     return originalTokens.map((origWord, i) => {
-      const mappedIdx = Math.min(
-        expanded.length - 1,
-        Math.floor((i / count) * expanded.length)
-      );
-      const ev = expanded[mappedIdx];
-      const nextEv = expanded[mappedIdx + 1];
+      const cleanOrig = normalizeTokenText(origWord);
+      let chosenIdx = Math.min(expanded.length - 1, evCursor);
+      for (let look = 0; look < 3 && evCursor + look < expanded.length; look++) {
+        const candClean = normalizeTokenText(expanded[evCursor + look].word);
+        if (candClean && cleanOrig && (candClean === cleanOrig || cleanOrig.includes(candClean) || candClean.includes(cleanOrig))) {
+          chosenIdx = evCursor + look;
+          break;
+        }
+      }
+      const ev = expanded[chosenIdx];
+      evCursor = Math.min(expanded.length - 1, chosenIdx + 1);
+      const nextEv = expanded[chosenIdx + 1];
       const startMs = ev.startMs;
       const endMs = nextEv
         ? Math.max(startMs + 80, nextEv.startMs)
@@ -234,7 +295,65 @@ function normalizeWordBoundaries(originalText, rawBoundaries, actualDurationMs, 
     });
   }
 
-  return buildProportionalWords(originalText, actualDurationMs, fpsVal);
+  // Case 2: SentenceBoundary events available (e.g. Vietnamese vi-VN-NamMinhNeural / vi-VN-HoaiMyNeural)
+  // Align each sentence to its EXACT Microsoft TTS start/end timestamps so multi-sentence pauses NEVER drift!
+  if (sentenceEvents.length > 0) {
+    const out = [];
+    let tokenCursor = 0;
+
+    for (let sIdx = 0; sIdx < sentenceEvents.length && tokenCursor < originalTokens.length; sIdx++) {
+      const sev = sentenceEvents[sIdx];
+      const isLastSent = sIdx === sentenceEvents.length - 1;
+      const sentTokens = String(sev.word || '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+
+      let sliceEnd = originalTokens.length;
+      if (!isLastSent) {
+        // Match target token count inside this sentence while honoring sentence-ending punctuation
+        const approxEnd = Math.min(originalTokens.length, tokenCursor + Math.max(1, sentTokens.length));
+        sliceEnd = approxEnd;
+        const lastExpected = normalizeTokenText(sentTokens[sentTokens.length - 1] || '');
+        for (let k = Math.max(tokenCursor + 1, approxEnd - 3); k <= Math.min(originalTokens.length - 1, approxEnd + 3); k++) {
+          const cand = originalTokens[k - 1];
+          if (/[.?!…]$/.test(cand) || (lastExpected && normalizeTokenText(cand) === lastExpected)) {
+            sliceEnd = k;
+            break;
+          }
+        }
+      }
+
+      const segSlice = originalTokens.slice(tokenCursor, sliceEnd);
+      tokenCursor = sliceEnd;
+
+      const sStartMs = Math.max(0, Number(sev.startMs || 0));
+      const nextSev = sentenceEvents[sIdx + 1];
+      const maxAllowEnd = nextSev ? Math.max(sStartMs + 200, nextSev.startMs - 40) : actualDurationMs;
+      const sEndMs = Math.min(maxAllowEnd, Math.max(sStartMs + 250, Number(sev.endMs || maxAllowEnd)));
+
+      const built = buildWeightedWordsInWindow(segSlice, sStartMs, sEndMs, fpsVal);
+      built.forEach((bw) => {
+        out.push({
+          ...bw,
+          text: out.length === 0 ? bw.word : ` ${bw.word}`,
+          sentenceIndex: sIdx,
+        });
+      });
+    }
+
+    if (tokenCursor < originalTokens.length) {
+      const lastEnd = out.length > 0 ? out[out.length - 1].endMs : 0;
+      const rem = buildWeightedWordsInWindow(originalTokens.slice(tokenCursor), lastEnd, actualDurationMs, fpsVal);
+      rem.forEach((bw) => out.push({ ...bw, text: out.length === 0 ? bw.word : ` ${bw.word}` }));
+    }
+
+    if (out.length === originalTokens.length) {
+      return out;
+    }
+  }
+
+  return buildWeightedWordsInWindow(originalTokens, 50, Math.max(400, actualDurationMs - 80), fpsVal);
 }
 
 let config = {
@@ -339,120 +458,138 @@ if (isPreviewMode && segments.length > 0) {
     cursorFrame += segFrames;
   }
 } else if (isMasterSpineMode) {
-  console.log(`✨ Master Audio Spine Mode active: Synthesizing continuous master voiceover track...`);
+  console.log(`✨ Master Audio Spine V7.2 active: Synthesizing sentence-locked segments & lossless-aligning voiceover.mp3...`);
 
-  // Combine full text while preserving boundary markers per segment
-  const segmentTexts = segments.map((s) => (typeof s === 'string' ? s : s?.text || '').trim()).filter(Boolean);
-  const combinedText = segmentTexts.join('\n\n');
-
-  const masterOutFile = `public/voiceover.mp3`;
-  const masterRawJson = `public/raw-master-words.json`;
-  const masterTxt = `public/voiceover.txt`;
-  fs.writeFileSync(masterTxt, combinedText, 'utf-8');
-
-  let rawBoundaries = [];
-  let pyDurationMs = 0;
-  try {
-    execSync(
-      `python3 "${pyScriptPath}" "${masterTxt}" "${voice}" "${rate}" "${masterOutFile}" "${masterRawJson}"`,
-      { stdio: 'inherit' }
-    );
-    if (fs.existsSync(masterRawJson)) {
-      const parsedPy = JSON.parse(fs.readFileSync(masterRawJson, 'utf-8'));
-      rawBoundaries = Array.isArray(parsedPy) ? parsedPy : parsedPy.words || [];
-      pyDurationMs = Number(parsedPy?.durationMs || 0);
-      fs.unlinkSync(masterRawJson);
-    }
-  } catch {
-    execSync(
-      `edge-tts --file "${masterTxt}" --voice "${voice}" --rate="${rate}" --write-media "${masterOutFile}"`,
-      { stdio: 'inherit' }
-    );
-  }
-
-  if (fs.existsSync(masterTxt)) fs.unlinkSync(masterTxt);
-  fs.copyFileSync(masterOutFile, `src/remotion/public/voiceover.mp3`);
-
-  const masterAudioDurSec = resolveExactAudioDurationSec(masterOutFile, pyDurationMs);
-  const masterAudioDurMs = Math.round(masterAudioDurSec * 1000);
-  const totalVideoFrames = Math.ceil((masterAudioDurSec + 0.5) * fps);
-
-  // Now, map individual segment texts to their time ranges in the master audio stream
-  const allWords = normalizeWordBoundaries(combinedText, rawBoundaries, masterAudioDurMs, fps);
-
-  let wordCursor = 0;
-  let runningStartFrame = 0;
+  const wavInputs = [];
+  let cumulativeMs = 0;
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
-    const segText = typeof seg === 'string' ? seg : seg?.text || '';
-    const segTokens = segText.trim().split(/\s+/).filter(Boolean);
-    const segWordCount = segTokens.length;
+    const segText = (typeof seg === 'string' ? seg : seg?.text || '').trim();
+    const segVoice = (typeof seg === 'object' && seg?.voice) || voice;
+    const rawMp3 = `public/voice-${i}.mp3`;
+    const segWav = `public/_seg-${i}.wav`;
+    const rawJsonFile = `public/raw-words-${i}.json`;
 
-    const segWords = allWords.slice(wordCursor, wordCursor + segWordCount);
-    wordCursor += segWordCount;
-
-    let segStartFrame = runningStartFrame;
-    let segEndFrame = runningStartFrame;
-
-    if (segWords.length > 0) {
-      segStartFrame = segWords[0].startFrame;
-      segEndFrame = segWords[segWords.length - 1].endFrame;
-      // If this is the last segment, extend it to total video frames
-      if (i === segments.length - 1) {
-        segEndFrame = totalVideoFrames;
-      }
-    } else {
-      segEndFrame = segStartFrame + Math.ceil(3 * fps);
+    if (!segText) {
+      generateSilentAudioFile(rawMp3, 0.5);
+      fs.copyFileSync(rawMp3, `src/remotion/public/voice-${i}.mp3`);
+      execSync(`ffmpeg -y -i "${rawMp3}" -ar 24000 -ac 1 "${segWav}"`, { stdio: 'ignore' });
+      wavInputs.push(segWav);
+      const segFrames = Math.ceil(0.5 * fps);
+      const startF = Math.round((cumulativeMs / 1000) * fps);
+      scenesTelemetry.push({
+        sceneIndex: i,
+        text: '',
+        audioDurationSec: 0.5,
+        durationInFrames: segFrames,
+        startFrame: startF,
+        endFrame: startF + segFrames,
+        words: [],
+      });
+      cumulativeMs += 500;
+      continue;
     }
 
+    const tmpTxt = `public/voice-${i}.txt`;
+    fs.writeFileSync(tmpTxt, segText, 'utf-8');
+
+    let rawBoundaries = [];
+    let pyDurationMs = 0;
+    try {
+      execSync(
+        `python3 "${pyScriptPath}" "${tmpTxt}" "${segVoice}" "${rate}" "${rawMp3}" "${rawJsonFile}"`,
+        { stdio: 'inherit' }
+      );
+      if (fs.existsSync(rawJsonFile)) {
+        const parsedPy = JSON.parse(fs.readFileSync(rawJsonFile, 'utf-8'));
+        rawBoundaries = Array.isArray(parsedPy) ? parsedPy : parsedPy.words || [];
+        pyDurationMs = Number(parsedPy?.durationMs || 0);
+        fs.unlinkSync(rawJsonFile);
+      }
+    } catch {
+      execSync(
+        `edge-tts --file "${tmpTxt}" --voice "${segVoice}" --rate="${rate}" --write-media "${rawMp3}"`,
+        { stdio: 'inherit' }
+      );
+    }
+    if (fs.existsSync(tmpTxt)) fs.unlinkSync(tmpTxt);
+
+    const speechDurSec = resolveExactAudioDurationSec(rawMp3, pyDurationMs);
+    const speechDurMs = Math.round(speechDurSec * 1000);
+
+    // Pad crisp 140ms breath between segments (350ms after final scene) inside decoded PCM WAV for 0-drift concatenation
+    const padSec = i === segments.length - 1 ? 0.35 : 0.14;
+    execSync(
+      `ffmpeg -y -i "${rawMp3}" -af "apad=pad_dur=${padSec}" -ar 24000 -ac 1 "${segWav}"`,
+      { stdio: 'ignore' }
+    );
+    const exactWavDurSec = resolveExactAudioDurationSec(segWav, 0);
+    const segTotalMs = Math.round(exactWavDurSec * 1000);
+    wavInputs.push(segWav);
+
+    // Copy per-scene mp3 cleanly
+    fs.copyFileSync(rawMp3, `src/remotion/public/voice-${i}.mp3`);
+
+    // Align tokens strictly inside THAT segment's real SentenceBoundary windows!
+    const localWords = normalizeWordBoundaries(segText, rawBoundaries, speechDurMs, fps);
+    const segStartFrame = Math.round((cumulativeMs / 1000) * fps);
+    const nextCumulativeMs = cumulativeMs + segTotalMs;
+    const segEndFrame = Math.round((nextCumulativeMs / 1000) * fps);
     const segDurFrames = Math.max(Math.ceil(1.2 * fps), segEndFrame - segStartFrame);
+
+    const globalWords = localWords.map((w) => {
+      const gStartMs = cumulativeMs + w.startMs;
+      const gEndMs = cumulativeMs + w.endMs;
+      return {
+        ...w,
+        globalStartMs: gStartMs,
+        globalEndMs: gEndMs,
+        globalStartFrame: Math.floor((gStartMs / 1000) * fps),
+        globalEndFrame: Math.ceil((gEndMs / 1000) * fps),
+      };
+    });
 
     scenesTelemetry.push({
       sceneIndex: i,
-      text: segText.trim(),
-      audioDurationSec: Number((segDurFrames / fps).toFixed(3)),
+      text: segText,
+      audioDurationSec: Number(exactWavDurSec.toFixed(3)),
       durationInFrames: segDurFrames,
       startFrame: segStartFrame,
       endFrame: segStartFrame + segDurFrames,
-      words: segWords.map((w) => ({
-        ...w,
-        globalStartFrame: w.startFrame,
-        globalEndFrame: w.endFrame,
-      })),
+      words: globalWords,
     });
 
-    runningStartFrame = segStartFrame + segDurFrames;
-
-    // Create accurate sliced audio for voice-i.mp3 using ffmpeg so if code mounts <Audio src={staticFile("voice-i.mp3")}>
-    // inside a <Sequence from={startFrame}>, it plays ONLY that segment's speech and NEVER repeats the whole track!
-    const sliceStartSec = (segStartFrame / fps).toFixed(3);
-    const sliceDurSec = (segDurFrames / fps).toFixed(3);
-    const segOutFile = `public/voice-${i}.mp3`;
-
-    try {
-      execSync(
-        `npx remotion ffmpeg -y -ss ${sliceStartSec} -t ${sliceDurSec} -i "${masterOutFile}" -c copy "${segOutFile}"`,
-        { stdio: ['ignore', 'ignore', 'ignore'] }
-      );
-    } catch {
-      try {
-        execSync(
-          `ffmpeg -y -ss ${sliceStartSec} -t ${sliceDurSec} -i "${masterOutFile}" -c copy "${segOutFile}"`,
-          { stdio: ['ignore', 'ignore', 'ignore'] }
-        );
-      } catch {
-        fs.copyFileSync(masterOutFile, segOutFile);
-      }
-    }
-
-    fs.copyFileSync(segOutFile, `src/remotion/public/voice-${i}.mp3`);
-    fs.writeFileSync(`public/captions-${i}.json`, JSON.stringify(segWords, null, 2), 'utf-8');
+    fs.writeFileSync(`public/captions-${i}.json`, JSON.stringify(localWords, null, 2), 'utf-8');
     fs.copyFileSync(`public/captions-${i}.json`, `src/remotion/public/captions-${i}.json`);
+
+    console.log(
+      `🎙️ Scene ${i}: exact=${exactWavDurSec.toFixed(2)}s (${segStartFrame}->${segStartFrame + segDurFrames}f), ${rawBoundaries.filter((b) => b.type === 'SentenceBoundary').length} SentenceBoundary, ${globalWords.length} synced words`
+    );
+
+    cumulativeMs = nextCumulativeMs;
   }
 
+  // Gapless PCM->MP3 concat into single continuous public/voiceover.mp3 (0 cumulative drift!)
+  const masterOutFile = `public/voiceover.mp3`;
+  if (wavInputs.length > 0) {
+    const inputFlags = wavInputs.map((f) => `-i "${f}"`).join(' ');
+    const filterStreams = wavInputs.map((_, idx) => `[${idx}:a]`).join('');
+    execSync(
+      `ffmpeg -y ${inputFlags} -filter_complex "${filterStreams}concat=n=${wavInputs.length}:v=0:a=1[aout]" -map "[aout]" -c:a libmp3lame -q:a 2 "${masterOutFile}"`,
+      { stdio: 'ignore' }
+    );
+    fs.copyFileSync(masterOutFile, `src/remotion/public/voiceover.mp3`);
+    wavInputs.forEach((f) => {
+      try {
+        if (fs.existsSync(f)) fs.unlinkSync(f);
+      } catch {}
+    });
+  }
+
+  const totalVideoFrames = scenesTelemetry.length > 0 ? scenesTelemetry[scenesTelemetry.length - 1].endFrame : defaultDurationFrames;
   console.log(
-    `🎙️ Master Audio Spine generated: ${masterAudioDurSec.toFixed(2)}s (${totalVideoFrames} frames) for ${scenesTelemetry.length} scenes. 100% continuous speech!`
+    `🎙️ Master Audio Spine V7.2 generated: ${(cumulativeMs / 1000).toFixed(2)}s (${totalVideoFrames} frames) for ${scenesTelemetry.length} scenes. Sentence-locked zero-drift sync!`
   );
 } else {
   // Legacy multi-chunk fallback

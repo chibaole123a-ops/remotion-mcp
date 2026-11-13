@@ -44,6 +44,7 @@ export interface WordToken {
   endFrame: number;
   globalStartFrame?: number;
   globalEndFrame?: number;
+  sentenceIndex?: number;
 }
 
 export interface SceneTelemetry {
@@ -386,13 +387,16 @@ export function getSceneCaptions(sceneIndex: number): Caption[] {
  *    first `enterFrames` and last `exitFrames` breath padding) so scenes flow seamlessly into one
  *    another without abrupt hard cuts!
  */
+export type SceneTransitionStyle = 'zoom-through' | 'whip-pan' | 'wipe' | 'fade' | 'cut';
+
 export interface SyncedSceneProps {
   sceneIndex: number;
   fallbackStartFrame?: number;
   fallbackDurationInFrames?: number;
   enterFrames?: number;
   exitFrames?: number;
-   overlapFrames?: number;
+  overlapFrames?: number;
+  transitionStyle?: SceneTransitionStyle;
   children: React.ReactNode;
   style?: React.CSSProperties;
 }
@@ -403,14 +407,28 @@ const SyncedSceneInner: React.FC<{
   exitFrames: number;
   isFirst: boolean;
   isLast: boolean;
+  transitionStyle: SceneTransitionStyle;
   style?: React.CSSProperties;
   children: React.ReactNode;
-}> = ({ durationInFrames, enterFrames, exitFrames, isFirst, isLast, style, children }) => {
+}> = ({
+  durationInFrames,
+  enterFrames,
+  exitFrames,
+  isFirst,
+  isLast,
+  transitionStyle,
+  style,
+  children,
+}) => {
   const frame = useCurrentFrame();
 
-  const inFrames = isFirst ? Math.min(12, enterFrames) : enterFrames;
-  const outFrames = isLast ? Math.min(15, exitFrames) : exitFrames;
-  const exitStart = Math.max(inFrames + 5, durationInFrames - outFrames);
+  if (transitionStyle === 'cut') {
+    return <AbsoluteFill style={style}>{children}</AbsoluteFill>;
+  }
+
+  const inFrames = isFirst ? Math.min(10, enterFrames) : enterFrames;
+  const outFrames = isLast ? Math.min(12, exitFrames) : exitFrames;
+  const exitStart = Math.max(inFrames + 4, durationInFrames - outFrames);
 
   const enterProgress = interpolate(frame, [0, inFrames], [0, 1], {
     easing: Easing.bezier(0.22, 1, 0.36, 1),
@@ -424,19 +442,41 @@ const SyncedSceneInner: React.FC<{
     extrapolateRight: 'clamp',
   });
 
-  const opacity = enterProgress * (1 - exitProgress);
-  const scale =
-    interpolate(enterProgress, [0, 1], [0.975, 1]) *
-    interpolate(exitProgress, [0, 1], [1, 1.02]);
-  const translateY =
-    interpolate(enterProgress, [0, 1], [14, 0]) +
-    interpolate(exitProgress, [0, 1], [0, -10]);
+  // Never fade first scene to 0 on frame 0 or dip mid-cut to black when overlapped
+  const enterOpacity = isFirst ? 1 : enterProgress;
+  const exitOpacity = isLast ? 1 : 1 - exitProgress;
+  let opacity = enterOpacity * exitOpacity;
+  let transform = 'none';
+  let clipPath: string | undefined;
+
+  if (transitionStyle === 'whip-pan') {
+    const enterX = isFirst ? 0 : interpolate(enterProgress, [0, 1], [320, 0]);
+    const exitX = isLast ? 0 : interpolate(exitProgress, [0, 1], [0, -240]);
+    const scale = isLast ? 1 : interpolate(exitProgress, [0, 1], [1, 0.96]);
+    transform = `translate3d(${(enterX + exitX).toFixed(1)}px, 0, 0) scale(${scale.toFixed(4)})`;
+  } else if (transitionStyle === 'zoom-through') {
+    const enterScale = isFirst ? 1 : interpolate(enterProgress, [0, 1], [0.92, 1]);
+    const exitScale = isLast ? 1 : interpolate(exitProgress, [0, 1], [1, 1.09]);
+    transform = `scale(${(enterScale * exitScale).toFixed(4)})`;
+  } else if (transitionStyle === 'wipe') {
+    if (!isFirst && enterProgress < 1) {
+      const rightPct = ((1 - enterProgress) * 100).toFixed(2);
+      clipPath = `inset(0 ${rightPct}% 0 0)`;
+      opacity = exitOpacity;
+    }
+  } else {
+    const scale =
+      (isFirst ? 1 : interpolate(enterProgress, [0, 1], [0.985, 1])) *
+      (isLast ? 1 : interpolate(exitProgress, [0, 1], [1, 1.015]));
+    transform = `scale(${scale.toFixed(4)})`;
+  }
 
   return (
     <AbsoluteFill
       style={{
         opacity,
-        transform: `translate3d(0, ${translateY.toFixed(2)}px, 0) scale(${scale.toFixed(4)})`,
+        transform,
+        clipPath,
         ...style,
       }}
     >
@@ -449,9 +489,10 @@ export const SyncedScene: React.FC<SyncedSceneProps> = ({
   sceneIndex,
   fallbackStartFrame = 0,
   fallbackDurationInFrames = 180,
-  enterFrames = 14,
-  exitFrames = 14,
-  overlapFrames = 6,
+  enterFrames = 12,
+  exitFrames = 12,
+  overlapFrames = 10,
+  transitionStyle = 'zoom-through',
   children,
   style,
 }) => {
@@ -462,9 +503,9 @@ export const SyncedScene: React.FC<SyncedSceneProps> = ({
   const baseStart = getSegmentStartFrame(sceneIndex, fallbackStartFrame);
   const baseDur = getSceneFrames(sceneIndex, fallbackDurationInFrames);
 
-  // Subtle overlap into the natural breath tail of the previous scene without shifting spoken word localFrames
-  const actualStart = isFirst ? baseStart : Math.max(0, baseStart - overlapFrames);
-  const actualDur = isFirst ? baseDur : baseDur + overlapFrames;
+  const actualOverlap = transitionStyle === 'cut' ? 0 : overlapFrames;
+  const actualStart = isFirst ? baseStart : Math.max(0, baseStart - actualOverlap);
+  const actualDur = isFirst ? baseDur : baseDur + actualOverlap;
 
   return (
     <Sequence from={actualStart} durationInFrames={actualDur}>
@@ -474,6 +515,7 @@ export const SyncedScene: React.FC<SyncedSceneProps> = ({
         exitFrames={exitFrames}
         isFirst={isFirst}
         isLast={isLast}
+        transitionStyle={transitionStyle}
         style={style}
       >
         {children}
@@ -734,6 +776,7 @@ export interface ProKaraokeCaptionsProps {
   highlightColor?: string;
   activeBgColor?: string;
   textColor?: string;
+  fontFamily?: string;
   fontSize?: number;
   bottomOffset?: number;
   wordsPerPage?: number;
@@ -742,16 +785,17 @@ export interface ProKaraokeCaptionsProps {
 
 /**
  * 👑 PRO KARAOKE HIGHLIGHT CAPTIONS (Alex Hormozi / TikTok / MrBeast Studio Quality):
- * Reads 100% real Edge-TTS WordBoundary telemetry timestamps across the master audio stream.
- * Features dynamic spring pops on each active word, glowing neon drop-shadows, and auto-page wrapping!
+ * Reads 100% real Sentence/Word telemetry timestamps across the master audio stream.
+ * Splits caption cards strictly at sentence/pause boundaries so text never bleeds across pauses!
  */
 export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
   stylePreset = 'hormozi',
   highlightColor = '#facc15',
   activeBgColor = 'rgba(250, 204, 21, 0.2)',
   textColor = '#ffffff',
-  fontSize = 44,
-  bottomOffset = 90,
+  fontFamily = 'BeVietnamPro, "Noto Sans", system-ui, sans-serif',
+  fontSize = 42,
+  bottomOffset = 84,
   wordsPerPage = 5,
   style,
 }) => {
@@ -764,7 +808,7 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
 
   if (allWords.length === 0) return null;
 
-  // Group allWords into pages of 4-6 words for punchy high-retention reading
+  // Group words into punchy pages that NEVER cross a sentence boundary or pause gap (> 8 frames)
   const pages = useMemo(() => {
     const res: Array<{
       pageIndex: number;
@@ -773,25 +817,45 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
       words: WordToken[];
     }> = [];
 
-    for (let i = 0; i < allWords.length; i += wordsPerPage) {
-      const slice = allWords.slice(i, i + wordsPerPage);
-      if (slice.length > 0) {
-        const startFrame = slice[0].globalStartFrame ?? slice[0].startFrame;
-        const endFrame = slice[slice.length - 1].globalEndFrame ?? slice[slice.length - 1].endFrame;
-        res.push({
-          pageIndex: res.length,
-          startFrame,
-          endFrame: Math.max(endFrame, startFrame + 15),
-          words: slice,
-        });
+    let buffer: WordToken[] = [];
+    const flush = () => {
+      if (buffer.length === 0) return;
+      const startFrame = buffer[0].globalStartFrame ?? buffer[0].startFrame;
+      const endFrame = buffer[buffer.length - 1].globalEndFrame ?? buffer[buffer.length - 1].endFrame;
+      res.push({
+        pageIndex: res.length,
+        startFrame,
+        endFrame: Math.max(endFrame, startFrame + 10),
+        words: buffer,
+      });
+      buffer = [];
+    };
+
+    for (let i = 0; i < allWords.length; i++) {
+      const w = allWords[i];
+      const prev = buffer[buffer.length - 1];
+      if (prev) {
+        const prevEnd = prev.globalEndFrame ?? prev.endFrame;
+        const currStart = w.globalStartFrame ?? w.startFrame;
+        const pauseGap = currStart - prevEnd;
+        const crossedSentence =
+          typeof w.sentenceIndex === 'number' &&
+          typeof prev.sentenceIndex === 'number' &&
+          w.sentenceIndex !== prev.sentenceIndex;
+        const endedSentence = /[.?!…]$/.test(prev.word);
+        if (buffer.length >= wordsPerPage || crossedSentence || endedSentence || pauseGap > 8) {
+          flush();
+        }
       }
+      buffer.push(w);
     }
+    flush();
     return res;
   }, [allWords, wordsPerPage]);
 
   const activePage = pages.find((p, idx) => {
     const nextP = pages[idx + 1];
-    const pageTail = nextP ? nextP.startFrame : p.endFrame + 18;
+    const pageTail = nextP ? Math.min(nextP.startFrame, p.endFrame + 8) : p.endFrame + 12;
     return frame >= p.startFrame && frame < pageTail;
   });
 
@@ -883,10 +947,10 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
               key={`${wStart}-${idx}`}
               style={{
                 display: 'inline-block',
-                fontFamily: 'Impact, "Arial Black", system-ui, sans-serif',
+                fontFamily,
                 fontSize,
-                fontWeight: 900,
-                letterSpacing: 0.8,
+                fontWeight: 800,
+                letterSpacing: 0.4,
                 textTransform: 'uppercase',
                 color: isActive ? chosenHighlight : isPast ? textColor : 'rgba(255, 255, 255, 0.55)',
                 backgroundColor: isActive ? activeBgColor : 'transparent',

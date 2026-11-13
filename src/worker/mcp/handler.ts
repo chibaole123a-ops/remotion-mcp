@@ -349,7 +349,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     },
                     directorCodeBlueprint: DIRECTOR_CODE_BLUEPRINT,
                     instructionsForAgent:
-                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames).\nNEXT MANDATORY STEPS:\n1) Call search_visual_media + search_soundtrack (prefer directMp3: true) + search_sfx.\n2) Write DynamicVideo.tsx following directorCodeBlueprint above (Continuous World + SyncedScene transitionStyle + getWordTrigger + @remotion/google-fonts/be-vietnam-pro + ProKaraokeCaptions + dynamic BGM ducking).\n3) Call evaluate_video_quality -> fix any CRITICAL/ADVISORY.\n4) Call preview_frames with 4 keyframes and inspect the Contact Sheet via get_task_status BEFORE render_video(durationInFrames: ${telemetry.totalDurationInFrames}, audioConfig).`,
+                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames).\nNEXT MANDATORY STEPS:\n1) Call search_visual_media + search_soundtrack (prefer directMp3: true) + search_sfx.\n2) Write DynamicVideo.tsx following directorCodeBlueprint above (Continuous World + SyncedScene transitionStyle + getWordTrigger + @remotion/google-fonts/BeVietnamPro + ProKaraokeCaptions + dynamic BGM ducking).\n3) Call evaluate_video_quality -> fix any CRITICAL/ADVISORY.\n4) Call preview_frames with 4 keyframes and inspect the Contact Sheet via get_task_status BEFORE render_video(durationInFrames: ${telemetry.totalDurationInFrames}, audioConfig).`,
                   },
                   null,
                   2

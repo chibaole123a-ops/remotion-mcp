@@ -35,7 +35,7 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
   - \`<MasterAudioTrack voiceVolume={1} bgmSrc={...} bgmVolume={0.2} enableDucking={true} />\` — mounts \`voiceover.mp3\` cleanly (NEVER also mount \`voice-i.mp3\` when using \`<MasterAudioTrack />\`).
   - \`<ProKaraokeCaptions stylePreset="minimal" | "hormozi" | "glow" | "cyber" fontFamily={...} fontSize={42} bottomOffset={64} wordsPerPage={5} highlightColor="#facc15" />\` — real MMS-300M CTC acoustic word-level captions (\`"minimal"\` renders clean borderless cinema subtitles with zero dark footer box).
   - \`getWordTrigger(sceneIndex, "keyword", frame, transitionDurationFrames)\` & \`getWordProgress(sceneIndex, "startWord", "endWord", frame)\` — trigger animations on the exact spoken word!
-- **Vietnamese Typography**: Always import \`import { loadFont } from '@remotion/google-fonts/be-vietnam-pro'\` when script contains Vietnamese diacritics and pass \`fontFamily\` to \`<ProKaraokeCaptions />\`.
+- **Vietnamese Typography**: Always import \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'\` (PascalCase — NEVER kebab-case like \`be-vietnam-pro\`) when script contains Vietnamese diacritics and pass \`fontFamily\` to \`<ProKaraokeCaptions />\`.
 - **3D & Vector**: \`@remotion/three\` (\`ThreeCanvas\`), \`@react-three/fiber\`, \`@react-three/drei\`, \`@remotion/shapes\`, \`@remotion/paths\` (\`evolvePath\`, \`interpolatePath\`), \`@remotion/skia\`, \`@remotion/lottie\`, \`@remotion/rive\`.
 - **Transitions, Blur & Light**: \`@remotion/transitions\` (\`TransitionSeries\`, \`slide\`, \`fade\`, \`wipe\`, \`flip\`), \`@remotion/motion-blur\` (\`CameraMotionBlur\`, \`Trail\`), \`@remotion/light-leaks\` (\`LightLeak\`), \`@remotion/noise\` (\`noise2D\`, \`noise3D\`).
 - **Typography, Annotations & SFX**: \`@remotion/google-fonts/*\`, \`@remotion/fonts\`, \`@remotion/rough-notation\` (\`Highlight\`, \`Box\`, \`Circle\`, \`Underline\`), \`lucide-react\`, \`@remotion/sfx\` (\`whoosh\`, \`whip\`, \`ding\`, \`mouseClick\`, \`uiSwitch\`, \`pageTurn\`, \`shutterModern\`, \`vineBoom\`, \`dramaticBoomer\`, \`recordScratch\`).
@@ -70,7 +70,7 @@ export const DIRECTOR_CODE_BLUEPRINT = `
    - Helpers: \`getWordTrigger(sceneIndex, "keyword", localFrame, 20)\`, \`getWordProgress(sceneIndex, "startWord", "endWord", localFrame)\`, \`getSceneTiming(sceneIndex)\`, \`getTelemetryTotalFrames()\`
 
 3. **Vietnamese Font & Strictly Increasing \`interpolate\` Safety**:
-   - Load font for Vietnamese captions & titles: \`import { loadFont } from '@remotion/google-fonts/be-vietnam-pro'; const { fontFamily: bodyFont } = loadFont();\`
+   - Load font for Vietnamese captions & titles (note PascalCase module name): \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily: bodyFont } = loadFont();\`
    - NEVER pass unsorted or duplicate dynamic \`getSegmentStartFrame(i)\` values into \`interpolate(frame, inputRange, ...)\` — ensure every adjacent element in \`inputRange\` differs by \`>= 1\` (e.g., \`Math.max(prev + 1, next)\`) or animate inside each scene's local \`useCurrentFrame()\`.
 
 4. **Anti-Slide "Continuous World + Multi-Beat" Skeleton**:
@@ -79,7 +79,7 @@ import React from 'react';
 import { AbsoluteFill, Audio, Img, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { ThreeCanvas } from '@remotion/three';
 import { whoosh, vineBoom } from '@remotion/sfx';
-import { loadFont } from '@remotion/google-fonts/be-vietnam-pro';
+import { loadFont } from '@remotion/google-fonts/BeVietnamPro';
 import {
   StoryboardCanvas, SyncedScene, MasterAudioTrack,
   SceneAnchoredSequence, ProKaraokeCaptions, getWordTrigger, getSceneTiming, getTelemetryTotalFrames

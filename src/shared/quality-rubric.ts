@@ -194,7 +194,15 @@ export function validateTsxComposition(tsxCode: string, ctx: ValidationContext =
     /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(combinedScriptText);
   if (hasVietnameseText && !/@remotion\/google-fonts|BeVietnamPro|Noto\s+Sans/i.test(activeCode)) {
     warnings.push(
-      'ADVISORY: Vietnamese text detected without `@remotion/google-fonts/be-vietnam-pro` or `BeVietnamPro`. Import `{ loadFont } from "@remotion/google-fonts/be-vietnam-pro"` and pass `fontFamily` to `<ProKaraokeCaptions />` so Vietnamese diacritics render cleanly.'
+      'ADVISORY: Vietnamese text detected without `@remotion/google-fonts/BeVietnamPro`. Import `{ loadFont } from "@remotion/google-fonts/BeVietnamPro"` (PascalCase) and pass `fontFamily` to `<ProKaraokeCaptions />` so Vietnamese diacritics render cleanly.'
+    );
+  }
+
+  // @remotion/google-fonts exports PascalCase subpaths (BeVietnamPro, NotoSans) — kebab-case fails webpack bundling
+  const kebabFontMatch = activeCode.match(/@remotion\/google-fonts\/(?!from-info\b)([a-z0-9]+-[a-z0-9-]+)/);
+  if (kebabFontMatch) {
+    warnings.push(
+      `CRITICAL: Invalid \`@remotion/google-fonts/${kebabFontMatch[1]}\` import path. \`@remotion/google-fonts\` uses PascalCase module names (e.g. \`@remotion/google-fonts/BeVietnamPro\`, \`@remotion/google-fonts/NotoSans\`).`
     );
   }
 

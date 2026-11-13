@@ -21,6 +21,8 @@ export interface RenderDispatchOptions {
   mode?: 'video' | 'still' | 'stitch';
   stillFrame?: number;
   stillFrames?: number[];
+  saveSnapshot?: boolean;
+  reusePayloadAssetName?: string;
   audioMastering?: {
     enabled?: boolean;
     targetLufs?: number;
@@ -127,11 +129,21 @@ export async function dispatchGitHubRender(
   const audioMasteringB64 = masteringJson ? toBase64Utf8(masteringJson) : '';
   const inlineTotalChars = tsxCodeB64.length + audioConfigB64.length + audioMasteringB64.length;
 
-  // Offload large long-video payloads (or stitch manifests) to GitHub Release asset to bypass the 65KB workflow_dispatch limit
-  let payloadAssetName = '';
-  const shouldOffload = mode === 'stitch' || Boolean(opts.stitchConfig) || inlineTotalChars > 36000;
-  if (shouldOffload) {
+  // Reuse an already-uploaded draft/preview snapshot OR offload snapshot/large/stitch payload to Release asset
+  let payloadAssetName = opts.reusePayloadAssetName || '';
+  const shouldOffload =
+    Boolean(payloadAssetName) ||
+    Boolean(opts.saveSnapshot) ||
+    mode === 'stitch' ||
+    Boolean(opts.stitchConfig) ||
+    inlineTotalChars > 36000;
+  if (shouldOffload && !payloadAssetName) {
     payloadAssetName = await uploadReleaseJsonAsset(env, `payload-${jobId}.json`, {
+      title,
+      width,
+      height,
+      fps,
+      durationInFrames,
       tsxCode,
       audioConfig: audioConfig || {},
       audioMastering: opts.audioMastering || null,
@@ -301,6 +313,44 @@ export async function checkReleaseAssetsOnGitHub(
     return { videoReady, stillReady, errorLogText, stillBase64, finalSheetBase64, qcTelemetry, projectSourceAvailable };
   } catch {
     return { videoReady: false, stillReady: false };
+  }
+}
+
+export async function fetchReleaseJsonAsset(
+  env: Env,
+  assetName: string
+): Promise<Record<string, any> | null> {
+  const repo = getRepo(env);
+  try {
+    const cdnUrl = `https://github.com/${repo}/releases/download/videos-store/${encodeURIComponent(assetName)}`;
+    const cdnRes = await fetch(cdnUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+      redirect: 'follow',
+    });
+    if (cdnRes.ok) {
+      return (await cdnRes.json()) as Record<string, any>;
+    }
+
+    // Immediate API fallback if CDN edge has just received the upload
+    const tagRes = await fetch(`https://api.github.com/repos/${repo}/releases/tags/videos-store`, {
+      headers: githubHeaders(env.GITHUB_TOKEN),
+    });
+    if (tagRes.ok) {
+      const tagData: any = await tagRes.json();
+      const asset = (tagData?.assets || []).find((a: any) => a.name === assetName);
+      if (asset?.url) {
+        const binRes = await fetch(asset.url, {
+          headers: githubHeaders(env.GITHUB_TOKEN, { Accept: 'application/octet-stream' }),
+          redirect: 'follow',
+        });
+        if (binRes.ok) {
+          return (await binRes.json()) as Record<string, any>;
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 

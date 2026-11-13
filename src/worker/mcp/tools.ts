@@ -5,8 +5,8 @@ export const TOOLS = [
   {
     name: 'plan_storyboard_timeline',
     description:
-      'STAGE 1 — STORYBOARD, TIMELINE & CODE BLUEPRINT ORCHESTRATOR: Compute frame-accurate speech timing, scene boundaries (startFrame, durationInFrames), audioConfigPayload, anchorKeywords, AND the verified Continuous-World DynamicVideo.tsx Blueprint.\n' +
-      'Mandatory workflow: 1) plan_storyboard_timeline -> 2) search_visual_media + search_soundtrack + search_sfx -> 3) evaluate_video_quality -> 4) preview_frames (4 keyframes) + get_task_status Vision check -> 5) render_video -> 6) get_task_status final audit.',
+      'STAGE 1 — STORYBOARD, TIMELINE & CODE BLUEPRINT ORCHESTRATOR: Compute frame-accurate speech timing, scene boundaries (startFrame, durationInFrames), audioConfigPayload, anchorKeywords, built-in @remotion/sfx catalog, AND the DynamicVideo.tsx Blueprint.\n' +
+      'Streamlined 4-Step Workflow: 1) plan_storyboard_timeline -> 2) search_visual_media(queries: [...]) + search_soundtrack -> 3) preview_frames (runs guardrails automatically + snapshots TSX) -> 4) render_video(fromPreviewJobId) -> get_task_status final audit.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -60,14 +60,33 @@ export const TOOLS = [
   {
     name: 'search_visual_media',
     description:
-      'STAGE 2A — MULTIMODAL VISUAL MEDIA SEARCH: Search real photos and MP4/WebM videos across open global libraries (Wikimedia Commons, NASA Image & Video Library, Wikipedia EN/VI, Openverse, Internet Archive, plus optional Pexels/Pixabay).\n' +
-      'Automatically attaches verified thumbnails as Vision image blocks (type: "image") so you can visually inspect quality, framing, and relevance before embedding URLs in <Img> or <OffthreadVideo>. For custom external web URLs outside these libraries, call `verify_external_asset`.',
+      'STAGE 2A — MULTIMODAL VISUAL MEDIA SEARCH (SINGLE OR BATCH): Search real photos and MP4/WebM videos across open global libraries (Wikimedia Commons, NASA Image & Video Library, Wikipedia EN/VI, Openverse, Internet Archive, plus optional Pexels/Pixabay).\n' +
+      'Pass `queries: [...]` to fetch media & Vision thumbnails across ALL scenes in 1 single tool call, or `query` for a single search. Automatically attaches thumbnails as Vision image blocks (`visionImageIndex`). For custom external web URLs outside these libraries, call `verify_external_asset`.',
     inputSchema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Descriptive English or Vietnamese keywords (English yields broader global stock coverage, e.g. "tokyo neon rain night", "earth from space nasa").',
+          description: 'Single descriptive English or Vietnamese keyword query.',
+        },
+        queries: {
+          type: 'array',
+          description: 'Batch mode (RECOMMENDED): up to 5 scene queries executed concurrently in 1 call (strings or { query, mediaType, orientation, limit }).',
+          items: {
+            oneOf: [
+              { type: 'string' },
+              {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                  mediaType: { type: 'string', enum: ['all', 'image', 'video'] },
+                  orientation: { type: 'string', enum: ['any', 'landscape', 'portrait', 'square'] },
+                  limit: { type: 'number' },
+                },
+                required: ['query'],
+              },
+            ],
+          },
         },
         mediaType: {
           type: 'string',
@@ -84,15 +103,14 @@ export const TOOLS = [
         limit: {
           type: 'number',
           default: 5,
-          description: 'Max diverse results across sources (1-10, default 5).',
+          description: 'Max results per query (1-10, default 5 single / 3 batch).',
         },
         attachVisionThumbnails: {
           type: 'boolean',
           default: true,
-          description: 'Attach up to 6 thumbnails/video frames directly as Vision image blocks (matched via visionImageIndex).',
+          description: 'Attach thumbnails/video frames directly as Vision image blocks (matched via visionImageIndex).',
         },
       },
-      required: ['query'],
     },
     annotations: {
       readOnlyHint: true,
@@ -168,7 +186,7 @@ export const TOOLS = [
   {
     name: 'evaluate_video_quality',
     description:
-      'STAGE 3A — NON-RESTRICTIVE DIRECTOR QUALITY CHECK & RUBRIC: Run fast pre-render validation on your Remotion TSX code against hard technical invariants and get an intent-relative 5-pillar rubric (100 pts) while keeping 100% creative freedom.',
+      'OPTIONAL STATIC PRE-CHECK: Run instant regex/guardrail validation on DynamicVideo TSX without dispatching to Cloud. (Note: `preview_frames` and `render_video` already run these guardrails automatically, so skip this step unless you want a zero-cloud dry check.)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -205,9 +223,9 @@ export const TOOLS = [
   {
     name: 'preview_frames',
     description:
-      'STAGE 3B — MULTI-FRAME VISUAL INSPECTION (CONTACT SHEET): Render 1 frame OR up to 6 key frames in a SINGLE Cloud job (e.g. frames: [15, 180, 420] for Hook, Body, Outro) and receive a labeled Contact Sheet PNG in your Vision context.\n' +
+      'STAGE 3 — PRE-FLIGHT GUARDRAILS + MULTI-FRAME VISION CONTACT SHEET: Validates TSX guardrails automatically, caches external media, saves an exact draft snapshot (for instant `render_video(fromPreviewJobId)`), and renders 1 to 6 key frames (e.g. [15, 180, 420]) into one labeled Contact Sheet PNG.\n' +
       `Inspect the returned image against:\n${VISION_FRAME_CRITERIA.join('\n')}\n` +
-      'Follow up with get_task_status(jobId) to retrieve the Contact Sheet image block.',
+      'Follow up with get_task_status(jobId). When fixing a single scene, pass only that scene frame (e.g. frames: [247]) to re-verify fast.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -245,10 +263,14 @@ export const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
+        fromPreviewJobId: {
+          type: 'string',
+          description: 'FAST REUSE: Pass the approved `preview_frames` (or previous render) jobId to inherit its exact validated `tsxCode`, `audioConfig`, `width`, `height`, `fps`, and `durationInFrames` without re-writing code! Any explicit parameter still overrides.',
+        },
         title: { type: 'string', description: 'Title of the video composition' },
         tsxCode: {
           type: 'string',
-          description: 'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`.',
+          description: 'Complete TypeScript/React code exporting `export const DynamicVideo: React.FC = () => { ... }`. Optional when `fromPreviewJobId` is provided.',
         },
         durationInFrames: {
           type: 'number',
@@ -272,7 +294,6 @@ export const TOOLS = [
           },
         },
       },
-      required: ['tsxCode'],
     },
   },
   {

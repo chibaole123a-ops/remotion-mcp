@@ -906,7 +906,7 @@ export interface ProKaraokeCaptionsProps {
  */
 export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
   stylePreset = 'minimal',
-  highlightColor = '#facc15',
+  highlightColor,
   activeBgColor = 'rgba(250, 204, 21, 0.2)',
   textColor = '#ffffff',
   fontFamily = 'BeVietnamPro, "Noto Sans", system-ui, sans-serif',
@@ -1068,14 +1068,15 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
           const activeScale = isActive ? interpolate(wordPop, [0, 1], [1.0, 1.15]) : 1.0;
           const activeY = isActive ? -3 : 0;
 
-          const chosenHighlight =
-            stylePreset === 'hormozi'
-              ? idx % 2 === 0
-                ? '#facc15'
-                : '#38bdf8'
-              : stylePreset === 'cyber'
-              ? '#00f2fe'
-              : highlightColor;
+          const chosenHighlight = highlightColor
+            ? highlightColor
+            : stylePreset === 'hormozi'
+            ? idx % 2 === 0
+              ? '#facc15'
+              : '#38bdf8'
+            : stylePreset === 'cyber'
+            ? '#00f2fe'
+            : '#facc15';
 
           return (
             <span

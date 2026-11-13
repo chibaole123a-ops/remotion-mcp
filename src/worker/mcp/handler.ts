@@ -16,6 +16,7 @@ import {
   checkReleaseAssetsOnGitHub,
   inspectGitHubWorkflowRun,
   fetchProjectSourceFromGitHub,
+  fetchReleaseJsonAsset,
 } from "../services/github.js";
 import { searchSoundtrackQuery } from "../services/music.js";
 import { searchVisualMedia, searchSfxCatalog, verifyExternalAsset, validatePublicMediaUrl } from "../services/media.js";
@@ -121,24 +122,129 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
     try {
       if (toolName === 'search_visual_media') {
-        const query = String(args.query || '').trim();
-        const mediaType = (args.mediaType || 'all') as 'all' | 'image' | 'video';
-        const orientation = (['any', 'landscape', 'portrait', 'square'].includes(String(args.orientation))
+        const defaultMediaType = (args.mediaType || 'all') as 'all' | 'image' | 'video';
+        const defaultOrientation = (['any', 'landscape', 'portrait', 'square'].includes(String(args.orientation))
           ? String(args.orientation)
           : 'any') as 'any' | 'landscape' | 'portrait' | 'square';
-        const limit = Number(args.limit || 5);
         const attachVision = args.attachVisionThumbnails !== false;
+
+        if (Array.isArray(args.queries) && args.queries.length > 0) {
+          const batchSpecs = args.queries
+            .slice(0, 5)
+            .map((entry: any) => {
+              if (typeof entry === 'string') {
+                return {
+                  query: entry.trim(),
+                  mediaType: defaultMediaType,
+                  orientation: defaultOrientation,
+                  limit: Number(args.limit || 3),
+                };
+              }
+              return {
+                query: String(entry?.query || '').trim(),
+                mediaType: (entry?.mediaType || defaultMediaType) as 'all' | 'image' | 'video',
+                orientation: (['any', 'landscape', 'portrait', 'square'].includes(String(entry?.orientation))
+                  ? String(entry.orientation)
+                  : defaultOrientation) as 'any' | 'landscape' | 'portrait' | 'square',
+                limit: Math.min(5, Math.max(1, Number(entry?.limit || args.limit || 3))),
+              };
+            })
+            .filter((s: any) => s.query.length > 0);
+
+          const groupResults = await Promise.all(
+            batchSpecs.map((spec: any) =>
+              searchVisualMedia(
+                spec.query,
+                spec.mediaType,
+                spec.limit,
+                attachVision,
+                { pexelsKey: env.PEXELS_API_KEY, pixabayKey: env.PIXABAY_API_KEY },
+                spec.orientation
+              )
+            )
+          );
+
+          // Interleave up to 8 Vision thumbnails across query groups so every scene gets direct visual inspection
+          const combinedImageBlocks: any[] = [];
+          const maxBatchVision = attachVision ? Math.min(8, Math.max(6, groupResults.length * 2)) : 0;
+          const groupCounters = groupResults.map(() => 0);
+
+          const groupsPayload = groupResults.map((gr) => ({
+            query: gr.query,
+            mediaTypeFilter: gr.mediaTypeFilter,
+            items: gr.items.map((item: any) => ({ ...item, visionAttached: false, visionImageIndex: undefined })),
+          }));
+
+          if (attachVision && maxBatchVision > 0) {
+            let added = true;
+            while (combinedImageBlocks.length < maxBatchVision && added) {
+              added = false;
+              for (let gIdx = 0; gIdx < groupResults.length; gIdx++) {
+                if (combinedImageBlocks.length >= maxBatchVision) break;
+                const srcItems = groupResults[gIdx].items;
+                const srcBlocks = groupResults[gIdx].imageBlocks;
+                let itemCursor = groupCounters[gIdx];
+                while (itemCursor < srcItems.length && typeof srcItems[itemCursor].visionImageIndex !== 'number') {
+                  itemCursor++;
+                }
+                if (itemCursor < srcItems.length) {
+                  const localImgIdx = srcItems[itemCursor].visionImageIndex!;
+                  const imgBlock = srcBlocks[localImgIdx];
+                  if (imgBlock) {
+                    const globalImgIdx = combinedImageBlocks.length;
+                    combinedImageBlocks.push(imgBlock);
+                    groupsPayload[gIdx].items[itemCursor].visionAttached = true;
+                    groupsPayload[gIdx].items[itemCursor].visionImageIndex = globalImgIdx;
+                    added = true;
+                  }
+                  groupCounters[gIdx] = itemCursor + 1;
+                } else {
+                  groupCounters[gIdx] = srcItems.length;
+                }
+              }
+            }
+          }
+
+          return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify(
+                    {
+                      batchMode: true,
+                      queriesSearched: batchSpecs.length,
+                      totalFound: groupsPayload.reduce((acc, g) => acc + g.items.length, 0),
+                      visionThumbnailsAttached: combinedImageBlocks.length,
+                      groups: groupsPayload,
+                      usageNotes:
+                        'Match each item across groups with its attached Vision image block via item.visionImageIndex (0-based) before embedding. Use <Img src="<item.url>" /> or <OffthreadVideo src="<item.url>" />.',
+                    },
+                    null,
+                    2
+                  ),
+                },
+                ...combinedImageBlocks,
+              ],
+            },
+          };
+        }
+
+        const query = String(args.query || '').trim();
+        const limit = Number(args.limit || 5);
 
         const result = await searchVisualMedia(
           query,
-          mediaType,
+          defaultMediaType,
           limit,
           attachVision,
           {
             pexelsKey: env.PEXELS_API_KEY,
             pixabayKey: env.PIXABAY_API_KEY,
           },
-          orientation
+          defaultOrientation
         );
 
         const contentBlocks: any[] = [
@@ -148,7 +254,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               {
                 query: result.query,
                 mediaTypeFilter: result.mediaTypeFilter,
-                orientation,
+                orientation: defaultOrientation,
                 totalFound: result.items.length,
                 visionThumbnailsAttached: result.imageBlocks.length,
                 items: result.items,
@@ -387,6 +493,20 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     recommendedPreviewFrames,
                     previewFrameTranscripts,
                     audioConfigPayload: telemetry.audioConfigPayload,
+                    availableBuiltinSfx: [
+                      'whoosh',
+                      'whip',
+                      'pageTurn',
+                      'uiSwitch',
+                      'mouseClick',
+                      'ding',
+                      'snapchatNotification',
+                      'shutterModern',
+                      'shutterOld',
+                      'vineBoom',
+                      'dramaticBoomer',
+                      'recordScratch',
+                    ],
                     continuityPack: adaptiveChapterPlan.continuityPack,
                     adaptiveChapterPlan: isAdaptiveChapters ? adaptiveChapterPlan : undefined,
                     directorQualityReminder: {
@@ -400,7 +520,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     directorCodeBlueprint: DIRECTOR_CODE_BLUEPRINT,
                     instructionsForAgent: isAdaptiveChapters
                       ? `Adaptive Storyboard verified (${telemetry.totalDurationSec}s, ${telemetry.totalScenes} scenes). Both Single-Render and Adaptive Multi-Chapter workflows are supported — choose whichever fits best:\n- Option A (Recommended for heavy 3D/video or >4 min stories): Render each chapter in adaptiveChapterPlan.chapters cleanly via render_video (keeping continuityPack voice/font/palette and omitting per-chapter BGM), then merge with stitch_video_chapters(chapters, masterBgmUrl, transition: "crossfade").\n- Option B (Single continuous render for lightweight 2D/photo/lyric videos): Render the full timeline in one render_video call (payloads > 36 KB are automatically offloaded beyond GitHub's 65 KB limit).`
-                      : `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames).\nNEXT MANDATORY STEPS:\n1) Call search_visual_media + search_soundtrack (prefer directMp3: true) + search_sfx.\n2) Write DynamicVideo.tsx following directorCodeBlueprint above (Continuous World + SyncedScene transitionStyle + getWordTrigger + @remotion/google-fonts/BeVietnamPro + ProKaraokeCaptions + dynamic BGM ducking).\n3) Call evaluate_video_quality -> fix any CRITICAL/ADVISORY.\n4) Call preview_frames(frames: ${JSON.stringify(recommendedPreviewFrames)}, audioConfig: audioConfigPayload) and inspect the Contact Sheet via get_task_status against previewFrameTranscripts (1-pass polish if needed) BEFORE render_video(durationInFrames: ${telemetry.totalDurationInFrames}, audioConfig).`,
+                      : `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames).\nSTREAMLINED 4-STEP WORKFLOW:\n1) Call search_visual_media(queries: [...]) to fetch Vision-verified media across all scenes in 1 batch + search_soundtrack(directMp3: true). Use availableBuiltinSfx directly from "@remotion/sfx" (only call search_sfx if you need external web foley).\n2) Write DynamicVideo.tsx once and call preview_frames(frames: ${JSON.stringify(recommendedPreviewFrames)}, durationInFrames: ${telemetry.totalDurationInFrames}, audioConfig: audioConfigPayload) directly (guardrails run automatically inside preview_frames).\n3) Inspect the Contact Sheet via get_task_status against previewFrameTranscripts. If editing one scene, preview just that frame; once approved, call render_video(fromPreviewJobId: "<previewJobId>") without rewriting TSX!\n4) Call get_task_status until MP4 + -14 LUFS QC completes.`,
                   },
                   null,
                   2
@@ -431,19 +551,51 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const resolvedFrames = previewFramesList || [0];
         const maxPreviewFrame = Math.max(...resolvedFrames);
 
-        const tsxCode = String(args.tsxCode || '');
+        const fromPreviewId = !isFramePreview
+          ? sanitizeJobId(String(args.fromPreviewJobId || args.fromJobId || ''))
+          : '';
+        let snapshot: Record<string, any> | null = null;
+        let snapshotAssetKind: 'payload' | 'project' | null = null;
+
+        if (fromPreviewId) {
+          snapshot = await fetchReleaseJsonAsset(env, `payload-${fromPreviewId}.json`);
+          if (snapshot?.tsxCode) {
+            snapshotAssetKind = 'payload';
+          } else {
+            snapshot = await fetchReleaseJsonAsset(env, `project-${fromPreviewId}.json`);
+            if (snapshot?.tsxCode) snapshotAssetKind = 'project';
+          }
+          if (!snapshot?.tsxCode && !args.tsxCode) {
+            return {
+              jsonrpc: '2.0',
+              id,
+              result: {
+                isError: true,
+                content: [
+                  {
+                    type: 'text',
+                    text: `Could not find saved TSX snapshot for fromPreviewJobId "${fromPreviewId}". Pass tsxCode explicitly or run preview_frames first.`,
+                  },
+                ],
+              },
+            };
+          }
+        }
+
+        const tsxCode = String(args.tsxCode || snapshot?.tsxCode || '');
         const jobId = randomJobId();
-        const fps = Number(args.fps || 30);
-        const width = Number(args.width || 1920);
-        const height = Number(args.height || 1080);
-        const durationInFrames = Number(args.durationInFrames || 300);
-        const audioConfig = args.audioConfig || {};
+        const fps = Number(args.fps || snapshot?.fps || 30);
+        const width = Number(args.width || snapshot?.width || 1920);
+        const height = Number(args.height || snapshot?.height || 1080);
+        const durationInFrames = Number(args.durationInFrames || snapshot?.durationInFrames || 300);
+        const audioConfig = args.audioConfig || snapshot?.audioConfig || {};
+        const effectiveMasteringSource = args.audioMastering || snapshot?.audioMastering;
         const audioMastering =
-          args.audioMastering && typeof args.audioMastering === 'object'
+          effectiveMasteringSource && typeof effectiveMasteringSource === 'object'
             ? {
-                enabled: args.audioMastering.enabled !== false,
-                targetLufs: Number(args.audioMastering.targetLufs ?? -14),
-                truePeakDbtp: Number(args.audioMastering.truePeakDbtp ?? -1.5),
+                enabled: effectiveMasteringSource.enabled !== false,
+                targetLufs: Number(effectiveMasteringSource.targetLufs ?? -14),
+                truePeakDbtp: Number(effectiveMasteringSource.truePeakDbtp ?? -1.5),
               }
             : { enabled: true, targetLufs: -14, truePeakDbtp: -1.5 };
 
@@ -473,13 +625,14 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         if (isFramePreview) {
           const title = args.title || 'Remotion Frame Preview';
+          const effectivePreviewDuration = Math.max(durationInFrames, maxPreviewFrame + 1, 30);
 
           await dispatchGitHubRender(
             env,
             jobId,
             title,
             tsxCode,
-            Math.max(durationInFrames, maxPreviewFrame + 1, 30),
+            effectivePreviewDuration,
             fps,
             width,
             height,
@@ -488,6 +641,8 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               mode: 'still',
               stillFrame: resolvedFrames[0],
               stillFrames: resolvedFrames,
+              saveSnapshot: true,
+              audioMastering,
             }
           );
 
@@ -525,6 +680,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     {
                       status: 'frame_dispatched_to_cloud',
                       jobId,
+                      snapshotSavedForFastRender: true,
                       capturedFrames: resolvedFrames,
                       frameNarrationContext,
                       contactSheetMode: resolvedFrames.length > 1,
@@ -534,7 +690,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       qualityAdvisories: qualityAdvisories.length > 0 ? qualityAdvisories : undefined,
                       visionInspectionCriteria: getVisionFrameCriteria(width, height),
                       instructionsForAgent:
-                        `Frame capture job for frame(s) [${resolvedFrames.join(', ')}] dispatched to Cloud runner! Call get_task_status(jobId: "${jobId}", waitForCompletion: true) to retrieve the ${resolvedFrames.length > 1 ? 'Contact Sheet' : 'still frame'}, compare every frame against frameNarrationContext + visionInspectionCriteria, and apply 1 polish pass if any frame looks flat or out-of-sync before render_video.`,
+                        `Frame capture job for frame(s) [${resolvedFrames.join(', ')}] dispatched to Cloud runner! Call get_task_status(jobId: "${jobId}", waitForCompletion: true) to inspect the ${resolvedFrames.length > 1 ? 'Contact Sheet' : 'still frame'}. If you fix a specific scene, you can preview just that scene's frame; once approved, call render_video(fromPreviewJobId: "${jobId}") to render MP4 directly without re-writing TSX!`,
                     },
                     null,
                     2
@@ -545,8 +701,14 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           };
         }
 
-        // Full Video Render
-        const title = args.title || 'Remotion Video';
+        // Full Video Render (fast async dispatch — skip redundant 20s stall since Cloud renders take >90s)
+        const title = String(args.title || snapshot?.title || 'Remotion Video');
+        const canReuseSnapshotPayload =
+          Boolean(fromPreviewId) &&
+          snapshotAssetKind === 'payload' &&
+          !args.tsxCode &&
+          !args.audioConfig &&
+          !args.audioMastering;
 
         await dispatchGitHubRender(
           env,
@@ -562,6 +724,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
             mode: 'video',
             stillFrame: 0,
             audioMastering,
+            reusePayloadAssetName: canReuseSnapshotPayload ? `payload-${fromPreviewId}.json` : undefined,
           }
         );
 
@@ -569,37 +732,6 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const streamUrl = `${baseUrl}/video/${jobId}.mp4${secretQuery}`;
         const galleryUrl = `${baseUrl}/gallery${secretQuery}`;
         const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
-
-        const waitStart = Date.now();
-        let finalStatus = 'rendering_on_cloud';
-        let isSuccess = false;
-        let isFailed = false;
-        let errorDetails: string | undefined;
-        let qcTelemetry: Record<string, any> | undefined;
-
-        while (Date.now() - waitStart < 20000) {
-          await new Promise((r) => setTimeout(r, 4000));
-          const check = await checkReleaseAssetsOnGitHub(env, jobId);
-          if (check.videoReady) {
-            isSuccess = true;
-            finalStatus = 'completed';
-            qcTelemetry = check.qcTelemetry;
-            break;
-          }
-          if (check.errorLogText) {
-            isFailed = true;
-            finalStatus = 'failed';
-            errorDetails = check.errorLogText;
-            break;
-          }
-          const wf = await inspectGitHubWorkflowRun(env, jobId);
-          if (wf?.conclusion === 'failure') {
-            isFailed = true;
-            finalStatus = 'failed';
-            errorDetails = 'GitHub Actions workflow failed during build or render step. Check logs with inspect_task_logs.';
-            break;
-          }
-        }
 
         return {
           jsonrpc: '2.0',
@@ -610,8 +742,9 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 type: 'text',
                 text: JSON.stringify(
                   {
-                    status: finalStatus,
+                    status: 'rendering_on_cloud',
                     jobId,
+                    inheritedFromPreviewJobId: fromPreviewId || undefined,
                     title,
                     specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames / ${(durationInFrames / fps).toFixed(1)}s)`,
                     audioMastering,
@@ -619,14 +752,8 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     streamUrl,
                     galleryUrl,
                     directDownloadUrl: videoUrl,
-                    qcTelemetry: isSuccess ? qcTelemetry : undefined,
                     qualityAdvisories: qualityAdvisories.length > 0 ? qualityAdvisories : undefined,
-                    errorDetails: errorDetails || undefined,
-                    instructionsForAgent: isSuccess
-                      ? `Render completed successfully! Present the video watch link to the user: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${videoUrl})`
-                      : isFailed
-                      ? `Render failed on cloud runner! Inspect "errorDetails" above, fix your React TSX code or assets, and re-call render_video.`
-                      : `CRITICAL ACTION REQUIRED: Video is still rendering on Cloud Runner! DO NOT reply to the user yet and DO NOT say you are waiting. You MUST immediately execute get_task_status(jobId: "${jobId}", waitForCompletion: true) right now until status is "completed"!`,
+                    instructionsForAgent: `Video dispatched to Cloud Runner! Poll get_task_status(jobId: "${jobId}", waitForCompletion: true) until status is "completed".`,
                   },
                   null,
                   2

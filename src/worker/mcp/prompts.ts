@@ -5,28 +5,23 @@ export const ECOSYSTEM_DOCS = `
 
 You have **100% creative freedom** to build any video or visual composition using the complete Remotion v4.0.542 ecosystem.
 
-## 🎬 PRO EDITOR WORKFLOW (RECOMMENDED PIPELINE):
-Even from a 1-sentence prompt, operate like a **Professional Video Director & Editor**:
-1. **Script & Timeline Lock (\`plan_storyboard_timeline\`)**: Expand the idea into a compelling arc (**Hook → Build-up → Climax → Outro**). Call \`plan_storyboard_timeline\` FIRST to lock exact \`startFrame\`, \`durationInFrames\`, \`audioConfigPayload\`, and \`anchorKeywords\`.
-2. **Visual & Audio Sourcing**:
-   - Call \`search_visual_media\` to discover real photos/videos (.jpg/.png/.mp4) across Wikimedia Commons, NASA, Wikipedia EN/VI, Openverse, Internet Archive (plus optional Pexels/Pixabay) and inspect thumbnails directly with Vision.
-   - To use ANY external web media URL outside those libraries (or extract \`og:image\`/\`og:video\` from a public webpage), verify it first with \`verify_external_asset\` (enforces SSRF safety, blocks watermarked stock domains, checks HTTP reachability & MIME type, and attaches Vision preview).
-   - Call \`search_soundtrack\` for mood-matched BGM (prefer \`directMp3: true\` studio CDN tracks for 100% reliability on Cloud runners) and \`search_sfx\` for exact \`@remotion/sfx\` exports or ambient foley.
-3. **Multi-Layer Cinematic Craft (\`DynamicVideo.tsx\`)**:
-   - Wrap scenes inside \`<StoryboardCanvas>\` (for continuous 2.5D camera drift) + \`<SyncedScene sceneIndex={i}>\`. (Omit top/bottom duration progress bars like \`<ChapterProgressSpine />\` by default so edges stay clean — add a chapter/progress bar ONLY if the user's request or topic calls for it.)
-   - Combine real media (\`<Img>\` / \`<OffthreadVideo>\`), 3D (\`ThreeCanvas\`), vector shapes/paths, \`@remotion/light-leaks\` (\`<LightLeak>\`), \`@remotion/motion-blur\` (\`<CameraMotionBlur>\`, \`<Trail>\`), \`@remotion/rough-notation\`, \`lucide-react\`, and \`<ProKaraokeCaptions stylePreset="minimal" />\` (clean cinema subtitles with zero rectangular box bar).
-   - Sync visual beats to exact spoken words using \`getWordTrigger(sceneIndex, "keyword", frame)\`, and anchor SFX/ducking cues dynamically to measured TTS boundaries using \`<SceneAnchoredSequence sceneIndex={i}>\` or \`getSceneTiming(i)\` / \`getTelemetryTotalFrames()\` from \`./audio-sync\`.
-   - Mix audio cleanly: use dynamic BGM ducking (\`volume={(f) => ...}\`) when voiceover is active and layer verified \`@remotion/sfx\` (\`whoosh\`, \`whip\`, \`pageTurn\`, \`uiSwitch\`, \`mouseClick\`, \`ding\`, \`shutterModern\`, \`vineBoom\`, \`dramaticBoomer\`, \`recordScratch\`).
-4. **Pre-Flight Quality & Multi-Frame Preview**:
-   - Optionally call \`evaluate_video_quality\` to verify Tier-1 technical invariants and your 5-pillar intent alignment.
-   - Use \`preview_frames\` with multiple timestamps (e.g., \`frames: [15, 180, 420]\`) to visually inspect Hook, Body, and Outro in a single Contact Sheet before full render.
-5. **Full Cloud Render & Studio Mastering (\`render_video\`)**:
-   - Dispatch \`render_video\` (with \`audioMastering\` enabled by default for automatic FFmpeg two-pass \`-14 LUFS\` normalization) and poll \`get_task_status(jobId, waitForCompletion: true)\` until completed.
-6. **Iterative Editing (\`get_project_source\`)**:
-   - If the user asks to refine an existing video, call \`get_project_source(jobId)\` to load its exact \`tsxCode\` and \`audioConfig\` and iterate surgically.
-7. **Adaptive Long-Form & Continuous-Score Strategy**:
-   - Large \`tsxCode\`/\`audioConfig\` payloads (> 36 KB) offload automatically beyond GitHub's 65 KB limit.
-   - When \`plan_storyboard_timeline\` detects a long or heavy composition and returns \`adaptiveChapterPlan\`, follow its natural scene-bounded chapters + shared \`continuityPack\` (identical voice, rate, font, and palette; **omit local BGM** inside individual chapters), then merge via \`stitch_video_chapters\` with \`masterBgmUrl\` so FFmpeg applies **uninterrupted sidechain-ducked music** across all chapters before \`-14 LUFS\` mastering.
+## 🎬 PRO EDITOR WORKFLOW (STREAMLINED 4-STEP PIPELINE):
+Even from a 1-sentence prompt, operate like a **Professional Video Director & Editor** without redundant round-trips:
+1. **Script & Timeline Lock (\`plan_storyboard_timeline\`)**: Expand the idea into a compelling arc (**Hook → Build-up → Climax → Outro**). Call \`plan_storyboard_timeline\` FIRST to lock \`startFrame\`, \`durationInFrames\`, \`audioConfigPayload\`, \`anchorKeywords\`, and see built-in \`availableBuiltinSfx\`.
+2. **Batch Visual & Audio Sourcing**:
+   - Call \`search_visual_media(queries: [...])\` ONCE across all scenes to discover real photos/videos (.jpg/.png/.mp4) from Wikimedia Commons, NASA, Wikipedia EN/VI, Openverse, Internet Archive, Pexels, and Pixabay and inspect Vision thumbnails directly.
+   - To use ANY external web media URL outside those libraries (or extract \`og:image\`/\`og:video\` from a public webpage), verify it first with \`verify_external_asset\`.
+   - Call \`search_soundtrack\` for mood-matched BGM (prefer \`directMp3: true\` studio CDN tracks). Only call \`search_sfx\` when you need external Internet Archive foley beyond \`availableBuiltinSfx\`.
+3. **Multi-Layer Craft (\`DynamicVideo.tsx\`) + Vision Contact Sheet (\`preview_frames\`)**:
+   - Write \`DynamicVideo.tsx\` ONCE using \`<StoryboardCanvas>\` + \`<SyncedScene sceneIndex={i}>\`, \`<SafeAreaLayer>\`, real media (\`<Img>\` / \`<OffthreadVideo>\`), 3D/motion FX, \`@remotion/google-fonts/BeVietnamPro\` for Vietnamese, \`<ProKaraokeCaptions />\` (auto Safe-Zone on 9:16 & 16:9), \`getWordTrigger\`, and dynamic BGM ducking (\`getSmoothDuckingVolume\`).
+   - Call \`preview_frames(frames: recommendedPreviewFrames, durationInFrames, audioConfig)\` directly — it runs static guardrails automatically AND saves a snapshot for fast MP4 reuse. Inspect the Contact Sheet via \`get_task_status\` (when fixing just one scene, pass only that scene's frame to \`preview_frames\` instead of re-capturing untouched scenes). (Omit \`<ChapterProgressSpine />\` by default unless requested.)
+4. **Zero-Rewrite Cloud Render & Mastering (\`render_video\`)**:
+   - Once the Contact Sheet looks sharp, call \`render_video(fromPreviewJobId: "<previewJobId>", title: "...")\` — **no need to rewrite/re-send \`tsxCode\`!** Wait for \`get_task_status(jobId, waitForCompletion: true)\` until completed (-14 LUFS mastered MP4 + final Contact Sheet audit).
+5. **Iterative Editing (\`get_project_source\`)**:
+   - If refining an already-published video later, call \`get_project_source(jobId)\` to load its exact \`tsxCode\` and \`audioConfig\`.
+6. **Adaptive Long-Form & Continuous-Score Strategy**:
+   - Large payloads (> 36 KB) offload automatically beyond GitHub's 65 KB limit.
+   - When \`plan_storyboard_timeline\` detects a long or heavy composition and returns \`adaptiveChapterPlan\`, follow Option A (\`render_video\` per chapter sharing \`continuityPack\`, omitting local chapter BGM, then \`stitch_video_chapters\` with continuous \`masterBgmUrl\` FFmpeg sidechain ducking) or Option B (single continuous render for lightweight 2D/lyrics).
 
 ## 📦 INSTALLED REMOTION PACKAGES & HELPERS:
 - **Core (\`remotion\`)**: \`useCurrentFrame()\`, \`useVideoConfig()\`, \`interpolate(..., { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })\`, \`spring({ frame, fps, config })\`, \`interpolateColors()\`, \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`Img\`, \`OffthreadVideo\`, \`Audio\`, \`staticFile()\`, \`random("seed")\`, \`Easing\`.
@@ -63,8 +58,8 @@ ${DIRECTOR_EVALUATION_FRAMEWORK}
 
 export const DIRECTOR_CODE_BLUEPRINT = `
 ### 🎬 VERIFIED REMOTION STUDIO BLUEPRINT (USE DIRECTLY IN DynamicVideo.tsx)
-1. **Mandatory Pro Workflow Order (with 1-Pass Polish Gate)**:
-   \`plan_storyboard_timeline\` → \`search_visual_media\` + \`search_soundtrack\` (prefer \`directMp3: true\`) + \`search_sfx\` → write \`DynamicVideo.tsx\` → \`evaluate_video_quality\` → \`preview_frames(recommendedPreviewFrames, audioConfig)\` + \`get_task_status\` (audit Spoken-vs-Shown sync & cross-scene depth parity; refine 1 pass if any tile is weaker/out-of-sync!) → \`render_video\` → \`get_task_status\` (inspect final MP4 Contact Sheet + QC).
+1. **Streamlined 4-Step Workflow Order**:
+   \`plan_storyboard_timeline\` → \`search_visual_media(queries: [...])\` + \`search_soundtrack\` → write \`DynamicVideo.tsx\` → \`preview_frames(recommendedPreviewFrames, durationInFrames, audioConfig)\` + \`get_task_status\` (audit Spoken-vs-Shown & Safe-Zone; re-check only edited frames if polishing) → \`render_video(fromPreviewJobId: "<previewJobId>")\` → \`get_task_status\` (inspect final MP4 Contact Sheet + QC).
 
 2. **Exact Verified Imports & Props (\`./audio-sync\`)**:
    - \`SyncedScene\`: \`sceneIndex\`, \`transitionStyle="zoom-through" | "whip-pan" | "wipe" | "fade" | "cut"\`, \`overlapFrames={10}\`, \`enterFrames={12}\`, \`exitFrames={12}\`

@@ -373,9 +373,9 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
   const detectedSignals = {
     usesSpringPhysics: /\bspring\s*\(/.test(activeCode),
     usesInterpolation: /\binterpolate\s*\(/.test(activeCode),
-    usesMilestoneSync: /\binterpolateSceneMilestones\s*\(/.test(activeCode),
+    usesMilestoneSync: /\b(?:interpolateSceneMilestones|getWordTrigger|getWordProgress)\s*\(/.test(activeCode),
     uses3DOrCanvas: /ThreeCanvas|@remotion\/three/.test(activeCode),
-    usesTransitions: /TransitionSeries|@remotion\/transitions/.test(activeCode),
+    usesTransitions: /TransitionSeries|@remotion\/transitions|\btransitionStyle\s*=/.test(activeCode),
     usesStoryboardCanvas: /StoryboardCanvas|SyncedScene/.test(activeCode),
     usesCaptions: /ProKaraokeCaptions|WordHighlightCaptions/.test(activeCode),
     usesDynamicAudioDucking: hasInlineDucking || hasNamedDucking,

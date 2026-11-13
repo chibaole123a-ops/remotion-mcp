@@ -110,6 +110,15 @@ jobs:
         if: inputs.mode != 'stitch'
         run: npx remotion browser ensure --quiet
 
+      - name: Cache External Video Assets (Preview -> Render Reuse)
+        if: inputs.mode != 'stitch'
+        uses: actions/cache@v4
+        with:
+          path: ~/.remotion-media-cache
+          key: remotion-media-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            remotion-media-${{ runner.os }}-
+
       - name: Ensure FFmpeg CLI (Shared for Previews, Stitch & Mastering)
         run: |
           if ! command -v ffmpeg &> /dev/null; then

@@ -1,4 +1,36 @@
 import fs from 'fs';
+import crypto from 'crypto';
+import path from 'path';
+import os from 'os';
+
+const MEDIA_CACHE_DIR = process.env.MEDIA_CACHE_DIR || path.join(os.homedir(), '.remotion-media-cache');
+
+function getCachedMediaPath(url, ext) {
+  const hash = crypto.createHash('sha1').update(String(url)).digest('hex').slice(0, 16);
+  return path.join(MEDIA_CACHE_DIR, `${hash}.${ext}`);
+}
+
+function pruneMediaCache(cacheDir, maxBytes = 420 * 1024 * 1024) {
+  try {
+    if (!fs.existsSync(cacheDir)) return;
+    const entries = fs
+      .readdirSync(cacheDir)
+      .map((name) => {
+        const full = path.join(cacheDir, name);
+        const st = fs.statSync(full);
+        return { full, size: st.size, mtimeMs: st.mtimeMs };
+      })
+      .sort((a, b) => a.mtimeMs - b.mtimeMs);
+    let total = entries.reduce((acc, e) => acc + e.size, 0);
+    while (total > maxBytes && entries.length > 0) {
+      const oldest = entries.shift();
+      try {
+        fs.unlinkSync(oldest.full);
+        total -= oldest.size;
+      } catch {}
+    }
+  } catch {}
+}
 
 const tsxB64 = fs.existsSync('outputs/hydrated-tsx.txt')
   ? fs.readFileSync('outputs/hydrated-tsx.txt').toString('base64')
@@ -72,17 +104,36 @@ async function prefetchExternalMedia(code) {
   const urlToLocalFile = new Map();
 
   if (uniqueVideoUrls.length > 0) {
+    try {
+      fs.mkdirSync(MEDIA_CACHE_DIR, { recursive: true });
+    } catch {}
+    let cacheUpdated = false;
+
     await Promise.all(
       uniqueVideoUrls.map(async (url, idx) => {
         const extMatch = url.match(/\.(mp4|webm|mov|ogv)(?:\?|$)/i);
         const ext = extMatch ? extMatch[1].toLowerCase() : 'mp4';
         const fileName = `cached-vid-${idx}.${ext}`;
         const outPath = `public/${fileName}`;
+        const cachedPath = getCachedMediaPath(url, ext);
         try {
+          if (fs.existsSync(cachedPath) && fs.statSync(cachedPath).size > 4096) {
+            fs.copyFileSync(cachedPath, outPath);
+            fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
+            urlToLocalFile.set(url, fileName);
+            const mb = (fs.statSync(cachedPath).size / (1024 * 1024)).toFixed(2);
+            console.log(`⚡ Media cache HIT [${idx}]: ${url.slice(0, 65)}... -> ${fileName} (${mb} MB)`);
+            return;
+          }
+
           const { buffer, contentType } = await fetchWithTimeout(url, 25000, 'video/*,*/*;q=0.8');
           if (buffer && buffer.length > 4096 && !contentType.includes('text/html')) {
             fs.writeFileSync(outPath, buffer);
             fs.copyFileSync(outPath, `src/remotion/public/${fileName}`);
+            try {
+              fs.writeFileSync(cachedPath, buffer);
+              cacheUpdated = true;
+            } catch {}
             urlToLocalFile.set(url, fileName);
             console.log(
               `🎞️ Pre-fetched external video [${idx}]: ${url.slice(0, 70)}... -> ${fileName} (${(
@@ -97,6 +148,10 @@ async function prefetchExternalMedia(code) {
         }
       })
     );
+
+    if (cacheUpdated) {
+      pruneMediaCache(MEDIA_CACHE_DIR);
+    }
   }
 
   // 2. Pre-fetch external audio URLs (.mp3, .wav, .m4a, .aac, .ogg), TikTok videos/sounds, or YouTube via yt-dlp / Zing MP3

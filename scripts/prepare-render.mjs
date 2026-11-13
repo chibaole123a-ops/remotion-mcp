@@ -103,12 +103,21 @@ async function prefetchExternalMedia(code) {
   const uniqueAudioUrls = [...new Set(audioMatches.map((m) => m[2]))];
 
   if (uniqueAudioUrls.length > 0) {
+    const isPreviewMode = process.env.PREVIEW_MODE === 'true';
     await Promise.all(
       uniqueAudioUrls.map(async (url, idx) => {
         const isStreaming = /tiktok\.com|youtube\.com|youtu\.be/i.test(url);
         const fileName = `cached-audio-${idx}.mp3`;
         const outPath = `public/${fileName}`;
         let downloaded = false;
+
+        if (isPreviewMode && fs.existsSync('public/bgm.mp3')) {
+          fs.copyFileSync('public/bgm.mp3', outPath);
+          fs.copyFileSync('public/bgm.mp3', `src/remotion/public/${fileName}`);
+          urlToLocalFile.set(url, fileName);
+          console.log(`⚡ PREVIEW_MODE: Skipped audio download [${idx}] -> ${fileName}`);
+          return;
+        }
 
         try {
           if (isStreaming) {

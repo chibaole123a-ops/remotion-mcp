@@ -95,17 +95,36 @@ jobs:
       - name: Ensure Remotion Browser
         run: npx remotion browser ensure --quiet
 
-      - name: Install Python Edge-TTS, yt-dlp & PO Token Provider for Autonomous Audio Extraction
+      - name: Cache Python Audio Tools (Edge-TTS & yt-dlp, Video Render Only)
+        if: inputs.mode != 'still'
+        id: cache_tts
+        uses: actions/cache@v4
+        with:
+          path: ~/.tts-venv
+          key: tts-tools-v1-${{ runner.os }}
+
+      - name: Setup Python Edge-TTS, yt-dlp & Conditional YouTube POT (Video Render Only)
+        if: inputs.mode != 'still'
+        env:
+          TSX_B64: ${{ inputs.tsxCodeBase64 }}
         run: |
-          # ffmpeg and curl are pre-installed on GitHub Actions Ubuntu runners; avoid fragile apt update hangs
           if ! command -v ffmpeg &> /dev/null; then
             sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl || true
           fi
-          python -m pip install --upgrade edge-tts mutagen yt-dlp bgutil-ytdlp-pot-provider
-          # Run official docker container for BotGuard Proof-of-Origin Token Provider
-          docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider || true
-          sleep 3
-          curl -s http://127.0.0.1:4416/ping || echo "POT provider initialized"
+          TTS_VENV="$HOME/.tts-venv"
+          if [ "${{ steps.cache_tts.outputs.cache-hit }}" != "true" ] || [ ! -f "$TTS_VENV/bin/edge-tts" ]; then
+            python -m venv "$TTS_VENV"
+            "$TTS_VENV/bin/pip" install --upgrade pip
+            "$TTS_VENV/bin/pip" install --upgrade edge-tts mutagen yt-dlp bgutil-ytdlp-pot-provider
+          fi
+          echo "$TTS_VENV/bin" >> "$GITHUB_PATH"
+          if echo "$TSX_B64" | base64 -d 2>/dev/null | grep -qiE "youtube\.com|youtu\.be"; then
+            docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider || true
+            sleep 2
+            curl -s http://127.0.0.1:4416/ping || echo "POT provider initialized"
+          else
+            echo "⚡ Direct audio / no YouTube URL detected — skipping Docker POT startup."
+          fi
 
       - name: Cache CTC Forced Aligner & HuggingFace MMS Model
         if: inputs.mode != 'still'
@@ -121,7 +140,7 @@ jobs:
         if: inputs.mode != 'still'
         run: |
           VENV_DIR="$HOME/.ctc-aligner-venv"
-          if [ ! -f "$VENV_DIR/bin/python" ] || ! "$VENV_DIR/bin/python" -c "import ctc_forced_aligner" 2>/dev/null; then
+          if [ "${{ steps.cache_ctc.outputs.cache-hit }}" != "true" ] || [ ! -f "$VENV_DIR/bin/python" ]; then
             (
               python -m venv "$VENV_DIR"
               "$VENV_DIR/bin/pip" install --upgrade pip wheel setuptools pybind11
@@ -129,12 +148,13 @@ jobs:
               "$VENV_DIR/bin/pip" install --upgrade --no-cache-dir git+https://github.com/MahmoudAshraf97/ctc-forced-aligner.git
             ) || echo "⚠️ CTC Forced Aligner install failed; falling back to SentenceBoundary word alignment."
           fi
-          if [ -f "$VENV_DIR/bin/python" ] && "$VENV_DIR/bin/python" -c "import ctc_forced_aligner" 2>/dev/null; then
+          if [ -f "$VENV_DIR/bin/python" ]; then
             echo "ALIGNER_PYTHON=$VENV_DIR/bin/python" >> "$GITHUB_ENV"
-            echo "✅ CTC Acoustic Forced Aligner ready: $VENV_DIR/bin/python"
+            echo "⚡ CTC Acoustic Forced Aligner ready: $VENV_DIR/bin/python"
           fi
 
       - name: Prepare YouTube Cookies if configured
+        if: inputs.mode != 'still'
         env:
           YT_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
@@ -160,6 +180,7 @@ jobs:
           FPS: ${{ inputs.fps }}
           WIDTH: ${{ inputs.width }}
           HEIGHT: ${{ inputs.height }}
+          PREVIEW_MODE: ${{ inputs.mode == 'still' && 'true' || 'false' }}
         run: |
           mkdir -p public
           node scripts/prepare-render.mjs

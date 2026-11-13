@@ -1687,7 +1687,7 @@ export const ParallaxDepthLayers: React.FC<ParallaxDepthLayersProps> = ({
 
 export interface AutoFitTitleProps {
   text: string;
-  maxWidth: number;
+  maxWidth?: number;
   maxLines?: number;
   maxFontSize?: number;
   minFontSize?: number;
@@ -1701,6 +1701,7 @@ export interface AutoFitTitleProps {
 
 /**
  * Automatically sizes and breaks multi-line headlines using @remotion/layout-utils so titles never overflow.
+ * When maxWidth is omitted, automatically fits within the current aspect ratio's safe-zone width.
  */
 export const AutoFitTitle: React.FC<AutoFitTitleProps> = ({
   text,
@@ -1715,26 +1716,35 @@ export const AutoFitTitle: React.FC<AutoFitTitleProps> = ({
   letterSpacing = '-0.02em',
   style,
 }) => {
+  const { width, height } = useVideoConfig();
+  const safeInsets = getSafeZoneInsets(width, height);
+  const resolvedMaxWidth =
+    typeof maxWidth === 'number' && Number.isFinite(maxWidth) && maxWidth > 0
+      ? maxWidth
+      : Math.max(240, width - safeInsets.left - safeInsets.right);
+
   const fitted = useMemo(() => {
     try {
       const res = fitTextOnNLines({
         text: String(text || ''),
         maxLines,
-        maxBoxWidth: Math.max(200, maxWidth),
+        maxBoxWidth: Math.max(200, resolvedMaxWidth),
         fontFamily,
         fontWeight,
         letterSpacing,
         maxFontSize,
         validateFontIsLoaded: false,
       });
+      const safeFontSize = Number.isFinite(res.fontSize) ? res.fontSize : maxFontSize;
+      const safeLines = Array.isArray(res.lines) && res.lines.length > 0 ? res.lines : [String(text || '')];
       return {
-        fontSize: Math.max(minFontSize, Math.min(maxFontSize, res.fontSize)),
-        lines: res.lines,
+        fontSize: Math.max(minFontSize, Math.min(maxFontSize, safeFontSize)),
+        lines: safeLines,
       };
     } catch {
       return { fontSize: maxFontSize, lines: [String(text || '')] };
     }
-  }, [text, maxLines, maxWidth, fontFamily, fontWeight, letterSpacing, maxFontSize, minFontSize]);
+  }, [text, maxLines, resolvedMaxWidth, fontFamily, fontWeight, letterSpacing, maxFontSize, minFontSize]);
 
   return (
     <div
@@ -1745,7 +1755,7 @@ export const AutoFitTitle: React.FC<AutoFitTitleProps> = ({
         lineHeight,
         color,
         letterSpacing,
-        maxWidth,
+        maxWidth: resolvedMaxWidth,
         ...style,
       }}
     >
@@ -1826,20 +1836,38 @@ export const SafeAreaLayer: React.FC<SafeAreaLayerProps> = ({
 }) => {
   const { width, height } = useVideoConfig();
   const insets = getSafeZoneInsets(width, height);
+  const top = insets.top + extraPadding;
+  const right = insets.right + extraPadding;
+  const bottom = insets.bottom + extraPadding;
+  const left = insets.left + extraPadding;
 
   return (
     <AbsoluteFill
       style={{
-        paddingTop: insets.top + extraPadding,
-        paddingRight: insets.right + extraPadding,
-        paddingBottom: insets.bottom + extraPadding,
-        paddingLeft: insets.left + extraPadding,
+        paddingTop: top,
+        paddingRight: right,
+        paddingBottom: bottom,
+        paddingLeft: left,
         boxSizing: 'border-box',
-        border: showGuide ? '2px dashed rgba(56, 189, 248, 0.55)' : undefined,
         ...style,
       }}
     >
       {children}
+      {showGuide ? (
+        <div
+          style={{
+            position: 'absolute',
+            top,
+            right,
+            bottom,
+            left,
+            border: '2px dashed rgba(56, 189, 248, 0.55)',
+            borderRadius: 12,
+            boxSizing: 'border-box',
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null}
     </AbsoluteFill>
   );
 };

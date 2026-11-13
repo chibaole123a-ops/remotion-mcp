@@ -171,7 +171,7 @@ export function validateTsxComposition(tsxCode: string, ctx: ValidationContext =
     const usesCaptionsComp = /ProKaraokeCaptions|WordHighlightCaptions/.test(activeCode);
     if (!usesCaptionsComp) {
       warnings.push(
-        'ADVISORY: Voiceover scenes detected without `<ProKaraokeCaptions />` or `<WordHighlightCaptions />`. Mount `<ProKaraokeCaptions stylePreset="hormozi" />` to render MMS-300M CTC word-synced subtitles.'
+        'ADVISORY: Voiceover scenes detected without `<ProKaraokeCaptions />` or `<WordHighlightCaptions />`. Mount `<ProKaraokeCaptions stylePreset="minimal" />` (or choose `"hormozi" | "glow" | "cyber"` to match your style) to render MMS-300M CTC word-synced subtitles.'
       );
     }
 

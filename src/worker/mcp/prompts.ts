@@ -12,7 +12,7 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
    - Call \`search_visual_media\` to discover real photos/videos (.jpg/.png/.mp4) and inspect thumbnails directly with Vision.
    - Call \`search_soundtrack\` for mood-matched BGM (prefer \`directMp3: true\` studio CDN tracks for 100% reliability on Cloud runners) and \`search_sfx\` for exact \`@remotion/sfx\` exports or ambient foley.
 3. **Multi-Layer Cinematic Craft (\`DynamicVideo.tsx\`)**:
-   - Wrap scenes inside \`<StoryboardCanvas>\` (for continuous 2.5D camera drift) + \`<SyncedScene sceneIndex={i}>\`. (Use \`<ChapterProgressSpine />\` ONLY for structured multi-chapter tutorials — omit it for cinematic/storytelling videos so there is no slide-style top bar.)
+   - Wrap scenes inside \`<StoryboardCanvas>\` (for continuous 2.5D camera drift) + \`<SyncedScene sceneIndex={i}>\`. (Omit top/bottom duration progress bars like \`<ChapterProgressSpine />\` by default so edges stay clean — add a chapter/progress bar ONLY if the user's request or topic calls for it.)
    - Combine real media (\`<Img>\` / \`<OffthreadVideo>\`), 3D (\`ThreeCanvas\`), vector shapes/paths, \`@remotion/light-leaks\` (\`<LightLeak>\`), \`@remotion/motion-blur\` (\`<CameraMotionBlur>\`, \`<Trail>\`), \`@remotion/rough-notation\`, \`lucide-react\`, and \`<ProKaraokeCaptions stylePreset="minimal" />\` (clean cinema subtitles with zero rectangular box bar).
    - Sync visual beats to exact spoken words using \`getWordTrigger(sceneIndex, "keyword", frame)\`, and anchor SFX/ducking cues dynamically to measured TTS boundaries using \`<SceneAnchoredSequence sceneIndex={i}>\` or \`getSceneTiming(i)\` / \`getTelemetryTotalFrames()\` from \`./audio-sync\`.
    - Mix audio cleanly: use dynamic BGM ducking (\`volume={(f) => ...}\`) when voiceover is active and layer verified \`@remotion/sfx\` (\`whoosh\`, \`whip\`, \`pageTurn\`, \`uiSwitch\`, \`mouseClick\`, \`ding\`, \`shutterModern\`, \`vineBoom\`, \`dramaticBoomer\`, \`recordScratch\`).
@@ -48,7 +48,7 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
 ## 🎬 THE DIRECTOR & EDITOR CRAFT (CREATIVITY WITHOUT RIGID TEMPLATES):
 * **Audio-First Storytelling**: Write for the Ear with tactile imagery, varied sentence cadence, Curiosity Gap hooks, and *Therefore / But* narrative causality.
 * **Walter Murch's Rule of Six**: Emotion (51%), Story (23%), Rhythm (10%), Eye-Trace (7%), 2D/3D Space (9%).
-* **Visual Rhythm & Anti-Slide Choreography**: NEVER build a single static card layout that sits unchanged for 8–12s and fades to black between scenes, and avoid putting top progress bars (\`<ChapterProgressSpine />\`), boxed footer bars, or repeating 3-card horizontal rows at the bottom of every scene (which feel like PowerPoint slides!). Instead, evolve visual beats every **2.5–3.5s** inside each scene (camera push/zoom -> visual metaphor morph -> kinetic callout -> cutaway), vary staging asymmetrically across scenes, keep a persistent spatial world/3D motif alive across cuts, and use \`transitionStyle="whip-pan" | "zoom-through" | "wipe"\` or \`@remotion/transitions\` \`TransitionSeries\`.
+* **Visual Rhythm & Creative Freedom**: Avoid static frames sitting unchanged for 8–12s and fading to black between scenes, and avoid adding top/bottom duration-running progress bars (like \`<ChapterProgressSpine />\`, timeline bars, or heavy boxed footer bars) unless the prompt or topic specifically benefits from them. Every layout choice inside the scene — cards, split-screens, data grids, 3D worlds, kinetic typography, or open-canvas cinema — is **100% yours to design** based on the user's request, topic, and creative idea. Evolve visual beats every **2.5–3.5s** inside each scene (camera push/zoom -> visual metaphor morph -> kinetic callout -> cutaway), keep a persistent spatial world/3D motif alive across cuts, and use \`transitionStyle="whip-pan" | "zoom-through" | "wipe"\` or \`@remotion/transitions\` \`TransitionSeries\`.
 * **Spatial Depth & Visual Metaphor**: Separate Foreground (particles, light leaks), Midground (focal subject/media), and Background (ambient space/grid). Use Ken Burns motion on still images so every frame breathes.
 * **Audio Hierarchy**: Master Voiceover → Tactile Foley/SFX → Dynamic BGM (ducked during speech, lifted on pauses, or cut abruptly for dramatic *Sudden Silence*).
 * **Aesthetic Chameleon**: Freely adapt style to the topic — investigative documentary (Vox/Johnny Harris), vibrant science (Kurzgesagt), kinetic viral (Hormozi/MrBeast), 3D sci-fi/cyberpunk, or serene poetic minimalism.
@@ -64,7 +64,7 @@ export const DIRECTOR_CODE_BLUEPRINT = `
 2. **Exact Verified Imports & Props (\`./audio-sync\`)**:
    - \`SyncedScene\`: \`sceneIndex\`, \`transitionStyle="zoom-through" | "whip-pan" | "wipe" | "fade" | "cut"\`, \`overlapFrames={10}\`, \`enterFrames={12}\`, \`exitFrames={12}\`
    - \`ProKaraokeCaptions\`: \`stylePreset="minimal"\` (default borderless cinema subtitles) or \`"hormozi" | "glow" | "cyber"\`, \`fontFamily={bodyFont}\`, \`fontSize={42}\`, \`bottomOffset={64}\`, \`wordsPerPage={5}\`, \`highlightColor="#facc15"\`
-   - \`ChapterProgressSpine\`: optional — use ONLY for chaptered tutorials; omit for cinematic videos to avoid top slide bars.
+   - \`ChapterProgressSpine\`: optional — omit by default so there are no top/bottom duration progress bars; use ONLY if the user's topic/request benefits from chapter progress indicators.
    - \`MasterAudioTrack\`: \`voiceVolume={1}\` (OR pass \`bgmSrc={...} bgmVolume={0.2} enableDucking={true}\` directly; NEVER mount \`voice-X.mp3\` alongside \`MasterAudioTrack\`)
    - \`SceneAnchoredSequence\`: \`sceneIndex\`, \`offsetFrames={0}\`, \`durationInFrames={45}\`, \`fromEnd={false}\` (anchors SFX to exact speech boundaries)
    - Helpers: \`getWordTrigger(sceneIndex, "keyword", localFrame, 20)\`, \`getWordProgress(sceneIndex, "startWord", "endWord", localFrame)\`, \`getSceneTiming(sceneIndex)\`, \`getTelemetryTotalFrames()\`
@@ -103,7 +103,7 @@ export const DynamicVideo: React.FC = () => {
         <Scene0SubBeats />{/* Inside, use local useCurrentFrame() + getWordTrigger(0, "keyword", f) every ~3s */}
       </SyncedScene>
       <SyncedScene sceneIndex={1} transitionStyle="whip-pan">
-        <Scene1MediaLayer />{/* <Img src="verified_url" /> with Ken Burns drift; avoid repeating footer card bars */}
+        <Scene1MediaLayer />{/* <Img src="verified_url" /> with Ken Burns drift — choose whatever layout, cards, or 3D composition fits the topic */}
       </SyncedScene>
 
       <ProKaraokeCaptions stylePreset="minimal" fontFamily={bodyFont} bottomOffset={56} wordsPerPage={5} />

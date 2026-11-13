@@ -221,7 +221,7 @@ export const TOOLS = [
         height: { type: 'number', description: 'Height in pixels (default 1080).', default: 1080 },
         audioConfig: {
           type: 'object',
-          description: 'Optional audioConfigPayload from plan_storyboard_timeline so captions and ChapterProgressSpine appear on the Contact Sheet (synthesized fast without waiting for TTS).',
+          description: 'Optional audioConfigPayload from plan_storyboard_timeline so captions and speech timing cues appear on the Contact Sheet (synthesized fast without waiting for TTS).',
         },
       },
       required: ['tsxCode'],

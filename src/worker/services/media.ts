@@ -53,8 +53,8 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 5500): Promise<any 
 
 async function fetchImageBase64(
   url: string,
-  timeoutMs = 4500,
-  maxBytes = 350_000
+  timeoutMs = 6500,
+  maxBytes = 750_000
 ): Promise<{ data: string; mimeType: string } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -303,11 +303,12 @@ async function searchPixabayMedia(
     for (const hit of vData?.hits || []) {
       const vid = hit?.videos?.large || hit?.videos?.medium;
       if (!vid?.url) continue;
-      // Use real video frame thumbnail (videos.*.thumbnail or Vimeo CDN picture_id), never userImageURL (uploader avatar)
+      // Prefer compact real video frame thumbnail (small/tiny/medium) so Vision stays fast, never userImageURL (uploader avatar)
       const frameThumb =
-        vid?.thumbnail ||
-        hit?.videos?.medium?.thumbnail ||
         hit?.videos?.small?.thumbnail ||
+        hit?.videos?.tiny?.thumbnail ||
+        hit?.videos?.medium?.thumbnail ||
+        vid?.thumbnail ||
         (hit?.picture_id ? `https://i.vimeocdn.com/video/${hit.picture_id}_640x360.jpg` : undefined);
       items.push({
         id: `pixabay-vid-${hit.id}`,

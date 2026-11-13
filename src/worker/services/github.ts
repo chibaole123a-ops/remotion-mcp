@@ -37,6 +37,9 @@ export interface RenderDispatchOptions {
     targetWidth?: number;
     targetHeight?: number;
     targetFps?: number;
+    masterBgmUrl?: string;
+    masterBgmVolume?: number;
+    duckingStrength?: 'gentle' | 'balanced' | 'strong';
   };
 }
 

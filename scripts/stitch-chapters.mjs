@@ -161,6 +161,62 @@ function crossfadePair(fileA, fileB, outFile, fadeSec) {
   );
 }
 
+async function applyMasterSidechainBgm(videoPath, bgmUrl, bgmVolume, duckingStrength, workDir) {
+  const bgmPath = path.join(workDir, 'master-bgm.audio');
+  console.log(`🎵 Downloading continuous master BGM: ${bgmUrl}`);
+  const ok = await downloadFile(bgmUrl, bgmPath);
+  if (!ok) {
+    console.warn(`⚠️ Master BGM failed to download (${bgmUrl}); keeping stitched chapter audio.`);
+    return;
+  }
+
+  const vInfo = probeClip(videoPath);
+  const totalDur = Math.max(2, vInfo.duration || 10);
+  const fadeOutStart = Math.max(0.5, Number((totalDur - 2.2).toFixed(2)));
+  const vol = Math.max(0.05, Math.min(0.6, Number(bgmVolume ?? 0.24)));
+
+  const duckPresets = {
+    gentle: 'threshold=0.04:ratio=3:attack=160:release=550',
+    balanced: 'threshold=0.025:ratio=4.5:attack=120:release=450',
+    strong: 'threshold=0.015:ratio=7:attack=80:release=350',
+  };
+  const scParams = duckPresets[duckingStrength] || duckPresets.balanced;
+
+  const filterComplex =
+    `[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,` +
+    `volume=${vol},afade=t=in:st=0:d=1.2,afade=t=out:st=${fadeOutStart}:d=2.2[bgm_base];` +
+    `[0:a]asplit=2[vo_mix][vo_sc];` +
+    `[bgm_base][vo_sc]sidechaincompress=${scParams}:makeup=1[bgm_ducked];` +
+    `[vo_mix][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[a_out]`;
+
+  const scoredTmp = path.join(workDir, 'scored-master.mp4');
+  console.log(`🎚️ Applying continuous sidechain-ducked Master BGM (vol=${vol}, preset=${duckingStrength})...`);
+  execFileSync(
+    'ffmpeg',
+    [
+      '-y',
+      '-i', videoPath,
+      '-stream_loop', '-1',
+      '-i', bgmPath,
+      '-filter_complex', filterComplex,
+      '-map', '0:v:0',
+      '-map', '[a_out]',
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-shortest',
+      '-movflags', '+faststart',
+      scoredTmp,
+    ],
+    { stdio: ['ignore', 'ignore', 'pipe'] }
+  );
+
+  if (fs.existsSync(scoredTmp) && fs.statSync(scoredTmp).size > 4096) {
+    fs.renameSync(scoredTmp, videoPath);
+    console.log('✅ Applied continuous master BGM with automatic speech sidechain ducking.');
+  }
+}
+
 async function main() {
   if (!jobId) throw new Error('Missing JOB_ID');
   const cfg = loadStitchConfig();
@@ -239,6 +295,17 @@ async function main() {
   if (!fs.existsSync(finalOut)) {
     throw new Error('Stitched output video was not produced.');
   }
+
+  if (typeof cfg.masterBgmUrl === 'string' && cfg.masterBgmUrl.trim().startsWith('http')) {
+    await applyMasterSidechainBgm(
+      finalOut,
+      cfg.masterBgmUrl.trim(),
+      cfg.masterBgmVolume,
+      cfg.duckingStrength || 'balanced',
+      workDir
+    );
+  }
+
   console.log(`🎉 Stitched long video ready -> ${finalOut}`);
 }
 

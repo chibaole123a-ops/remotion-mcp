@@ -149,3 +149,181 @@ export function calculateSpeechTelemetry(
     message: `Synthesized timing for ${scenes.length} scene(s). Total duration: ${cumulativeSec.toFixed(1)}s (${cumulativeFrames} frames @ ${fps}fps). Use these exact frame boundaries in your Remotion <Sequence> components!`,
   };
 }
+
+function estimateSceneRenderMultiplier(sceneMeta?: { sceneName?: string; visualConcept?: string }): {
+  weight: number;
+  label: 'light' | 'medium' | 'heavy';
+} {
+  const desc = `${sceneMeta?.sceneName || ''} ${sceneMeta?.visualConcept || ''}`.toLowerCase();
+  if (/(3d|threecanvas|webgl|shader|motion[-_\s]?blur|offthreadvideo|particle|aurora|fluid)/.test(desc)) {
+    return { weight: 2.0, label: 'heavy' };
+  }
+  if (/(video|clip|footage|chart|map|graph|timeline|lottie|skia)/.test(desc)) {
+    return { weight: 1.35, label: 'medium' };
+  }
+  return { weight: 1.0, label: 'light' };
+}
+
+function isSemanticChapterBoundary(sceneMeta?: { sceneName?: string; continuityFromPrevScene?: string }): boolean {
+  const combined = `${sceneMeta?.sceneName || ''} ${sceneMeta?.continuityFromPrevScene || ''}`.toLowerCase();
+  return /(^|\b)(part|chapter|act|section|climax|outro|conclusion|phần|chương|hồi|kết|chuyển|new scene|reset)(\b|$)/i.test(
+    combined
+  );
+}
+
+export function buildAdaptiveChapterPlan(
+  telemetryScenes: Array<{
+    sceneIndex: number;
+    text: string;
+    voice: string;
+    durationSec: number;
+    durationInFrames: number;
+    startFrame: number;
+    endFrame: number;
+  }>,
+  inputScenes: Array<{ sceneName?: string; visualConcept?: string; continuityFromPrevScene?: string }>,
+  defaultVoice: string,
+  rate: string,
+  fps: number,
+  forceSplit = false
+) {
+  const totalSec = telemetryScenes.reduce((acc, s) => acc + s.durationSec, 0);
+  const sceneCosts = telemetryScenes.map((s, idx) => {
+    const est = estimateSceneRenderMultiplier(inputScenes[idx]);
+    return {
+      ...s,
+      meta: inputScenes[idx] || {},
+      multiplier: est.weight,
+      complexityLabel: est.label,
+      effectiveCost: s.durationSec * est.weight,
+      isSemanticBoundary: idx > 0 && isSemanticChapterBoundary(inputScenes[idx]),
+    };
+  });
+  const totalEffectiveCost = sceneCosts.reduce((acc, s) => acc + s.effectiveCost, 0);
+
+  const shouldPartition =
+    telemetryScenes.length >= 4 &&
+    (forceSplit || totalSec > 180 || telemetryScenes.length >= 12 || totalEffectiveCost > 250);
+
+  const continuityPack = {
+    voice: defaultVoice,
+    rate,
+    fps,
+    fontImport: "import { loadFont } from '@remotion/google-fonts/BeVietnamPro';",
+    captionPreset: 'minimal',
+    bgmStrategy: shouldPartition ? 'master_sidechain' : 'local_ducking',
+    continuityInstructions: shouldPartition
+      ? 'Keep identical palette, typography, caption style, voice, and rate across every chapter. Omit local <Audio> BGM inside individual chapters (keep voiceover + @remotion/sfx + subtle ambience), then pass a continuous masterBgmUrl to stitch_video_chapters for seamless FFmpeg sidechain ducking from start to finish.'
+      : 'Single continuous composition is optimal for this length/complexity.',
+  };
+
+  if (!shouldPartition) {
+    return {
+      recommendedMode: 'single_render' as const,
+      totalDurationSec: Number(totalSec.toFixed(2)),
+      totalEffectiveCost: Number(totalEffectiveCost.toFixed(1)),
+      continuityPack,
+      chapters: undefined,
+    };
+  }
+
+  const MAX_CHAPTER_COST = 160;
+  const MAX_CHAPTER_SEC = 180;
+  const MIN_CHAPTER_SEC = 28;
+
+  const groups: Array<typeof sceneCosts> = [];
+  let currentGroup: typeof sceneCosts = [];
+  let curSec = 0;
+  let curCost = 0;
+
+  for (let i = 0; i < sceneCosts.length; i++) {
+    const sc = sceneCosts[i];
+    const wouldExceedHard =
+      currentGroup.length > 0 && (curCost + sc.effectiveCost > MAX_CHAPTER_COST || curSec + sc.durationSec > MAX_CHAPTER_SEC);
+    const softSemanticCut =
+      currentGroup.length >= 2 &&
+      sc.isSemanticBoundary &&
+      curCost >= MAX_CHAPTER_COST * 0.45 &&
+      curSec >= MIN_CHAPTER_SEC;
+
+    if (wouldExceedHard || softSemanticCut) {
+      groups.push(currentGroup);
+      currentGroup = [sc];
+      curSec = sc.durationSec;
+      curCost = sc.effectiveCost;
+    } else {
+      currentGroup.push(sc);
+      curSec += sc.durationSec;
+      curCost += sc.effectiveCost;
+    }
+  }
+  if (currentGroup.length > 0) {
+    groups.push(currentGroup);
+  }
+
+  // Merge tiny trailing chapter (< MIN_CHAPTER_SEC) into previous chapter if at least 2 groups
+  if (groups.length >= 2) {
+    const last = groups[groups.length - 1];
+    const lastSec = last.reduce((a, s) => a + s.durationSec, 0);
+    if (lastSec < MIN_CHAPTER_SEC) {
+      groups[groups.length - 2].push(...last);
+      groups.pop();
+    }
+  }
+
+  const chapters = groups.map((grp, chIdx) => {
+    let localCursor = 0;
+    const chDurationFrames = grp.reduce((acc, s) => acc + s.durationInFrames, 0);
+    const chDurationSec = Number(grp.reduce((acc, s) => acc + s.durationSec, 0).toFixed(2));
+    const midScene = grp[Math.floor(grp.length / 2)];
+    const lastScene = grp[grp.length - 1];
+    const localOffsets = grp.map((s) => {
+      const start = localCursor;
+      localCursor += s.durationInFrames;
+      return { start, dur: s.durationInFrames, ref: s };
+    });
+
+    const previewFrames = [
+      Math.min(Math.max(12, Math.round(localOffsets[0].dur * 0.45)), chDurationFrames - 10),
+      ...(localOffsets.length > 2
+        ? [
+            Math.round(
+              localOffsets[Math.floor(localOffsets.length / 2)].start +
+                localOffsets[Math.floor(localOffsets.length / 2)].dur * 0.45
+            ),
+          ]
+        : []),
+      Math.max(15, Math.round(localOffsets[localOffsets.length - 1].start + lastScene.durationInFrames * 0.5)),
+    ].filter((v, idx, arr) => v >= 0 && v < chDurationFrames && arr.indexOf(v) === idx);
+
+    const hasHeavy = grp.some((s) => s.complexityLabel === 'heavy');
+    return {
+      chapterIndex: chIdx,
+      title: grp[0]?.meta?.sceneName ? `Chapter ${chIdx + 1}: ${grp[0].meta.sceneName}` : `Chapter ${chIdx + 1}`,
+      sceneRange: [grp[0].sceneIndex, lastScene.sceneIndex] as [number, number],
+      sceneCount: grp.length,
+      durationSec: chDurationSec,
+      durationInFrames: chDurationFrames,
+      estimatedComplexity: hasHeavy ? 'heavy' : 'balanced',
+      recommendedPreviewFrames: previewFrames,
+      audioConfigPayload: {
+        voice: defaultVoice,
+        rate,
+        scenes: grp.map((s) => ({ text: s.text, voice: s.voice })),
+      },
+      chapterFocusCue: midScene?.meta?.sceneName || undefined,
+    };
+  });
+
+  return {
+    recommendedMode: chapters.length >= 2 ? ('adaptive_chapters' as const) : ('single_render' as const),
+    reason:
+      chapters.length >= 2
+        ? `Adaptive semantic split across ${chapters.length} natural scene-bounded chapters (${totalSec.toFixed(1)}s total, effective render load ${totalEffectiveCost.toFixed(0)}). Never cuts mid-sentence.`
+        : 'Single render sufficient.',
+    totalDurationSec: Number(totalSec.toFixed(2)),
+    totalEffectiveCost: Number(totalEffectiveCost.toFixed(1)),
+    continuityPack,
+    chapters: chapters.length >= 2 ? chapters : undefined,
+  };
+}

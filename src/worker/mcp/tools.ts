@@ -44,6 +44,10 @@ export const TOOLS = [
           description: 'Frames per second of your composition (default: 30).',
           default: 30,
         },
+        splitChapters: {
+          type: 'boolean',
+          description: 'Optional override to force adaptive scene-bounded chapter partitioning (normally triggered automatically for long/complex scripts).',
+        },
       },
     },
     annotations: {
@@ -377,8 +381,8 @@ export const TOOLS = [
   {
     name: 'stitch_video_chapters',
     description:
-      'STAGE 6 — LONG-FORM VIDEO CHAPTER STITCHER (10–30+ MIN PIPELINE): Seamlessly combine 2 to 25 individually rendered chapters (by jobId or public MP4 URL) into one long-form mastered MP4 with optional smooth video/audio crossfades, uniform resolution/fps normalization, and -14 LUFS loudness mastering.\n' +
-      'For videos longer than ~4 minutes, render focused 2–3 minute chapters via render_video so every chapter keeps peak visual craft, then merge them here.',
+      'STAGE 6 — ADAPTIVE LONG-FORM CHAPTER STITCHER (CONTINUOUS SCORE + SIDECHAIN DUCKING): Seamlessly combine 2 to 25 individually rendered chapters (by jobId or public MP4 URL) into one mastered MP4.\n' +
+      'Supports uniform resolution/fps normalization, smooth crossfades, FFmpeg -14 LUFS mastering, AND an optional continuous `masterBgmUrl` mixed across the entire film with automatic `sidechaincompress` speech ducking so music never restarts at chapter boundaries!',
     inputSchema: {
       type: 'object',
       properties: {
@@ -408,6 +412,21 @@ export const TOOLS = [
           type: 'number',
           default: 0.5,
           description: 'Crossfade duration in seconds (0.15 to 1.5, used when transition="crossfade").',
+        },
+        masterBgmUrl: {
+          type: 'string',
+          description: 'Optional public direct MP3/WAV URL for one continuous soundtrack running uninterrupted across ALL stitched chapters (recommended with chapters rendered without local BGM).',
+        },
+        masterBgmVolume: {
+          type: 'number',
+          default: 0.24,
+          description: 'Base music volume before FFmpeg sidechain ducking (0.05 to 0.6, default 0.24).',
+        },
+        duckingStrength: {
+          type: 'string',
+          enum: ['gentle', 'balanced', 'strong'],
+          default: 'balanced',
+          description: 'FFmpeg sidechaincompress auto-ducking strength whenever narration speaks.',
         },
         width: { type: 'number', default: 1920, description: 'Target output width (defaults to first chapter or 1920).' },
         height: { type: 'number', default: 1080, description: 'Target output height (defaults to first chapter or 1080).' },

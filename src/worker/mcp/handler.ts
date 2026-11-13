@@ -7,6 +7,7 @@ import {
   validateTsxCode,
   calculateSpeechTelemetry,
   estimateAudioMinFrames,
+  buildAdaptiveChapterPlan,
 } from "../utils.js";
 import { buildQualityEvaluationReport, VISION_FRAME_CRITERIA } from "../../shared/quality-rubric.js";
 import {
@@ -334,6 +335,15 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           };
         });
         const recommendedPreviewFrames = previewFrameTranscripts.map((p) => p.frame);
+        const adaptiveChapterPlan = buildAdaptiveChapterPlan(
+          telemetry.scenes,
+          inputArray,
+          voice,
+          rate,
+          fps,
+          Boolean(args.splitChapters)
+        );
+        const isAdaptiveChapters = adaptiveChapterPlan.recommendedMode === 'adaptive_chapters';
 
         return {
           jsonrpc: '2.0',
@@ -366,16 +376,20 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     recommendedPreviewFrames,
                     previewFrameTranscripts,
                     audioConfigPayload: telemetry.audioConfigPayload,
+                    continuityPack: adaptiveChapterPlan.continuityPack,
+                    adaptiveChapterPlan: isAdaptiveChapters ? adaptiveChapterPlan : undefined,
                     directorQualityReminder: {
                       targetDurationInFrames: telemetry.totalDurationInFrames,
-                      audioSyncRule:
-                        'Mount ONLY ONE voiceover method (either <MasterAudioTrack /> OR segmented <Audio src={staticFile("voice-X.mp3")} />), and duck BGM during speech.',
+                      audioSyncRule: isAdaptiveChapters
+                        ? 'MULTI-CHAPTER MODE DETECTED: Render each chapter in adaptiveChapterPlan.chapters with voiceover + SFX + subtle ambience ONLY (omit per-chapter BGM), preserve continuityPack (identical voice, rate, font, palette), then pass a continuous masterBgmUrl to stitch_video_chapters for seamless FFmpeg sidechain-ducked music across the entire film!'
+                        : 'Mount ONLY ONE voiceover method (either <MasterAudioTrack /> OR segmented <Audio src={staticFile("voice-X.mp3")} />), and duck BGM during speech.',
                       creativeFreedom:
                         'Design any visual style, pacing, 2D/3D medium, or camera flow that best serves your narrative intent.',
                     },
                     directorCodeBlueprint: DIRECTOR_CODE_BLUEPRINT,
-                    instructionsForAgent:
-                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames).\nNEXT MANDATORY STEPS:\n1) Call search_visual_media + search_soundtrack (prefer directMp3: true) + search_sfx.\n2) Write DynamicVideo.tsx following directorCodeBlueprint above (Continuous World + SyncedScene transitionStyle + getWordTrigger + @remotion/google-fonts/BeVietnamPro + ProKaraokeCaptions + dynamic BGM ducking).\n3) Call evaluate_video_quality -> fix any CRITICAL/ADVISORY.\n4) Call preview_frames(frames: ${JSON.stringify(recommendedPreviewFrames)}, audioConfig: audioConfigPayload) and inspect the Contact Sheet via get_task_status against previewFrameTranscripts (1-pass polish if needed) BEFORE render_video(durationInFrames: ${telemetry.totalDurationInFrames}, audioConfig).`,
+                    instructionsForAgent: isAdaptiveChapters
+                      ? `Adaptive Storyboard verified (${telemetry.totalDurationSec}s, ${telemetry.totalScenes} scenes -> automatically partitioned at natural scene boundaries into ${adaptiveChapterPlan.chapters?.length} balanced chapters!).\nMANDATORY LONG-FORM PIPELINE:\n1) Call search_visual_media + search_soundtrack (prefer directMp3: true for continuous masterBgmUrl) + search_sfx.\n2) Render EACH chapter in adaptiveChapterPlan.chapters cleanly via render_video using its own chapter audioConfigPayload & durationInFrames (keep identical palette/font/voice from continuityPack, and OMIT local BGM).\n3) Stitch all chapter jobIds together via stitch_video_chapters(chapters, masterBgmUrl: "<track.url>", transition: "crossfade") so FFmpeg runs uninterrupted sidechain-ducked music and -14 LUFS mastering across the entire video!`
+                      : `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames).\nNEXT MANDATORY STEPS:\n1) Call search_visual_media + search_soundtrack (prefer directMp3: true) + search_sfx.\n2) Write DynamicVideo.tsx following directorCodeBlueprint above (Continuous World + SyncedScene transitionStyle + getWordTrigger + @remotion/google-fonts/BeVietnamPro + ProKaraokeCaptions + dynamic BGM ducking).\n3) Call evaluate_video_quality -> fix any CRITICAL/ADVISORY.\n4) Call preview_frames(frames: ${JSON.stringify(recommendedPreviewFrames)}, audioConfig: audioConfigPayload) and inspect the Contact Sheet via get_task_status against previewFrameTranscripts (1-pass polish if needed) BEFORE render_video(durationInFrames: ${telemetry.totalDurationInFrames}, audioConfig).`,
                   },
                   null,
                   2
@@ -895,6 +909,24 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const targetWidth = args.width ? Math.max(360, Math.min(3840, Number(args.width))) : 1920;
         const targetHeight = args.height ? Math.max(360, Math.min(3840, Number(args.height))) : 1080;
         const targetFps = args.fps ? Math.max(15, Math.min(60, Number(args.fps))) : 30;
+        const masterBgmUrl = args.masterBgmUrl ? String(args.masterBgmUrl).trim() : undefined;
+        if (masterBgmUrl) {
+          const bgmCheck = validatePublicMediaUrl(masterBgmUrl);
+          if (!bgmCheck.ok) {
+            return {
+              jsonrpc: '2.0',
+              id,
+              result: {
+                isError: true,
+                content: [{ type: 'text', text: `Invalid masterBgmUrl: ${bgmCheck.reason}` }],
+              },
+            };
+          }
+        }
+        const masterBgmVolume = Math.max(0.05, Math.min(0.6, Number(args.masterBgmVolume ?? 0.24)));
+        const duckingStrength = (['gentle', 'balanced', 'strong'].includes(String(args.duckingStrength))
+          ? String(args.duckingStrength)
+          : 'balanced') as 'gentle' | 'balanced' | 'strong';
         const audioMastering =
           args.audioMastering && typeof args.audioMastering === 'object'
             ? {
@@ -924,6 +956,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               targetWidth,
               targetHeight,
               targetFps,
+              ...(masterBgmUrl ? { masterBgmUrl, masterBgmVolume, duckingStrength } : {}),
             },
           }
         );
@@ -947,6 +980,8 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     chaptersCount: sanitizedChapters.length,
                     transition,
                     fadeDurationSec: transition === 'crossfade' ? fadeDurationSec : 0,
+                    continuousMasterBgm: Boolean(masterBgmUrl),
+                    duckingStrength: masterBgmUrl ? duckingStrength : undefined,
                     targetSpecs: `${targetWidth}x${targetHeight} @ ${targetFps}fps`,
                     watchPageUrl,
                     streamUrl,

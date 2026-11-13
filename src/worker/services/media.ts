@@ -2,7 +2,7 @@ const USER_AGENT = 'Remotion-Cloud-MCP-Studio/7.0 (https://github.com/chibaole12
 
 export interface VisualMediaItem {
   id: string;
-  source: 'wikimedia' | 'openverse' | 'internet_archive' | 'pexels' | 'pixabay';
+  source: 'wikimedia' | 'openverse' | 'internet_archive' | 'pexels' | 'pixabay' | 'nasa' | 'wikipedia';
   mediaType: 'image' | 'video';
   title: string;
   url: string;
@@ -334,6 +334,111 @@ async function searchPixabayMedia(
   return items.slice(0, limit);
 }
 
+async function searchNasaMedia(
+  query: string,
+  mediaType: 'all' | 'image' | 'video',
+  limit: number
+): Promise<VisualMediaItem[]> {
+  const mediaParam = mediaType === 'all' ? 'image,video' : mediaType;
+  const apiUrl = `https://images-api.nasa.gov/search?q=${encodeURIComponent(query)}&media_type=${mediaParam}&page_size=${Math.min(8, limit * 2)}`;
+  const data = await fetchJsonWithTimeout(apiUrl, 5000);
+  const rawItems = Array.isArray(data?.collection?.items) ? data.collection.items : [];
+  const items: VisualMediaItem[] = [];
+
+  const resolved = await Promise.all(
+    rawItems.slice(0, Math.min(5, limit * 2)).map(async (entry: any) => {
+      const meta = entry?.data?.[0];
+      if (!meta?.nasa_id) return null;
+      const kind = meta.media_type === 'video' ? 'video' : 'image';
+      const previewLink = Array.isArray(entry.links)
+        ? entry.links.find((l: any) => l?.rel === 'preview' && typeof l?.href === 'string')?.href
+        : undefined;
+
+      let directUrl: string | undefined = kind === 'image' ? previewLink : undefined;
+      if (typeof entry.href === 'string' && entry.href.startsWith('https://')) {
+        const manifest = await fetchJsonWithTimeout(entry.href, 3500);
+        if (Array.isArray(manifest)) {
+          const urls = manifest.filter((u): u is string => typeof u === 'string');
+          if (kind === 'video') {
+            directUrl =
+              urls.find((u) => /~medium\.mp4$/i.test(u)) ||
+              urls.find((u) => /~small\.mp4$/i.test(u)) ||
+              urls.find((u) => /\.mp4$/i.test(u));
+          } else {
+            directUrl =
+              urls.find((u) => /~large\.jpg$/i.test(u)) ||
+              urls.find((u) => /~medium\.jpg$/i.test(u)) ||
+              urls.find((u) => /\.(jpe?g|png)$/i.test(u)) ||
+              previewLink;
+          }
+        }
+      }
+
+      if (!directUrl) return null;
+      return {
+        id: `nasa-${meta.nasa_id}`,
+        source: 'nasa' as const,
+        mediaType: kind as 'image' | 'video',
+        title: String(meta.title || meta.nasa_id),
+        url: directUrl,
+        thumbnailUrl: previewLink || (kind === 'image' ? directUrl : undefined),
+        license: 'NASA Public Domain',
+      };
+    })
+  );
+
+  for (const item of resolved) {
+    if (item) items.push(item);
+    if (items.length >= limit) break;
+  }
+  return items;
+}
+
+async function searchWikipediaMedia(query: string, limit: number): Promise<VisualMediaItem[]> {
+  const langs = /[À-ỹ]/i.test(query) ? ['vi', 'en'] : ['en', 'vi'];
+  const perLangResults = await Promise.all(
+    langs.map(async (lang) => {
+      const apiUrl =
+        `https://${lang}.wikipedia.org/w/api.php?action=query&generator=search` +
+        `&gsrsearch=${encodeURIComponent(query)}&gsrlimit=${Math.min(5, limit + 1)}` +
+        `&prop=pageimages&pithumbsize=1400&piprop=original|thumbnail&format=json&origin=*`;
+      const data = await fetchJsonWithTimeout(apiUrl, 4500);
+      const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
+      const found: VisualMediaItem[] = [];
+      for (const page of pages as any[]) {
+        const origUrl = page?.original?.source;
+        const thumbUrl = page?.thumbnail?.source;
+        const chosenUrl = origUrl || thumbUrl;
+        if (!chosenUrl || /\.(svg|tiff?)($|\?)/i.test(chosenUrl)) continue;
+        const width = Number(page?.original?.width || page?.thumbnail?.width || 0) || undefined;
+        const height = Number(page?.original?.height || page?.thumbnail?.height || 0) || undefined;
+        if (width && height && (width < 320 || height < 240)) continue;
+        found.push({
+          id: `wiki-${lang}-${page.pageid}`,
+          source: 'wikipedia',
+          mediaType: 'image',
+          title: String(page.title || query),
+          url: chosenUrl,
+          thumbnailUrl: thumbUrl || chosenUrl,
+          width,
+          height,
+          license: `Wikipedia (${lang.toUpperCase()})`,
+        });
+      }
+      return found;
+    })
+  );
+
+  const combined: VisualMediaItem[] = [];
+  for (const list of perLangResults) {
+    for (const item of list) {
+      if (!combined.some((x) => x.url === item.url)) combined.push(item);
+      if (combined.length >= limit) return combined;
+    }
+  }
+  return combined;
+}
+
 export async function searchVisualMedia(
   query: string,
   mediaType: 'all' | 'image' | 'video' = 'all',
@@ -347,9 +452,11 @@ export async function searchVisualMedia(
     ...(apiKeys?.pexelsKey ? [searchPexelsMedia(query, mediaType, clampedLimit, apiKeys.pexelsKey)] : []),
     ...(apiKeys?.pixabayKey ? [searchPixabayMedia(query, mediaType, clampedLimit, apiKeys.pixabayKey)] : []),
     searchWikimediaMedia(query, mediaType, clampedLimit),
+    searchNasaMedia(query, mediaType, Math.min(4, clampedLimit)),
   ];
   if (mediaType === 'all' || mediaType === 'image') {
     tasks.push(searchOpenverseImages(query, clampedLimit));
+    tasks.push(searchWikipediaMedia(query, clampedLimit));
   }
   if (mediaType === 'all' || mediaType === 'video') {
     tasks.push(searchInternetArchiveVideos(query, Math.min(3, clampedLimit)));
@@ -382,9 +489,11 @@ export async function searchVisualMedia(
       const relaxedQuery = tokens.slice(0, 2).join(' ');
       const retryTasks: Array<Promise<VisualMediaItem[]>> = [
         searchWikimediaMedia(relaxedQuery, mediaType, clampedLimit),
+        searchNasaMedia(relaxedQuery, mediaType, Math.min(3, clampedLimit)),
       ];
       if (mediaType === 'all' || mediaType === 'image') {
         retryTasks.push(searchOpenverseImages(relaxedQuery, clampedLimit));
+        retryTasks.push(searchWikipediaMedia(relaxedQuery, clampedLimit));
       }
       pushUnique(await Promise.all(retryTasks));
     }
@@ -536,5 +645,375 @@ export async function searchSfxCatalog(
     webFoleyMatches: webFoley,
     mixingTip:
       '5-Layer Studio Mix: layer subtle ambience/room-tone at volume 0.08-0.14 behind Voiceover (1.0) + smooth-ducked BGM + lead-in transition SFX (-5 frames) + impact/hit SFX.',
+  };
+}
+
+const WATERMARKED_STOCK_DOMAIN_RE =
+  /(^|\.)(shutterstock|gettyimages|istockphoto|alamy|123rf|dreamstime|depositphotos|vecteezy|stock\.adobe|megapixl|canstockphoto|pond5|bigstockphoto|dissolve|storyblocks)\./i;
+
+const WATERMARK_URL_HINT_RE = /(watermark|wm=|\/sample[-_]?image|\/comp[-_]?image)/i;
+
+function isBlockedPrivateHostname(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!host) return true;
+  if (
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.arpa')
+  ) {
+    return true;
+  }
+  // Reject integer or hex IPv4 aliases (e.g. 2130706433, 0x7f000001)
+  if (/^(0x[0-9a-f]+|\d+)$/i.test(host)) return true;
+
+  // IPv4 RFC1918 / loopback / link-local / CGNAT
+  const ipv4Match = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number);
+    if (a === 127 || a === 10 || a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+  }
+
+  // IPv6 loopback, unspecified, link-local, unique-local, IPv4-mapped
+  if (
+    host === '::1' ||
+    host === '::' ||
+    host.startsWith('fe80:') ||
+    host.startsWith('fc') ||
+    host.startsWith('fd') ||
+    host.includes('::ffff:127.') ||
+    host.includes('::ffff:10.') ||
+    host.includes('::ffff:192.168.') ||
+    host.includes('::ffff:169.254.')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function validatePublicMediaUrl(rawUrl: string): { ok: true; url: URL } | { ok: false; reason: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    return { ok: false, reason: 'Invalid URL format.' };
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { ok: false, reason: `Unsupported protocol "${parsed.protocol}" (only http/https allowed).` };
+  }
+
+  if (parsed.username || parsed.password) {
+    return { ok: false, reason: 'Embedded URL credentials are not allowed.' };
+  }
+
+  if (isBlockedPrivateHostname(parsed.hostname)) {
+    return { ok: false, reason: `Blocked private, loopback, or metadata host "${parsed.hostname}" (SSRF guard).` };
+  }
+
+  if (WATERMARKED_STOCK_DOMAIN_RE.test(parsed.hostname)) {
+    return {
+      ok: false,
+      reason: `Rejected watermarked commercial stock domain "${parsed.hostname}". Use clean sources (Wikimedia, NASA, Wikipedia, Openverse, Pexels, Pixabay, Internet Archive, or non-watermarked editorial/brand CDNs).`,
+    };
+  }
+
+  if (WATERMARK_URL_HINT_RE.test(parsed.pathname + parsed.search)) {
+    return { ok: false, reason: 'URL path/query indicates a watermarked preview sample.' };
+  }
+
+  return { ok: true, url: parsed };
+}
+
+function extractMetaMediaFromHtml(html: string, baseUrl: string): string | null {
+  const patterns = [
+    /<meta[^>]+property=["']og:video(?::url|:secure_url)?["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:video(?::url|:secure_url)?["']/i,
+    /<meta[^>]+property=["']og:image(?::url|:secure_url)?["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::url|:secure_url)?["']/i,
+    /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image(?::src)?["']/i,
+  ];
+  for (const re of patterns) {
+    const match = html.match(re);
+    if (match?.[1]) {
+      try {
+        const unescaped = match[1].trim().replace(/&amp;/g, '&').replace(/&#0*38;/g, '&');
+        const resolved = new URL(unescaped, baseUrl).toString();
+        const check = validatePublicMediaUrl(resolved);
+        if (check.ok) return resolved;
+      } catch {
+        continue;
+      }
+    }
+  }
+  return null;
+}
+
+async function fetchWithValidatedRedirects(
+  startUrl: string,
+  init: RequestInit,
+  timeoutMs = 5500,
+  maxHops = 4
+): Promise<{ res: Response; finalUrl: string } | { error: string }> {
+  let currentUrl = startUrl;
+  for (let hop = 0; hop <= maxHops; hop++) {
+    const check = validatePublicMediaUrl(currentUrl);
+    if (!check.ok) return { error: check.reason };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(currentUrl, {
+        ...init,
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': USER_AGENT,
+          ...(init.headers || {}),
+        },
+      });
+      clearTimeout(timer);
+
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get('location');
+        try {
+          await res.body?.cancel();
+        } catch {}
+        if (!loc) return { error: `HTTP ${res.status} redirect without Location header.` };
+        currentUrl = new URL(loc, currentUrl).toString();
+        continue;
+      }
+      return { res, finalUrl: currentUrl };
+    } catch (err: any) {
+      clearTimeout(timer);
+      return { error: err?.name === 'AbortError' ? 'Request timed out' : err?.message || 'Network error' };
+    }
+  }
+  return { error: 'Too many redirects (> 4).' };
+}
+
+export interface ExternalAssetVerificationResult {
+  verified: boolean;
+  inputUrl: string;
+  resolvedUrl?: string;
+  extractedFromPage?: boolean;
+  mediaType?: 'image' | 'video' | 'audio';
+  mimeType?: string;
+  contentLengthBytes?: number;
+  visionAttached: boolean;
+  reason: string;
+  imageBlock?: { type: 'image'; data: string; mimeType: string; mime_type: string };
+}
+
+export async function verifyExternalAsset(
+  rawUrl: string,
+  expectedType: 'auto' | 'image' | 'video' | 'audio' = 'auto',
+  attachVisionThumbnail = true,
+  depth = 0
+): Promise<ExternalAssetVerificationResult> {
+  const initialCheck = validatePublicMediaUrl(rawUrl);
+  if (!initialCheck.ok) {
+    return {
+      verified: false,
+      inputUrl: rawUrl,
+      visionAttached: false,
+      reason: initialCheck.reason,
+    };
+  }
+
+  // Probe with HEAD first; fallback to tiny Range GET if server rejects HEAD
+  let probe = await fetchWithValidatedRedirects(initialCheck.url.toString(), { method: 'HEAD' }, 5000);
+  if ('error' in probe) {
+    return {
+      verified: false,
+      inputUrl: rawUrl,
+      visionAttached: false,
+      reason: `Fetch failed: ${probe.error}`,
+    };
+  }
+
+  if (probe.res.status === 405 || probe.res.status === 403 || probe.res.status === 501) {
+    try {
+      await probe.res.body?.cancel();
+    } catch {}
+    probe = await fetchWithValidatedRedirects(
+      probe.finalUrl,
+      { method: 'GET', headers: { Range: 'bytes=0-2047' } },
+      5500
+    );
+    if ('error' in probe) {
+      return {
+        verified: false,
+        inputUrl: rawUrl,
+        visionAttached: false,
+        reason: `Fetch failed: ${probe.error}`,
+      };
+    }
+  }
+
+  const { res, finalUrl } = probe;
+  if (!res.ok) {
+    try {
+      await res.body?.cancel();
+    } catch {}
+    return {
+      verified: false,
+      inputUrl: rawUrl,
+      resolvedUrl: finalUrl,
+      visionAttached: false,
+      reason: `Remote server returned HTTP ${res.status}.`,
+    };
+  }
+
+  const rawMime = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  const lenHeader = res.headers.get('content-length');
+  const contentLengthBytes = lenHeader ? Number(lenHeader) : undefined;
+  try {
+    await res.body?.cancel();
+  } catch {}
+
+  // If URL is an HTML article/page (only unwrap 1 hop), attempt safe og:image / og:video extraction
+  if ((rawMime.includes('text/html') || rawMime.includes('xhtml')) && depth === 0) {
+    const htmlFetch = await fetchWithValidatedRedirects(finalUrl, { method: 'GET' }, 5500);
+    if (!('error' in htmlFetch) && htmlFetch.res.ok) {
+      try {
+        const reader = htmlFetch.res.body?.getReader();
+        let htmlSnippet = '';
+        if (reader) {
+          const decoder = new TextDecoder();
+          while (htmlSnippet.length < 65536) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            htmlSnippet += decoder.decode(value, { stream: true });
+            if (htmlSnippet.includes('</head>')) break;
+          }
+          try {
+            await reader.cancel();
+          } catch {}
+        }
+        const extractedUrl = extractMetaMediaFromHtml(htmlSnippet, htmlFetch.finalUrl);
+        if (extractedUrl) {
+          const nested = await verifyExternalAsset(extractedUrl, expectedType, attachVisionThumbnail, 1);
+          return {
+            ...nested,
+            inputUrl: rawUrl,
+            extractedFromPage: true,
+          };
+        }
+      } catch {}
+    }
+    return {
+      verified: false,
+      inputUrl: rawUrl,
+      resolvedUrl: finalUrl,
+      mimeType: rawMime || 'text/html',
+      visionAttached: false,
+      reason: 'URL returned an HTML webpage instead of a direct media file and no clean og:image/og:video was found.',
+    };
+  }
+
+  let detectedType: 'image' | 'video' | 'audio' | null = null;
+  if (rawMime.startsWith('image/')) detectedType = 'image';
+  else if (rawMime.startsWith('video/')) detectedType = 'video';
+  else if (rawMime.startsWith('audio/')) detectedType = 'audio';
+  else if (/\.(jpe?g|png|webp|gif|avif)(\?|$)/i.test(finalUrl)) detectedType = 'image';
+  else if (/\.(mp4|webm|mov|ogv)(\?|$)/i.test(finalUrl)) detectedType = 'video';
+  else if (/\.(mp3|wav|ogg|m4a|aac)(\?|$)/i.test(finalUrl)) detectedType = 'audio';
+
+  if (!detectedType) {
+    return {
+      verified: false,
+      inputUrl: rawUrl,
+      resolvedUrl: finalUrl,
+      mimeType: rawMime || 'unknown',
+      visionAttached: false,
+      reason: `Unsupported or non-media Content-Type "${rawMime || 'unknown'}". Direct image/video/audio required.`,
+    };
+  }
+
+  if (rawMime.includes('svg') || rawMime.includes('tiff')) {
+    return {
+      verified: false,
+      inputUrl: rawUrl,
+      resolvedUrl: finalUrl,
+      mediaType: detectedType,
+      mimeType: rawMime,
+      visionAttached: false,
+      reason: `Format "${rawMime}" cannot be safely rasterized/verified in <Img>; use JPG, PNG, WebP, or MP4.`,
+    };
+  }
+
+  if (expectedType !== 'auto' && detectedType !== expectedType) {
+    return {
+      verified: false,
+      inputUrl: rawUrl,
+      resolvedUrl: finalUrl,
+      mediaType: detectedType,
+      mimeType: rawMime,
+      visionAttached: false,
+      reason: `Expected "${expectedType}" asset, but URL serves "${detectedType}" (${rawMime}).`,
+    };
+  }
+
+  if (typeof contentLengthBytes === 'number' && !Number.isNaN(contentLengthBytes)) {
+    if (contentLengthBytes > 45 * 1024 * 1024) {
+      return {
+        verified: false,
+        inputUrl: rawUrl,
+        resolvedUrl: finalUrl,
+        mediaType: detectedType,
+        mimeType: rawMime,
+        contentLengthBytes,
+        visionAttached: false,
+        reason: `File size ${(contentLengthBytes / (1024 * 1024)).toFixed(1)} MB exceeds the 45 MB fast-prefetch limit.`,
+      };
+    }
+    if (contentLengthBytes > 0 && contentLengthBytes < 512) {
+      return {
+        verified: false,
+        inputUrl: rawUrl,
+        resolvedUrl: finalUrl,
+        mediaType: detectedType,
+        mimeType: rawMime,
+        contentLengthBytes,
+        visionAttached: false,
+        reason: `File size (${contentLengthBytes} bytes) is suspiciously tiny/corrupt.`,
+      };
+    }
+  }
+
+  let imageBlock: { type: 'image'; data: string; mimeType: string; mime_type: string } | undefined;
+  if (detectedType === 'image' && attachVisionThumbnail) {
+    const img = await fetchImageBase64(finalUrl, 5000, 350_000);
+    if (img) {
+      imageBlock = {
+        type: 'image',
+        data: img.data,
+        mimeType: img.mimeType,
+        mime_type: img.mimeType,
+      };
+    }
+  }
+
+  return {
+    verified: true,
+    inputUrl: rawUrl,
+    resolvedUrl: finalUrl,
+    mediaType: detectedType,
+    mimeType: rawMime || detectedType,
+    contentLengthBytes,
+    visionAttached: Boolean(imageBlock),
+    imageBlock,
+    reason: imageBlock
+      ? 'Verified clean direct media URL and attached Vision preview — inspect visually to confirm no watermarks or broken crops before embedding.'
+      : 'Verified clean direct media URL (headers, Content-Type, size, and domain checks passed).',
   };
 }

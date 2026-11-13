@@ -17,7 +17,7 @@ import {
   fetchProjectSourceFromGitHub,
 } from "../services/github.js";
 import { searchSoundtrackQuery } from "../services/music.js";
-import { searchVisualMedia, searchSfxCatalog } from "../services/media.js";
+import { searchVisualMedia, searchSfxCatalog, verifyExternalAsset } from "../services/media.js";
 
 function normalizePreviewFrames(args: any): number[] | null {
   if (Array.isArray(args?.frames) && args.frames.length > 0) {
@@ -800,6 +800,36 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           id,
           result: {
             content: [{ type: 'text', text: JSON.stringify(project, null, 2) }],
+          },
+        };
+      }
+
+      if (toolName === 'verify_external_asset') {
+        const rawUrl = String(args.url || '').trim();
+        if (!rawUrl) {
+          return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+              isError: true,
+              content: [{ type: 'text', text: 'Missing required parameter: url' }],
+            },
+          };
+        }
+        const expectedType = (['auto', 'image', 'video', 'audio'].includes(String(args.expectedType))
+          ? String(args.expectedType)
+          : 'auto') as 'auto' | 'image' | 'video' | 'audio';
+        const attachVision = args.attachVisionThumbnail !== false;
+        const verified = await verifyExternalAsset(rawUrl, expectedType, attachVision);
+        const { imageBlock, ...payload } = verified;
+        const content: Array<any> = [{ type: 'text', text: JSON.stringify(payload, null, 2) }];
+        if (imageBlock) content.push(imageBlock);
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            isError: !verified.verified,
+            content,
           },
         };
       }

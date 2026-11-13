@@ -56,8 +56,8 @@ export const TOOLS = [
   {
     name: 'search_visual_media',
     description:
-      'STAGE 2A — MULTIMODAL VISUAL MEDIA SEARCH: Search real photos and MP4/WebM videos across open global libraries (Wikimedia Commons, Openverse, Internet Archive).\n' +
-      'Automatically attaches verified thumbnails as Vision image blocks (type: "image") so you can visually inspect quality, framing, and relevance before embedding URLs in <Img> or <OffthreadVideo>.',
+      'STAGE 2A — MULTIMODAL VISUAL MEDIA SEARCH: Search real photos and MP4/WebM videos across open global libraries (Wikimedia Commons, NASA Image & Video Library, Wikipedia EN/VI, Openverse, Internet Archive, plus optional Pexels/Pixabay).\n' +
+      'Automatically attaches verified thumbnails as Vision image blocks (type: "image") so you can visually inspect quality, framing, and relevance before embedding URLs in <Img> or <OffthreadVideo>. For custom external web URLs outside these libraries, call `verify_external_asset`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -339,6 +339,39 @@ export const TOOLS = [
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: false,
+    },
+  },
+  {
+    name: 'verify_external_asset',
+    description:
+      'STAGE 2C — OPEN-WEB MEDIA VERIFIER & VISION INSPECTOR: Safely probe and verify ANY external public HTTP(S) image, MP4/WebM video, audio URL (or article URL with og:image/og:video) before embedding it in DynamicVideo.tsx.\n' +
+      'Enforces SSRF protection, blocks watermarked commercial stock domains (Shutterstock, Getty, iStock, Alamy, etc.), checks Content-Type & file size, and attaches a Vision preview for images so you can visually verify zero watermarks.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'Public HTTP(S) URL of an external image, video, audio file, or webpage (og:image/og:video extraction).',
+        },
+        expectedType: {
+          type: 'string',
+          enum: ['auto', 'image', 'video', 'audio'],
+          default: 'auto',
+          description: 'Expected media category to validate against Content-Type.',
+        },
+        attachVisionThumbnail: {
+          type: 'boolean',
+          default: true,
+          description: 'Attach image preview (<= 350 KB) as a Vision image block for visual inspection.',
+        },
+      },
+      required: ['url'],
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
     },
   },
 ];

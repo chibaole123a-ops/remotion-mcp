@@ -29,8 +29,9 @@ on:
         required: true
         type: string
       tsxCodeBase64:
-        description: 'Base64 encoded DynamicVideo.tsx code'
-        required: true
+        description: 'Base64 encoded DynamicVideo.tsx code (optional when offloaded via payloadAssetName)'
+        required: false
+        default: ''
         type: string
       audioConfigBase64:
         description: 'Base64 encoded JSON for AI Voiceover scenes & BGM mood'

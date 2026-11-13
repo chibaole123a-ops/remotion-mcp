@@ -841,6 +841,18 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
     </div>
   );
 };
+export interface WordHighlightCaptionsProps {
+  sceneIndex?: number;
+  highlightColor?: string;
+  activeBgColor?: string;
+  textColor?: string;
+  fontSize?: number;
+  bottomOffset?: number;
+  combineTokensWithinMilliseconds?: number;
+  style?: React.CSSProperties;
+}
+
+/**
  * If `sceneIndex` is omitted, it automatically tracks the active narration segment across the global timeline!
  */
 export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({

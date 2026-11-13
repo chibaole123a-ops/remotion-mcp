@@ -161,6 +161,9 @@ jobs:
             exit $EXIT_CODE
           else
             rm -f outputs/error-${{ inputs.jobId }}.txt
+            if [ "${{ inputs.mode }}" != "still" ] && [ -f "outputs/video-${{ inputs.jobId }}.mp4" ]; then
+              JOB_ID="${{ inputs.jobId }}" node scripts/measure-video-qc.mjs || true
+            fi
           fi
 
       - name: Upload Error Log on Failure (For Gemini Self-Healing Diagnostics)
@@ -189,6 +192,9 @@ jobs:
           fi
           if [ -f "outputs/video-${{ inputs.jobId }}.mp4" ]; then
             gh release upload "$TAG" "outputs/video-${{ inputs.jobId }}.mp4" --clobber
+          fi
+          if [ -f "outputs/qc-${{ inputs.jobId }}.json" ]; then
+            gh release upload "$TAG" "outputs/qc-${{ inputs.jobId }}.json" --clobber || true
           fi
           if [ -f "outputs/still-${{ inputs.jobId }}.png" ]; then
             gh release upload "$TAG" "outputs/still-${{ inputs.jobId }}.png" --clobber

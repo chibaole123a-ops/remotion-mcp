@@ -1,5 +1,5 @@
 name = "remotion-mcp"
-main = "src/cloudflare-worker.ts"
+main = "src/worker/index.ts"
 compatibility_date = "2025-01-01"
 
 [vars]

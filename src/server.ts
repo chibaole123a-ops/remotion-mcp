@@ -5,6 +5,13 @@ import { Readable } from 'stream';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
+import {
+  buildQualityEvaluationReport,
+  DIRECTOR_EVALUATION_FRAMEWORK,
+  validateTsxComposition,
+  VISION_FRAME_CRITERIA,
+  type ValidationContext,
+} from './shared/quality-rubric.js';
 
 const PORT = Number(process.env.PORT || 3456);
 const MCP_SECRET = process.env.MCP_SECRET || '';
@@ -35,19 +42,8 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function validateTsxCode(tsxCode: string): string[] {
-  const warnings: string[] = [];
-  if (!/export\s+(const|function)\s+DynamicVideo/.test(tsxCode)) {
-    warnings.push(
-      'CRITICAL: Code must export `export const DynamicVideo: React.FC = () => { ... }` or `export function DynamicVideo()`.'
-    );
-  }
-  if (/Math\.random\s*\(/.test(tsxCode)) {
-    warnings.push(
-      'NOTE: Detected `Math.random()`. Prefer `random("seed")` from "remotion" so parallel rendering stays 100% deterministic.'
-    );
-  }
-  return warnings;
+function validateTsxCode(tsxCode: string, ctx: ValidationContext = {}): string[] {
+  return validateTsxComposition(tsxCode, ctx);
 }
 
 const ECOSYSTEM_DOCS = `
@@ -107,6 +103,7 @@ export const DynamicVideo: React.FC = () => {
   );
 };
 \`\`\`
+${DIRECTOR_EVALUATION_FRAMEWORK}
 `;
 
 async function triggerGitHubActionsRender(
@@ -216,7 +213,13 @@ async function listReleaseVideosOnGitHub(baseUrl: string) {
 
 async function checkReleaseAssetsOnGitHub(
   jobId: string
-): Promise<{ videoReady: boolean; stillReady: boolean; errorLogText?: string; stillBase64?: string }> {
+): Promise<{
+  videoReady: boolean;
+  stillReady: boolean;
+  errorLogText?: string;
+  stillBase64?: string;
+  qcTelemetry?: Record<string, any>;
+}> {
   try {
     const headers: Record<string, string> = {
       Accept: 'application/vnd.github+json',
@@ -239,6 +242,7 @@ async function checkReleaseAssetsOnGitHub(
     );
     const stillReady = Boolean(stillAsset);
     const errAsset = assets.find((a) => a.name === `error-${jobId}.txt` && a.state === 'uploaded');
+    const qcAsset = assets.find((a) => a.name === `qc-${jobId}.json` && a.state === 'uploaded');
 
     let stillBase64: string | undefined;
     if (stillAsset) {
@@ -267,7 +271,21 @@ async function checkReleaseAssetsOnGitHub(
       }
     }
 
-    return { videoReady, stillReady, errorLogText, stillBase64 };
+    let qcTelemetry: Record<string, any> | undefined;
+    if (qcAsset) {
+      try {
+        const qcUrl = `https://github.com/${GITHUB_REPO}/releases/download/videos-store/qc-${jobId}.json`;
+        const qcRes = await fetch(qcUrl, {
+          headers,
+          redirect: 'follow',
+        });
+        if (qcRes.ok) {
+          qcTelemetry = (await qcRes.json()) as Record<string, any>;
+        }
+      } catch {}
+    }
+
+    return { videoReady, stillReady, errorLogText, stillBase64, qcTelemetry };
   } catch {
     return { videoReady: false, stillReady: false };
   }
@@ -370,7 +388,13 @@ function createMcpServerInstance(baseUrl: string) {
         .describe('Optional: Specific frame index if user only wants to capture a fast static preview PNG. If omitted, the entire video will be rendered.'),
     },
     async ({ title, tsxCode, durationInFrames, fps, width, height, frame }) => {
-      const warnings = validateTsxCode(tsxCode);
+      const isFramePreview = typeof frame === 'number';
+      const warnings = validateTsxCode(tsxCode, {
+        durationInFrames: isFramePreview ? undefined : durationInFrames,
+        fps,
+        width,
+        height,
+      });
       if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
         return {
           isError: true,
@@ -382,10 +406,10 @@ function createMcpServerInstance(baseUrl: string) {
           ],
         };
       }
+      const qualityAdvisories = warnings.filter((w) => !w.startsWith('CRITICAL:'));
 
       const jobId = randomUUID().slice(0, 8);
       const secretSuffix = MCP_SECRET ? `?key=${encodeURIComponent(MCP_SECRET)}` : '';
-      const isFramePreview = typeof frame === 'number';
 
       if (isFramePreview) {
         const stillUrl = `${baseUrl}/still/${jobId}.png${secretSuffix}`;
@@ -433,6 +457,8 @@ function createMcpServerInstance(baseUrl: string) {
                   previewImageUrl: stillUrl,
                   directDownloadUrl,
                   hasVisionImage: Boolean(stillReady && stillBase64),
+                  qualityAdvisories: qualityAdvisories.length > 0 ? qualityAdvisories : undefined,
+                  visionInspectionCriteria: VISION_FRAME_CRITERIA,
                   instructionsForAgent: stillReady
                     ? `Examine the image block attached below. Evaluate visual composition, contrast, font readability, 3D elements, and particle balance. If adjustments are needed, refine tsxCode and test another frame; if satisfied, call remotion without "frame" to render the complete video.`
                     : `Frame capture is still processing on Cloud runner. Call get_task_status with jobId "${jobId}" after a few moments to receive the image.`,
@@ -544,6 +570,7 @@ function createMcpServerInstance(baseUrl: string) {
       let workflowInfo: any = null;
 
       let stillBase64: string | undefined;
+      let qcTelemetry: Record<string, any> | undefined;
 
       while (Date.now() - start < 15000) {
         const check = await checkReleaseAssetsOnGitHub(jobId);
@@ -551,6 +578,7 @@ function createMcpServerInstance(baseUrl: string) {
         isStill = check.stillReady;
         errorLogText = check.errorLogText;
         stillBase64 = check.stillBase64;
+        qcTelemetry = check.qcTelemetry;
         if (ready || errorLogText) break;
 
         workflowInfo = await inspectGitHubWorkflowRun(jobId);
@@ -591,6 +619,8 @@ function createMcpServerInstance(baseUrl: string) {
               watchPageUrl: isStill ? undefined : watchPageUrl,
               streamUrl: isStill ? undefined : streamUrl,
               assetUrl: videoUrl,
+              qcTelemetry: !isStill && ready ? qcTelemetry : undefined,
+              visionInspectionCriteria: isStill && ready ? VISION_FRAME_CRITERIA : undefined,
               compilerErrorDetails: errorLogText,
               cloudRunnerDiagnostics: workflowInfo,
               message: ready
@@ -677,6 +707,34 @@ function createMcpServerInstance(baseUrl: string) {
             ),
           },
         ],
+      };
+    }
+  );
+
+  server.tool(
+    'evaluate_video_quality',
+    'NON-RESTRICTIVE DIRECTOR QUALITY CHECK & RUBRIC TOOL: Run a fast pre-render quality check on your Remotion TSX code and receive an intent-relative 5-pillar evaluation rubric (100 pts) tailored to your chosen genre and format while preserving 100% creative freedom.',
+    {
+      tsxCode: z.string().describe('Your Remotion DynamicVideo TSX source code to validate and inspect.'),
+      creativeIntent: z.string().optional().describe('Your chosen aesthetic mood, visual language, and pacing intent.'),
+      genre: z.string().optional().describe('Video genre/format (e.g. documentary, short-viral, 3d-sci-fi, minimalist-poem).'),
+      durationInFrames: z.number().int().default(300),
+      fps: z.number().int().default(30),
+      width: z.number().int().default(1920),
+      height: z.number().int().default(1080),
+    },
+    async ({ tsxCode, creativeIntent, genre, durationInFrames, fps, width, height }) => {
+      const report = buildQualityEvaluationReport({
+        tsxCode,
+        creativeIntent,
+        genre,
+        durationInFrames,
+        fps,
+        width,
+        height,
+      });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(report, null, 2) }],
       };
     }
   );

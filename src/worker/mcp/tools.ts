@@ -6,6 +6,7 @@ export const TOOLS = [
     name: 'plan_storyboard_timeline',
     description:
       'STAGE 1 — STORYBOARD, TIMELINE & CODE BLUEPRINT ORCHESTRATOR: Compute frame-accurate speech timing, scene boundaries (startFrame, durationInFrames), audioConfigPayload, anchorKeywords, built-in @remotion/sfx catalog, AND the DynamicVideo.tsx Blueprint.\n' +
+      'Autonomous Default (when user gives ONLY a topic): Auto-choose 1080x1920 (9:16 with <SafeAreaLayer>) for short/viral topics or 1920x1080 for deep documentaries; always include narrated voiceover, <ProKaraokeCaptions />, Vision-verified real media, ducked BGM, and SFX unless user asks otherwise.\n' +
       'Streamlined 4-Step Workflow: 1) plan_storyboard_timeline -> 2) search_visual_media(queries: [...]) + search_soundtrack -> 3) preview_frames (runs guardrails automatically + snapshots TSX) -> 4) render_video(fromPreviewJobId) -> get_task_status final audit.',
     inputSchema: {
       type: 'object',

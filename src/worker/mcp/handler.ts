@@ -1,6 +1,6 @@
 import type { Env } from "../types.js";
 import { TOOLS } from "./tools.js";
-import { ECOSYSTEM_DOCS, DIRECTOR_CODE_BLUEPRINT } from "./prompts.js";
+import { ECOSYSTEM_DOCS, DIRECTOR_CODE_BLUEPRINT, SERVER_INSTRUCTIONS } from "./prompts.js";
 import {
   randomJobId,
   sanitizeJobId,
@@ -54,6 +54,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           name: 'remotion-cloud-mcp',
           version: '7.4.0',
         },
+        instructions: SERVER_INSTRUCTIONS,
       },
     };
   }
@@ -66,7 +67,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         prompts: [
           {
             name: 'director_workflow',
-            description: 'Complete 6-stage AI Video Director workflow, Remotion API blueprint, Vietnamese fonts, and Continuous World code pattern.',
+            description: 'Streamlined 4-step AI Video Director workflow, Autonomous Defaults from a bare topic, Remotion API blueprint, Vietnamese fonts, and Safe-Zone rules.',
           },
         ],
       },

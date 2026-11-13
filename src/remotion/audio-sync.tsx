@@ -789,13 +789,13 @@ export interface ProKaraokeCaptionsProps {
  * Splits caption cards strictly at sentence/pause boundaries so text never bleeds across pauses!
  */
 export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
-  stylePreset = 'hormozi',
+  stylePreset = 'minimal',
   highlightColor = '#facc15',
   activeBgColor = 'rgba(250, 204, 21, 0.2)',
   textColor = '#ffffff',
   fontFamily = 'BeVietnamPro, "Noto Sans", system-ui, sans-serif',
   fontSize = 42,
-  bottomOffset = 84,
+  bottomOffset = 64,
   wordsPerPage = 5,
   style,
 }) => {
@@ -891,8 +891,8 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
           alignItems: 'center',
           gap: '10px 14px',
           maxWidth: 1200,
-          padding: '16px 32px',
-          borderRadius: 24,
+          padding: stylePreset === 'minimal' ? '8px 18px' : '16px 32px',
+          borderRadius: stylePreset === 'minimal' ? 0 : 24,
           backgroundColor:
             stylePreset === 'minimal'
               ? 'transparent'
@@ -907,7 +907,9 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
               ? '1px solid rgba(255, 255, 255, 0.12)'
               : 'none',
           boxShadow:
-            stylePreset === 'cyber'
+            stylePreset === 'minimal'
+              ? 'none'
+              : stylePreset === 'cyber'
               ? '0 0 35px rgba(0, 242, 254, 0.25)'
               : '0 16px 45px rgba(0,0,0,0.6)',
           transform: `scale(${interpolate(pageEnterSpring, [0, 1], [0.92, 1])}) translateY(${interpolate(
@@ -930,8 +932,8 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
             config: { damping: 12, stiffness: 280, mass: 0.4 },
           });
 
-          const activeScale = isActive ? interpolate(wordPop, [0, 1], [1.0, 1.18]) : 1.0;
-          const activeY = isActive ? -4 : 0;
+          const activeScale = isActive ? interpolate(wordPop, [0, 1], [1.0, 1.15]) : 1.0;
+          const activeY = isActive ? -3 : 0;
 
           const chosenHighlight =
             stylePreset === 'hormozi'
@@ -951,16 +953,26 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
                 fontSize,
                 fontWeight: 800,
                 letterSpacing: 0.4,
-                textTransform: 'uppercase',
-                color: isActive ? chosenHighlight : isPast ? textColor : 'rgba(255, 255, 255, 0.55)',
-                backgroundColor: isActive ? activeBgColor : 'transparent',
-                padding: '4px 10px',
-                borderRadius: 12,
+                textTransform: stylePreset === 'minimal' ? 'none' : 'uppercase',
+                color: isActive ? chosenHighlight : isPast ? textColor : 'rgba(255, 255, 255, 0.72)',
+                backgroundColor: stylePreset === 'minimal' ? 'transparent' : isActive ? activeBgColor : 'transparent',
+                padding: stylePreset === 'minimal' ? '2px 4px' : '4px 10px',
+                borderRadius: stylePreset === 'minimal' ? 0 : 12,
                 transform: `scale(${activeScale}) translateY(${activeY}px)`,
-                textShadow: isActive
-                  ? `0 0 25px ${chosenHighlight}aa, 0 3px 12px rgba(0,0,0,0.9)`
-                  : '0 3px 8px rgba(0,0,0,0.8)',
-                WebkitTextStroke: isActive ? '1.5px rgba(0,0,0,0.6)' : 'none',
+                textShadow:
+                  stylePreset === 'minimal'
+                    ? isActive
+                      ? `0 0 18px ${chosenHighlight}88, 0 4px 14px rgba(0,0,0,0.98), 0 1px 4px rgba(0,0,0,1)`
+                      : '0 4px 14px rgba(0,0,0,0.98), 0 1px 4px rgba(0,0,0,1)'
+                    : isActive
+                    ? `0 0 25px ${chosenHighlight}aa, 0 3px 12px rgba(0,0,0,0.9)`
+                    : '0 3px 8px rgba(0,0,0,0.8)',
+                WebkitTextStroke:
+                  stylePreset === 'minimal'
+                    ? '1.2px rgba(0,0,0,0.78)'
+                    : isActive
+                    ? '1.5px rgba(0,0,0,0.6)'
+                    : 'none',
                 transition: 'color 0.1s ease',
               }}
             >

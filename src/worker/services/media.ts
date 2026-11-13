@@ -51,6 +51,26 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 5500): Promise<any 
   }
 }
 
+function detectRasterMimeFromBytes(bytes: Uint8Array): 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' | null {
+  if (bytes.length < 12) return null;
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'image/gif';
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return 'image/webp';
+  }
+  return null;
+}
+
 async function fetchImageBase64(
   url: string,
   timeoutMs = 6500,
@@ -69,7 +89,10 @@ async function fetchImageBase64(
     });
     if (!res.ok) return null;
     const ct = (res.headers.get('content-type') || '').toLowerCase();
-    if (!ct.startsWith('image/') || ct.includes('svg')) return null;
+    const isImageCt = ct.startsWith('image/') && !ct.includes('svg') && !ct.includes('tiff');
+    const isOctetImageHint =
+      (ct.includes('octet-stream') || !ct) && /\.(jpe?g|png|webp|gif)(\?|$)/i.test(url);
+    if (!isImageCt && !isOctetImageHint) return null;
 
     const lenHeader = Number(res.headers.get('content-length') || 0);
     if (lenHeader > maxBytes) return null;
@@ -77,14 +100,16 @@ async function fetchImageBase64(
     const buf = await res.arrayBuffer();
     if (buf.byteLength < 512 || buf.byteLength > maxBytes) return null;
 
-    const mimeType = ct.includes('png')
-      ? 'image/png'
-      : ct.includes('webp')
-      ? 'image/webp'
-      : 'image/jpeg';
+    const bytes = new Uint8Array(buf);
+    const sniffedMime = detectRasterMimeFromBytes(bytes);
+    if (!sniffedMime && !isImageCt) return null;
+
+    const mimeType =
+      sniffedMime ||
+      (ct.includes('png') ? 'image/png' : ct.includes('webp') ? 'image/webp' : 'image/jpeg');
 
     return {
-      data: bytesToBase64(new Uint8Array(buf)),
+      data: bytesToBase64(bytes),
       mimeType,
     };
   } catch {

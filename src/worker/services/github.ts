@@ -17,6 +17,17 @@ function githubHeaders(token: string, extra?: Record<string, string>): Record<st
   };
 }
 
+export interface RenderDispatchOptions {
+  mode?: 'video' | 'still';
+  stillFrame?: number;
+  stillFrames?: number[];
+  audioMastering?: {
+    enabled?: boolean;
+    targetLufs?: number;
+    truePeakDbtp?: number;
+  };
+}
+
 export async function dispatchGitHubRender(
   env: Env,
   jobId: string,
@@ -27,9 +38,22 @@ export async function dispatchGitHubRender(
   width: number,
   height: number,
   audioConfig: any,
-  mode: 'video' | 'still' = 'video',
+  modeOrOpts: 'video' | 'still' | RenderDispatchOptions = 'video',
   stillFrame = 0
 ) {
+  const opts: RenderDispatchOptions =
+    typeof modeOrOpts === 'string'
+      ? { mode: modeOrOpts, stillFrame }
+      : modeOrOpts;
+
+  const mode = opts.mode || 'video';
+  const resolvedStillFrame = opts.stillFrame ?? stillFrame;
+  const stillFramesCsv =
+    Array.isArray(opts.stillFrames) && opts.stillFrames.length > 0
+      ? opts.stillFrames.join(',')
+      : '';
+  const masteringJson = opts.audioMastering ? JSON.stringify(opts.audioMastering) : '';
+
   const repo = getRepo(env);
   const res = await fetch(
     `https://api.github.com/repos/${repo}/actions/workflows/render.yml/dispatches`,
@@ -52,7 +76,9 @@ export async function dispatchGitHubRender(
           audioConfigBase64: toBase64Utf8(JSON.stringify(audioConfig || {})),
           callbackUrl: '',
           mode,
-          stillFrame: String(stillFrame),
+          stillFrame: String(resolvedStillFrame),
+          stillFrames: stillFramesCsv,
+          audioMasteringBase64: masteringJson ? toBase64Utf8(masteringJson) : '',
         },
       }),
     }
@@ -114,6 +140,7 @@ export async function checkReleaseAssetsOnGitHub(
   errorLogText?: string;
   stillBase64?: string;
   qcTelemetry?: Record<string, any>;
+  projectSourceAvailable?: boolean;
 }> {
   const repo = getRepo(env);
   try {
@@ -129,6 +156,7 @@ export async function checkReleaseAssetsOnGitHub(
     const stillReady = Boolean(stillAsset);
     const errAsset = assets.find((a) => a.name === `error-${jobId}.txt` && a.state === 'uploaded');
     const qcAsset = assets.find((a) => a.name === `qc-${jobId}.json` && a.state === 'uploaded');
+    const projectSourceAvailable = assets.some((a) => a.name === `project-${jobId}.json` && a.state === 'uploaded');
 
     let stillBase64: string | undefined;
     if (stillAsset) {
@@ -176,9 +204,24 @@ export async function checkReleaseAssetsOnGitHub(
       } catch {}
     }
 
-    return { videoReady, stillReady, errorLogText, stillBase64, qcTelemetry };
+    return { videoReady, stillReady, errorLogText, stillBase64, qcTelemetry, projectSourceAvailable };
   } catch {
     return { videoReady: false, stillReady: false };
+  }
+}
+
+export async function fetchProjectSourceFromGitHub(env: Env, jobId: string): Promise<Record<string, any> | null> {
+  const repo = getRepo(env);
+  try {
+    const url = `https://github.com/${repo}/releases/download/videos-store/project-${jobId}.json`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT },
+      redirect: 'follow',
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as Record<string, any>;
+  } catch {
+    return null;
   }
 }
 

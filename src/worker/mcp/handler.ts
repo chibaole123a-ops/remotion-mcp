@@ -1,10 +1,37 @@
 import type { Env } from "../types.js";
-import { ECOSYSTEM_DOCS } from "./prompts.js";
 import { TOOLS } from "./tools.js";
-import { randomJobId, sanitizeJobId, validateTsxCode, calculateSpeechTelemetry, estimateAudioMinFrames } from "../utils.js";
+import {
+  randomJobId,
+  sanitizeJobId,
+  validateTsxCode,
+  calculateSpeechTelemetry,
+  estimateAudioMinFrames,
+} from "../utils.js";
 import { buildQualityEvaluationReport, VISION_FRAME_CRITERIA } from "../../shared/quality-rubric.js";
-import { dispatchGitHubRender, listReleaseVideosOnGitHub, checkReleaseAssetsOnGitHub, inspectGitHubWorkflowRun } from "../services/github.js";
+import {
+  dispatchGitHubRender,
+  listReleaseVideosOnGitHub,
+  checkReleaseAssetsOnGitHub,
+  inspectGitHubWorkflowRun,
+  fetchProjectSourceFromGitHub,
+} from "../services/github.js";
 import { searchSoundtrackQuery } from "../services/music.js";
+import { searchVisualMedia, searchSfxCatalog } from "../services/media.js";
+
+function normalizePreviewFrames(args: any): number[] | null {
+  if (Array.isArray(args?.frames) && args.frames.length > 0) {
+    const cleaned = args.frames
+      .map((f: any) => Math.max(0, Math.floor(Number(f))))
+      .filter((n: number) => Number.isFinite(n));
+    const unique = [...new Set<number>(cleaned)].slice(0, 6);
+    if (unique.length > 0) return unique;
+  }
+  if (typeof args?.frame === 'number' && Number.isFinite(args.frame)) {
+    return [Math.max(0, Math.floor(args.frame))];
+  }
+  return null;
+}
+
 export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
   const { id, method, params } = body || {};
   const repo = env.GITHUB_REPO || 'chibaole123a-ops/remotion-mcp';
@@ -21,7 +48,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         },
         serverInfo: {
           name: 'remotion-cloud-mcp',
-          version: '6.1.0',
+          version: '7.0.0',
         },
       },
     };
@@ -48,27 +75,89 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
     const args = params?.arguments || {};
 
     try {
+      if (toolName === 'search_visual_media') {
+        const query = String(args.query || '').trim();
+        const mediaType = (args.mediaType || 'all') as 'all' | 'image' | 'video';
+        const limit = Number(args.limit || 5);
+        const attachVision = args.attachVisionThumbnails !== false;
+
+        const result = await searchVisualMedia(query, mediaType, limit, attachVision);
+
+        const contentBlocks: any[] = [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                query: result.query,
+                mediaTypeFilter: result.mediaTypeFilter,
+                totalFound: result.items.length,
+                visionThumbnailsAttached: result.imageBlocks.length,
+                items: result.items,
+                usageNotes:
+                  'Inspect attached image blocks with Vision before embedding. Use <Img src="<item.url>" /> for images or <OffthreadVideo src="<item.url>" /> for videos; the Cloud runner automatically pre-fetches them onto local SSD.',
+              },
+              null,
+              2
+            ),
+          },
+          ...result.imageBlocks,
+        ];
+
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: { content: contentBlocks },
+        };
+      }
+
+      if (toolName === 'search_sfx') {
+        const query = String(args.query || '').trim();
+        const category = typeof args.category === 'string' ? args.category : 'all';
+        const includeWebFoley = Boolean(args.includeWebFoley);
+        const result = await searchSfxCatalog(query, category, includeWebFoley);
+
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    ...result,
+                    usageNotes:
+                      'Import built-in effects directly from "@remotion/sfx" and wrap in <Sequence from={triggerFrame} durationInFrames={45}><Audio src={effectName} volume={0.55} /></Sequence>.',
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          },
+        };
+      }
+
+      // Legacy alias retained silently for backwards compatibility
       if (toolName === 'inspect_audio_track') {
         const audioUrl = String(args.url || '').trim();
         let status = 'unknown';
         let contentLength = 0;
-        let contentType = 'audio/mpeg';
+        let contentType = '';
 
         try {
-          const headRes = await fetch(audioUrl, { method: 'HEAD' });
+          const headRes = await fetch(audioUrl, { method: 'HEAD', redirect: 'follow' });
           status = headRes.ok ? 'accessible' : `http_${headRes.status}`;
           contentLength = Number(headRes.headers.get('content-length') || 0);
-          contentType = headRes.headers.get('content-type') || 'audio/mpeg';
+          contentType = headRes.headers.get('content-type') || '';
         } catch {
           status = 'unreachable';
         }
 
-        const isDirectMp3 = audioUrl.endsWith('.mp3') || contentType.includes('mpeg') || contentType.includes('audio');
+        const isDirectMp3 =
+          /\.(mp3|wav|m4a|ogg)(\?|$)/i.test(audioUrl) || contentType.includes('audio');
         const isTikTok = /tiktok\.com/i.test(audioUrl);
         const isYouTube = /youtube\.com|youtu\.be/i.test(audioUrl);
-
-        const estDurationSec = contentLength > 0 ? Math.round(contentLength / 24000) : 180;
-        const speechClashRisk = isTikTok ? 'medium (may contain spoken dialogue or singing)' : 'low (studio instrumental)';
 
         return {
           jsonrpc: '2.0',
@@ -81,14 +170,19 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                   {
                     url: audioUrl,
                     status,
-                    sourceType: isDirectMp3 ? 'direct_studio_mp3' : isTikTok ? 'tiktok_audio' : isYouTube ? 'youtube_stream' : 'external_stream',
-                    estimatedDurationSec: estDurationSec,
-                    speechClashRisk,
-                    recommendation:
-                      isTikTok
-                        ? 'TikTok sound detected. Ensure background volume is set around 0.12 - 0.18 so it does not overpower your Vietnamese voiceover narration.'
-                        : 'Clean studio instrumental track. Perfect for background music with volume={0.15}. Ready to use!',
-                    usageInRemotion: `<Audio src="${audioUrl}" volume={0.15} loop />`,
+                    contentType: contentType || 'unknown',
+                    contentLengthBytes: contentLength || undefined,
+                    sourceType: isDirectMp3
+                      ? 'direct_audio'
+                      : isTikTok
+                      ? 'tiktok_audio'
+                      : isYouTube
+                      ? 'youtube_stream'
+                      : 'external_stream',
+                    speechClashRisk: isDirectMp3
+                      ? 'low-to-medium (check if instrumental vs vocal; duck BGM during speech)'
+                      : 'medium (stream track — apply dynamic ducking during voiceover)',
+                    usageInRemotion: `<Audio src="${audioUrl}" volume={(f) => ...} loop />`,
                   },
                   null,
                   2
@@ -102,7 +196,8 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
       if (toolName === 'search_soundtrack') {
         const query = String(args.query || '');
         const limit = Number(args.limit || 5);
-        const results = await searchSoundtrackQuery(query, limit);
+        const verifyLinks = args.verifyLinks !== false;
+        const results = await searchSoundtrackQuery(query, limit, verifyLinks);
 
         return {
           jsonrpc: '2.0',
@@ -117,7 +212,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     totalFound: results.length,
                     tracks: results,
                     instructionsForAgent:
-                      'You can choose any track matching your video mood and duration. In your Remotion TSX, import Audio from "remotion" and mount `<Audio src="<track.url>" volume={0.15} loop />`. The runner will automatically download and bundle the audio file!',
+                      'Prefer tracks with verifiedReachable: true and directMp3: true when available. Mount `<Audio src="<track.url>" volume={(f) => ...} loop />` and duck BGM during active voiceover.',
                   },
                   null,
                   2
@@ -170,6 +265,8 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const fps = Number(args.fps || 30);
 
         const telemetry = calculateSpeechTelemetry(scenesInput, voice, fps, rate);
+        const inputArray = Array.isArray(args.scenes) ? args.scenes : [];
+
         return {
           jsonrpc: '2.0',
           id,
@@ -184,24 +281,30 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     totalDurationSec: telemetry.totalDurationSec,
                     totalDurationInFrames: telemetry.totalDurationInFrames,
                     totalScenes: telemetry.totalScenes,
-                    timeline: telemetry.scenes.map((s: any) => ({
+                    timeline: telemetry.scenes.map((s: any, idx: number) => ({
                       sceneIndex: s.sceneIndex,
+                      sceneName: inputArray[idx]?.sceneName || undefined,
+                      visualConcept: inputArray[idx]?.visualConcept || undefined,
+                      continuityFromPrevScene: inputArray[idx]?.continuityFromPrevScene || undefined,
                       startFrame: s.startFrame,
                       endFrame: s.endFrame,
                       durationInFrames: s.durationInFrames,
                       durationSec: s.durationSec,
                       text: s.text,
+                      anchorKeywords: s.anchorKeywords,
                       audioFile: s.audioFileName,
-                      usageSnippet: `<Sequence from={${s.startFrame}} durationInFrames={${s.durationInFrames}}><Audio src={staticFile("${s.audioFileName}")} volume={1} /></Sequence>`,
+                      usageSnippet: `<SyncedScene sceneIndex={${s.sceneIndex}}>{/* trigger beats with getWordTrigger(${s.sceneIndex}, "${s.anchorKeywords?.[0] || ''}", frame) */}</SyncedScene>`,
                     })),
                     audioConfigPayload: telemetry.audioConfigPayload,
                     directorQualityReminder: {
                       targetDurationInFrames: telemetry.totalDurationInFrames,
-                      audioSyncRule: 'Mount ONLY ONE voiceover method (either <MasterAudioTrack /> OR segmented <Audio src={staticFile("voice-X.mp3")} />), and duck BGM during speech.',
-                      creativeFreedom: 'Design any visual style, pacing, 2D/3D medium, or camera flow that best serves your narrative intent.',
+                      audioSyncRule:
+                        'Mount ONLY ONE voiceover method (either <MasterAudioTrack /> OR segmented <Audio src={staticFile("voice-X.mp3")} />), and duck BGM during speech.',
+                      creativeFreedom:
+                        'Design any visual style, pacing, 2D/3D medium, or camera flow that best serves your narrative intent.',
                     },
                     instructionsForAgent:
-                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames). You have 100% creative freedom to design unique, non-repetitive visual motion for each scene! Pass durationInFrames: ${telemetry.totalDurationInFrames} and audioConfig to render_video.`,
+                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames). Next: source real media/audio via search_visual_media, search_soundtrack, and search_sfx, then pass durationInFrames: ${telemetry.totalDurationInFrames} and audioConfig to render_video.`,
                   },
                   null,
                   2
@@ -215,16 +318,22 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
       if (
         toolName === 'render_video' ||
         toolName === 'render_remotion_video' ||
+        toolName === 'preview_frames' ||
         toolName === 'preview_frame' ||
         toolName === 'preview_remotion_frame' ||
         toolName === 'remotion' ||
         toolName === 'remotion_studio'
       ) {
+        const previewFramesList = normalizePreviewFrames(args);
         const isFramePreview =
+          toolName === 'preview_frames' ||
           toolName === 'preview_frame' ||
           toolName === 'preview_remotion_frame' ||
-          typeof args.frame === 'number' ||
+          previewFramesList !== null ||
           args.action === 'preview';
+
+        const resolvedFrames = previewFramesList || [0];
+        const maxPreviewFrame = Math.max(...resolvedFrames);
 
         const tsxCode = String(args.tsxCode || '');
         const jobId = randomJobId();
@@ -233,6 +342,14 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const height = Number(args.height || 1080);
         const durationInFrames = Number(args.durationInFrames || 300);
         const audioConfig = args.audioConfig || {};
+        const audioMastering =
+          args.audioMastering && typeof args.audioMastering === 'object'
+            ? {
+                enabled: args.audioMastering.enabled !== false,
+                targetLufs: Number(args.audioMastering.targetLufs ?? -14),
+                truePeakDbtp: Number(args.audioMastering.truePeakDbtp ?? -1.5),
+              }
+            : { enabled: true, targetLufs: -14, truePeakDbtp: -1.5 };
 
         const warnings = validateTsxCode(tsxCode, {
           durationInFrames: isFramePreview ? undefined : durationInFrames,
@@ -260,20 +377,22 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
 
         if (isFramePreview) {
           const title = args.title || 'Remotion Frame Preview';
-          const frame = Number(args.frame || 0);
 
           await dispatchGitHubRender(
             env,
             jobId,
             title,
             tsxCode,
-            Math.max(frame + 1, 30),
+            Math.max(durationInFrames, maxPreviewFrame + 1, 30),
             fps,
             width,
             height,
             {},
-            'still',
-            frame
+            {
+              mode: 'still',
+              stillFrame: resolvedFrames[0],
+              stillFrames: resolvedFrames,
+            }
           );
 
           const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
@@ -290,16 +409,15 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     {
                       status: 'frame_dispatched_to_cloud',
                       jobId,
-                      capturedFrame: frame,
+                      capturedFrames: resolvedFrames,
+                      contactSheetMode: resolvedFrames.length > 1,
                       specs: `${width}x${height} @ ${fps}fps`,
                       previewImageUrl: stillUrl,
                       directDownloadUrl: downloadUrl,
                       qualityAdvisories: qualityAdvisories.length > 0 ? qualityAdvisories : undefined,
                       visionInspectionCriteria: VISION_FRAME_CRITERIA,
                       instructionsForAgent:
-                        `Frame capture job dispatched to Cloud runner! It takes ~20-25s. Call get_task_status with jobId "${jobId}" to retrieve the visual inspection image into your vision context.`,
-                      message:
-                        `Remotion frame #${frame} successfully dispatched to GitHub Actions Cloud (16GB RAM)! Next step: Call get_task_status with jobId "${jobId}" to inspect the visual frame.`,
+                        `Frame capture job for frame(s) [${resolvedFrames.join(', ')}] dispatched to Cloud runner! Call get_task_status(jobId: "${jobId}", waitForCompletion: true) to retrieve the ${resolvedFrames.length > 1 ? 'Contact Sheet' : 'still frame'} into your Vision context.`,
                     },
                     null,
                     2
@@ -323,8 +441,11 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           width,
           height,
           audioConfig,
-          'video',
-          0
+          {
+            mode: 'video',
+            stillFrame: 0,
+            audioMastering,
+          }
         );
 
         const watchPageUrl = `${baseUrl}/watch/${jobId}${secretQuery}`;
@@ -332,13 +453,12 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const galleryUrl = `${baseUrl}/gallery${secretQuery}`;
         const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${jobId}.mp4`;
 
-        // Wait synchronously for render completion up to 90s directly inside render_video!
-        // This ensures Gemini receives the final completed video link immediately without having to poll multiple times.
         const waitStart = Date.now();
         let finalStatus = 'rendering_on_cloud';
         let isSuccess = false;
         let isFailed = false;
         let errorDetails: string | undefined;
+        let qcTelemetry: Record<string, any> | undefined;
 
         while (Date.now() - waitStart < 20000) {
           await new Promise((r) => setTimeout(r, 4000));
@@ -346,6 +466,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           if (check.videoReady) {
             isSuccess = true;
             finalStatus = 'completed';
+            qcTelemetry = check.qcTelemetry;
             break;
           }
           if (check.errorLogText) {
@@ -376,22 +497,19 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     jobId,
                     title,
                     specs: `${width}x${height} @ ${fps}fps (${durationInFrames} frames / ${(durationInFrames / fps).toFixed(1)}s)`,
+                    audioMastering,
                     watchPageUrl,
                     streamUrl,
                     galleryUrl,
                     directDownloadUrl: videoUrl,
+                    qcTelemetry: isSuccess ? qcTelemetry : undefined,
                     qualityAdvisories: qualityAdvisories.length > 0 ? qualityAdvisories : undefined,
                     errorDetails: errorDetails || undefined,
                     instructionsForAgent: isSuccess
                       ? `Render completed successfully! Present the video watch link to the user: 🎬 [Xem Video Trực Tiếp](${watchPageUrl}) | 📥 [Tải Video MP4](${videoUrl})`
                       : isFailed
                       ? `Render failed on cloud runner! Inspect "errorDetails" above, fix your React TSX code or assets, and re-call render_video.`
-                      : `CRITICAL ACTION REQUIRED: Video is still rendering on Cloud Runner! DO NOT reply to the user yet and DO NOT say you are waiting. You MUST immediately execute the tool get_task_status(jobId: "${jobId}", waitForCompletion: true) right now until it returns status: "completed"!`,
-                    message: isSuccess
-                      ? 'Render completed successfully! Present watchPageUrl to user.'
-                      : isFailed
-                      ? `Render failed with error: ${errorDetails || 'Runner failure'}. Check errorDetails to fix.`
-                      : `RENDER IN PROGRESS: Do not finish your response! Call get_task_status(jobId: "${jobId}") now to retrieve the completed video link for the user.`,
+                      : `CRITICAL ACTION REQUIRED: Video is still rendering on Cloud Runner! DO NOT reply to the user yet and DO NOT say you are waiting. You MUST immediately execute get_task_status(jobId: "${jobId}", waitForCompletion: true) right now until status is "completed"!`,
                   },
                   null,
                   2
@@ -411,9 +529,9 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         let isStill = false;
         let errorLogText: string | undefined;
         let workflowInfo: any = null;
-
         let stillBase64: string | undefined;
         let qcTelemetry: Record<string, any> | undefined;
+        let projectSourceAvailable = false;
 
         while (Date.now() - start < maxWaitMs) {
           const check = await checkReleaseAssetsOnGitHub(env, jobId);
@@ -422,6 +540,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           errorLogText = check.errorLogText;
           stillBase64 = check.stillBase64;
           qcTelemetry = check.qcTelemetry;
+          projectSourceAvailable = Boolean(check.projectSourceAvailable);
           if (ready || errorLogText) break;
 
           workflowInfo = await inspectGitHubWorkflowRun(env, jobId);
@@ -462,14 +581,17 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 streamUrl: isStill ? undefined : streamUrl,
                 assetUrl: videoUrl,
                 qcTelemetry: !isStill && ready ? qcTelemetry : undefined,
+                projectSourceAvailable: !isStill && ready ? projectSourceAvailable : undefined,
                 visionInspectionCriteria: isStill && ready ? VISION_FRAME_CRITERIA : undefined,
                 compilerErrorDetails: errorLogText,
                 cloudRunnerDiagnostics: workflowInfo,
                 message: ready
-                  ? (isStill ? 'Still frame is ready to inspect! Multimodal image block attached below.' : 'Video is completed and ready to watch inline or download!')
+                  ? isStill
+                    ? 'Preview image / Contact Sheet is ready! Inspect the attached image block using the Vision criteria above.'
+                    : 'Video is completed, mastered, and ready to watch or download!'
                   : isFailed
-                  ? 'Render job failed on GitHub Actions. Call inspect_task_logs or read compilerErrorDetails to see error trace, fix tsxCode and re-call remotion.'
-                  : `Job is actively rendering on GitHub Actions Cloud. Present URL to user; it tracks live progress and completes when ready!`,
+                  ? 'Render job failed on GitHub Actions. Call inspect_task_logs or read compilerErrorDetails to see error trace, fix tsxCode and re-call render_video.'
+                  : 'Job is actively rendering on GitHub Actions Cloud. Continue polling get_task_status(jobId, waitForCompletion: true) until completed.',
               },
               null,
               2
@@ -478,7 +600,6 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         ];
 
         if (isStill && ready && stillBase64) {
-          // Standard MCP Specification: type: "image", mimeType: "image/png", data: "<base64>"
           contentBlocks.push({
             type: 'image',
             data: stillBase64,
@@ -490,9 +611,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         return {
           jsonrpc: '2.0',
           id,
-          result: {
-            content: contentBlocks,
-          },
+          result: { content: contentBlocks },
         };
       }
 
@@ -512,7 +631,9 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                   {
                     jobId,
                     hasErrorLog: Boolean(check.errorLogText),
-                    compilerErrorDetails: check.errorLogText || 'No compile-time error log found. Runner may still be in progress or completed without syntax error.',
+                    compilerErrorDetails:
+                      check.errorLogText ||
+                      'No compile-time error log found. Runner may still be in progress or completed without syntax error.',
                     runnerConclusion: workflowInfo?.conclusion || workflowInfo?.status || 'unknown',
                     failedSteps: workflowInfo?.steps?.filter((s: any) => s.conclusion === 'failure') || [],
                   },
@@ -546,6 +667,33 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 ),
               },
             ],
+          },
+        };
+      }
+
+      if (toolName === 'get_project_source') {
+        const jobId = sanitizeJobId(String(args.jobId || ''));
+        const project = await fetchProjectSourceFromGitHub(env, jobId);
+        if (!project) {
+          return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: `Project source for jobId "${jobId}" was not found (jobs rendered before V7 did not archive project JSON).`,
+                },
+              ],
+            },
+          };
+        }
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [{ type: 'text', text: JSON.stringify(project, null, 2) }],
           },
         };
       }

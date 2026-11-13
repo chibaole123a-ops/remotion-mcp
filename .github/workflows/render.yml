@@ -50,6 +50,16 @@ on:
         required: false
         default: '0'
         type: string
+      stillFrames:
+        description: 'Comma-separated frame numbers for multi-frame Contact Sheet preview'
+        required: false
+        default: ''
+        type: string
+      audioMasteringBase64:
+        description: 'Base64 encoded JSON for FFmpeg studio audio mastering'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -128,17 +138,23 @@ jobs:
 
       - name: Render Video or Still with Remotion
         id: render_step
+        env:
+          JOB_ID: ${{ inputs.jobId }}
+          STILL_FRAME: ${{ inputs.stillFrame || '0' }}
+          STILL_FRAMES: ${{ inputs.stillFrames || '' }}
+          AUDIO_MASTERING_B64: ${{ inputs.audioMasteringBase64 || '' }}
+          VIDEO_TITLE: ${{ inputs.title }}
+          TSX_B64: ${{ inputs.tsxCodeBase64 }}
+          AUDIO_B64: ${{ inputs.audioConfigBase64 || '' }}
+          WIDTH: ${{ inputs.width }}
+          HEIGHT: ${{ inputs.height }}
+          FPS: ${{ inputs.fps }}
+          DURATION: ${{ inputs.durationInFrames }}
         run: |
           mkdir -p outputs
           set +e
           if [ "${{ inputs.mode }}" = "still" ]; then
-            npx remotion still src/remotion/index.ts DynamicVideo outputs/still-${{ inputs.jobId }}.png \
-              --frame=${{ inputs.stillFrame || '0' }} \
-              --scale=0.67 \
-              --public-dir=public \
-              --gl=swangle \
-              --log=error \
-              --chromium-options="--disable-dev-shm-usage --no-sandbox" 2> outputs/error-${{ inputs.jobId }}.txt
+            node scripts/render-preview-frames.mjs
             EXIT_CODE=$?
           else
             npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 \
@@ -162,7 +178,9 @@ jobs:
           else
             rm -f outputs/error-${{ inputs.jobId }}.txt
             if [ "${{ inputs.mode }}" != "still" ] && [ -f "outputs/video-${{ inputs.jobId }}.mp4" ]; then
-              JOB_ID="${{ inputs.jobId }}" node scripts/measure-video-qc.mjs || true
+              node scripts/master-video-audio.mjs || true
+              node scripts/measure-video-qc.mjs || true
+              node scripts/save-project-source.mjs || true
             fi
           fi
 
@@ -195,6 +213,9 @@ jobs:
           fi
           if [ -f "outputs/qc-${{ inputs.jobId }}.json" ]; then
             gh release upload "$TAG" "outputs/qc-${{ inputs.jobId }}.json" --clobber || true
+          fi
+          if [ -f "outputs/project-${{ inputs.jobId }}.json" ]; then
+            gh release upload "$TAG" "outputs/project-${{ inputs.jobId }}.json" --clobber || true
           fi
           if [ -f "outputs/still-${{ inputs.jobId }}.png" ]; then
             gh release upload "$TAG" "outputs/still-${{ inputs.jobId }}.png" --clobber

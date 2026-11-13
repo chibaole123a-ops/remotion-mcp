@@ -1,4 +1,23 @@
-export async function searchSoundtrackQuery(query: string, limit = 5): Promise<any[]> {
+async function verifyDirectAudioReachability(url: string): Promise<{ reachable: boolean; contentType?: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3500);
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      headers: { 'User-Agent': 'Remotion-Cloud-MCP-Studio/7.0' },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    const ct = res.headers.get('content-type') || undefined;
+    return { reachable: res.ok, contentType: ct };
+  } catch {
+    return { reachable: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function searchSoundtrackQuery(query: string, limit = 5, verifyLinks = true): Promise<any[]> {
   const results: any[] = [];
 
   // Source 1: YouTube Search
@@ -129,5 +148,37 @@ export async function searchSoundtrackQuery(query: string, limit = 5): Promise<a
     } catch {}
   }
 
-  return results.slice(0, Math.max(1, Math.min(15, limit)));
+  const sliced = results.slice(0, Math.max(1, Math.min(15, limit)));
+
+  if (!verifyLinks || sliced.length === 0) {
+    return sliced;
+  }
+
+  return await Promise.all(
+    sliced.map(async (track) => {
+      const isDirect = Boolean(track.directMp3);
+      const speechClashRisk =
+        track.sourceType === 'studio_cdn' || track.channel === 'Kevin MacLeod (Incompetech)'
+          ? 'low (instrumental studio track)'
+          : 'medium (verify volume ducking if track contains vocals)';
+
+      if (!isDirect) {
+        return {
+          ...track,
+          verifiedReachable: true,
+          speechClashRisk,
+          recommendedDuckingVolume: 'volume={(f) => ...} (0.12 - 0.18 during speech)',
+        };
+      }
+
+      const check = await verifyDirectAudioReachability(track.url);
+      return {
+        ...track,
+        verifiedReachable: check.reachable,
+        contentType: check.contentType,
+        speechClashRisk,
+        recommendedDuckingVolume: 'volume={(f) => ...} (0.12 - 0.18 during speech)',
+      };
+    })
+  );
 }

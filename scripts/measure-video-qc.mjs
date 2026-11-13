@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { execFileSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 const jobId = process.env.JOB_ID || '';
 const videoPath = `outputs/video-${jobId}.mp4`;
@@ -7,9 +7,10 @@ const qcOutPath = `outputs/qc-${jobId}.json`;
 
 function safeRun(cmd, args) {
   try {
-    return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const res = spawnSync(cmd, args, { encoding: 'utf8' });
+    return `${res.stdout || ''}\n${res.stderr || ''}`;
   } catch (err) {
-    return (err?.stdout || '') + '\n' + (err?.stderr || '');
+    return `${err?.stdout || ''}\n${err?.stderr || ''}`;
   }
 }
 

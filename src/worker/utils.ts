@@ -47,6 +47,28 @@ export function validateTsxCode(tsxCode: string, ctx: ValidationContext = {}): s
   return validateTsxComposition(tsxCode, { ...ctx, expectedMinFrames });
 }
 
+const STOPWORDS = new Set([
+  'và', 'là', 'của', 'có', 'trong', 'một', 'những', 'các', 'cho', 'được', 'với', 'khi',
+  'này', 'đó', 'để', 'như', 'từ', 'về', 'trên', 'đến', 'ra', 'vào', 'lại', 'đã', 'đang',
+  'the', 'and', 'for', 'that', 'with', 'from', 'this', 'into', 'are', 'was', 'were',
+]);
+
+export function extractAnchorKeywords(text: string, maxKeywords = 3): string[] {
+  const tokens = text
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3 && !STOPWORDS.has(t.toLowerCase()));
+
+  if (tokens.length === 0) return [];
+  const step = Math.max(1, Math.floor(tokens.length / maxKeywords));
+  const picks: string[] = [];
+  for (let i = 0; i < tokens.length && picks.length < maxKeywords; i += step) {
+    if (!picks.includes(tokens[i])) picks.push(tokens[i]);
+  }
+  return picks;
+}
+
 export function calculateSpeechTelemetry(
   rawScenes: any,
   defaultVoice = 'vi-VN-NamMinhNeural',
@@ -101,6 +123,7 @@ export function calculateSpeechTelemetry(
       durationInFrames,
       startFrame,
       endFrame,
+      anchorKeywords: extractAnchorKeywords(text, 3),
       audioFileName: `voice-${idx}.mp3`,
       usageCode: `<Sequence from={${startFrame}} durationInFrames={${durationInFrames}}><Audio src={staticFile("voice-${idx}.mp3")} volume={1} /></Sequence>`,
     };

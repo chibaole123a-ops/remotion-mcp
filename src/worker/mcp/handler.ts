@@ -123,13 +123,23 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
       if (toolName === 'search_visual_media') {
         const query = String(args.query || '').trim();
         const mediaType = (args.mediaType || 'all') as 'all' | 'image' | 'video';
+        const orientation = (['any', 'landscape', 'portrait', 'square'].includes(String(args.orientation))
+          ? String(args.orientation)
+          : 'any') as 'any' | 'landscape' | 'portrait' | 'square';
         const limit = Number(args.limit || 5);
         const attachVision = args.attachVisionThumbnails !== false;
 
-        const result = await searchVisualMedia(query, mediaType, limit, attachVision, {
-          pexelsKey: env.PEXELS_API_KEY,
-          pixabayKey: env.PIXABAY_API_KEY,
-        });
+        const result = await searchVisualMedia(
+          query,
+          mediaType,
+          limit,
+          attachVision,
+          {
+            pexelsKey: env.PEXELS_API_KEY,
+            pixabayKey: env.PIXABAY_API_KEY,
+          },
+          orientation
+        );
 
         const contentBlocks: any[] = [
           {
@@ -138,11 +148,12 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
               {
                 query: result.query,
                 mediaTypeFilter: result.mediaTypeFilter,
+                orientation,
                 totalFound: result.items.length,
                 visionThumbnailsAttached: result.imageBlocks.length,
                 items: result.items,
                 usageNotes:
-                  'Inspect attached image blocks with Vision before embedding. Use <Img src="<item.url>" /> for images or <OffthreadVideo src="<item.url>" /> for videos; the Cloud runner automatically pre-fetches them onto local SSD.',
+                  'Match each item with its attached Vision image block via item.visionImageIndex (0-based) before embedding. Use <Img src="<item.url>" /> for images or <OffthreadVideo src="<item.url>" /> for videos; the Cloud runner automatically pre-fetches them onto local SSD.',
               },
               null,
               2

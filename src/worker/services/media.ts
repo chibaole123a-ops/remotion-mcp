@@ -11,6 +11,7 @@ export interface VisualMediaItem {
   height?: number;
   license?: string;
   visionAttached?: boolean;
+  visionImageIndex?: number;
 }
 
 export interface VisualMediaSearchResult {
@@ -214,11 +215,13 @@ async function searchPexelsMedia(
   query: string,
   mediaType: 'all' | 'image' | 'video',
   limit: number,
-  apiKey?: string
+  apiKey?: string,
+  orientation: 'any' | 'landscape' | 'portrait' | 'square' = 'any'
 ): Promise<VisualMediaItem[]> {
   if (!apiKey) return [];
   const items: VisualMediaItem[] = [];
   const headers = { Authorization: apiKey, 'User-Agent': USER_AGENT };
+  const orientParam = orientation !== 'any' ? `&orientation=${orientation}` : '';
 
   const fetchList = async (url: string) => {
     const controller = new AbortController();
@@ -235,12 +238,13 @@ async function searchPexelsMedia(
 
   if (mediaType === 'all' || mediaType === 'video') {
     const vData: any = await fetchList(
-      `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${Math.min(5, limit)}&orientation=landscape`
+      `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${Math.min(5, limit)}${orientParam}`
     );
     for (const v of vData?.videos || []) {
+      const mp4s = (v.video_files || []).filter((f: any) => f.file_type === 'video/mp4' && f?.link);
       const hd =
-        (v.video_files || []).find((f: any) => f.file_type === 'video/mp4' && Number(f.width) >= 1280 && Number(f.width) <= 1920) ||
-        (v.video_files || []).find((f: any) => f.file_type === 'video/mp4');
+        mp4s.find((f: any) => Math.max(Number(f.width || 0), Number(f.height || 0)) >= 1280 && Math.max(Number(f.width || 0), Number(f.height || 0)) <= 1920) ||
+        mp4s[0];
       if (!hd?.link) continue;
       items.push({
         id: `pexels-vid-${v.id}`,
@@ -258,7 +262,7 @@ async function searchPexelsMedia(
 
   if ((mediaType === 'all' || mediaType === 'image') && items.length < limit) {
     const pData: any = await fetchList(
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${Math.min(5, limit)}`
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${Math.min(5, limit)}${orientParam}`
     );
     for (const p of pData?.photos || []) {
       const url = p?.src?.large2x || p?.src?.original;
@@ -283,10 +287,13 @@ async function searchPixabayMedia(
   query: string,
   mediaType: 'all' | 'image' | 'video',
   limit: number,
-  apiKey?: string
+  apiKey?: string,
+  orientation: 'any' | 'landscape' | 'portrait' | 'square' = 'any'
 ): Promise<VisualMediaItem[]> {
   if (!apiKey) return [];
   const items: VisualMediaItem[] = [];
+  const pbOrient =
+    orientation === 'landscape' ? '&orientation=horizontal' : orientation === 'portrait' ? '&orientation=vertical' : '';
 
   if (mediaType === 'all' || mediaType === 'video') {
     const vData = await fetchJsonWithTimeout(
@@ -296,13 +303,19 @@ async function searchPixabayMedia(
     for (const hit of vData?.hits || []) {
       const vid = hit?.videos?.large || hit?.videos?.medium;
       if (!vid?.url) continue;
+      // Use real video frame thumbnail (videos.*.thumbnail or Vimeo CDN picture_id), never userImageURL (uploader avatar)
+      const frameThumb =
+        vid?.thumbnail ||
+        hit?.videos?.medium?.thumbnail ||
+        hit?.videos?.small?.thumbnail ||
+        (hit?.picture_id ? `https://i.vimeocdn.com/video/${hit.picture_id}_640x360.jpg` : undefined);
       items.push({
         id: `pixabay-vid-${hit.id}`,
         source: 'pixabay',
         mediaType: 'video',
         title: hit.tags || `Pixabay Video ${hit.id}`,
         url: vid.url,
-        thumbnailUrl: hit.userImageURL || undefined,
+        thumbnailUrl: frameThumb,
         width: vid.width,
         height: vid.height,
         license: 'Pixabay Content License',
@@ -312,7 +325,7 @@ async function searchPixabayMedia(
 
   if ((mediaType === 'all' || mediaType === 'image') && items.length < limit) {
     const pData = await fetchJsonWithTimeout(
-      `https://pixabay.com/api/?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}&image_type=photo&min_width=1200&per_page=${Math.min(5, limit)}`,
+      `https://pixabay.com/api/?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}&image_type=photo&min_width=800${pbOrient}&per_page=${Math.min(5, limit)}`,
       5000
     );
     for (const hit of pData?.hits || []) {
@@ -401,7 +414,7 @@ async function searchWikipediaMedia(query: string, limit: number): Promise<Visua
       const apiUrl =
         `https://${lang}.wikipedia.org/w/api.php?action=query&generator=search` +
         `&gsrsearch=${encodeURIComponent(query)}&gsrlimit=${Math.min(5, limit + 1)}` +
-        `&prop=pageimages&pithumbsize=1400&piprop=original|thumbnail&format=json&origin=*`;
+        `&prop=pageimages&pithumbsize=480&piprop=original|thumbnail&format=json&origin=*`;
       const data = await fetchJsonWithTimeout(apiUrl, 4500);
       const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
       const found: VisualMediaItem[] = [];
@@ -444,13 +457,14 @@ export async function searchVisualMedia(
   mediaType: 'all' | 'image' | 'video' = 'all',
   limit = 5,
   attachVisionThumbnails = true,
-  apiKeys?: { pexelsKey?: string; pixabayKey?: string }
+  apiKeys?: { pexelsKey?: string; pixabayKey?: string },
+  orientation: 'any' | 'landscape' | 'portrait' | 'square' = 'any'
 ): Promise<VisualMediaSearchResult> {
-  const clampedLimit = Math.max(1, Math.min(8, limit));
+  const clampedLimit = Math.max(1, Math.min(10, limit));
 
   const tasks: Array<Promise<VisualMediaItem[]>> = [
-    ...(apiKeys?.pexelsKey ? [searchPexelsMedia(query, mediaType, clampedLimit, apiKeys.pexelsKey)] : []),
-    ...(apiKeys?.pixabayKey ? [searchPixabayMedia(query, mediaType, clampedLimit, apiKeys.pixabayKey)] : []),
+    ...(apiKeys?.pexelsKey ? [searchPexelsMedia(query, mediaType, clampedLimit, apiKeys.pexelsKey, orientation)] : []),
+    ...(apiKeys?.pixabayKey ? [searchPixabayMedia(query, mediaType, clampedLimit, apiKeys.pixabayKey, orientation)] : []),
     searchWikimediaMedia(query, mediaType, clampedLimit),
     searchNasaMedia(query, mediaType, Math.min(4, clampedLimit)),
   ];
@@ -499,19 +513,70 @@ export async function searchVisualMedia(
     }
   }
 
-  // Rank HD landscape assets first so full-frame Ken Burns shots never pixelate
-  const scoreResolution = (it: VisualMediaItem) => {
+  // Rank by query relevance + 4K/HD resolution + requested orientation fit, then interleave round-robin across sources for genuine diversity
+  const queryTerms = query
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 2);
+
+  const scoreMediaItem = (it: VisualMediaItem): number => {
     const w = Number(it.width || 0);
     const h = Number(it.height || 0);
-    const isLandscape = w > 0 && h > 0 ? w >= h : true;
-    return (it.mediaType === 'video' ? 40 : 0) + (w >= 1200 ? 30 : w >= 800 ? 15 : 0) + (isLandscape ? 10 : 0);
+    const maxDim = Math.max(w, h);
+    const titleLower = (it.title || '').toLowerCase();
+
+    let matchScore = 0;
+    for (const term of queryTerms) {
+      if (titleLower.includes(term)) matchScore += 12;
+    }
+    matchScore = Math.min(36, matchScore);
+
+    const resScore = maxDim >= 3800 ? 36 : maxDim >= 1900 ? 28 : maxDim >= 1200 ? 22 : maxDim >= 800 ? 12 : 0;
+
+    let orientScore = 0;
+    if (w > 0 && h > 0) {
+      const ratio = w / h;
+      if (orientation === 'portrait') orientScore = h > w ? 22 : -15;
+      else if (orientation === 'landscape') orientScore = w >= h ? 18 : -15;
+      else if (orientation === 'square') orientScore = ratio >= 0.8 && ratio <= 1.25 ? 18 : 0;
+      else orientScore = ratio >= 0.45 && ratio <= 2.4 ? 6 : 0;
+    }
+
+    const videoBonus = mediaType === 'all' && it.mediaType === 'video' ? 8 : 0;
+    return matchScore + resScore + orientScore + videoBonus;
   };
-  const merged = pool.sort((a, b) => scoreResolution(b) - scoreResolution(a)).slice(0, clampedLimit);
+
+  // Group and sort each source internally, then round-robin pick so one provider never monopolizes the result list
+  const bySource = new Map<string, VisualMediaItem[]>();
+  for (const item of pool) {
+    const bucket = bySource.get(item.source) || [];
+    bucket.push(item);
+    bySource.set(item.source, bucket);
+  }
+  for (const bucket of bySource.values()) {
+    bucket.sort((a, b) => scoreMediaItem(b) - scoreMediaItem(a));
+  }
+
+  const queues = [...bySource.values()].sort((a, b) => scoreMediaItem(b[0]) - scoreMediaItem(a[0]));
+  const merged: VisualMediaItem[] = [];
+  let round = 0;
+  while (merged.length < clampedLimit) {
+    let pushedInRound = false;
+    for (const q of queues) {
+      if (round < q.length && merged.length < clampedLimit) {
+        merged.push(q[round]);
+        pushedInRound = true;
+      }
+    }
+    if (!pushedInRound) break;
+    round++;
+  }
 
   const imageBlocks: Array<{ type: 'image'; data: string; mimeType: string; mime_type: string }> = [];
 
   if (attachVisionThumbnails && merged.length > 0) {
-    const thumbTargets = merged.slice(0, 4);
+    const thumbTargets = merged.slice(0, 6);
     const fetchedThumbs = await Promise.all(
       thumbTargets.map(async (item) => {
         if (!item.thumbnailUrl) return null;
@@ -523,6 +588,7 @@ export async function searchVisualMedia(
     for (const entry of fetchedThumbs) {
       if (entry?.img) {
         entry.item.visionAttached = true;
+        entry.item.visionImageIndex = imageBlocks.length;
         imageBlocks.push({
           type: 'image',
           data: entry.img.data,

@@ -75,15 +75,21 @@ export const TOOLS = [
           default: 'all',
           description: 'Filter by image, video, or all.',
         },
+        orientation: {
+          type: 'string',
+          enum: ['any', 'landscape', 'portrait', 'square'],
+          default: 'any',
+          description: 'Preferred framing orientation (use "portrait" for 9:16 TikTok/Shorts/Reels or "landscape" for 16:9).',
+        },
         limit: {
           type: 'number',
           default: 5,
-          description: 'Max results to return (1-8, default 5).',
+          description: 'Max diverse results across sources (1-10, default 5).',
         },
         attachVisionThumbnails: {
           type: 'boolean',
           default: true,
-          description: 'Attach up to 4 thumbnails directly as Vision image blocks for inspection.',
+          description: 'Attach up to 6 thumbnails/video frames directly as Vision image blocks (matched via visionImageIndex).',
         },
       },
       required: ['query'],

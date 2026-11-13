@@ -8,6 +8,8 @@ import {
   Sequence,
   AbsoluteFill,
   Audio,
+  Img,
+  random,
   staticFile,
 } from 'remotion';
 import rawTelemetry from './audio-telemetry.json';
@@ -1129,5 +1131,250 @@ export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({
         })}
       </div>
     </div>
+  );
+};
+
+// ============================================================================
+// OPTIONAL HIGH-CRAFT CINEMA PRIMITIVES (V7.6)
+// Style-agnostic, deterministic building blocks available to import from ./audio-sync
+// ============================================================================
+
+export interface SceneMilestone {
+  sceneIndex: number;
+  value: number;
+}
+
+/**
+ * Interpolate a numeric metric (depth, year, price, score, temperature) across scenes so it
+ * ramps smoothly at scene entry and dwells near each scene's milestone while that scene is spoken
+ * (never drifting far ahead of the narration).
+ */
+export function interpolateSceneMilestones(
+  globalFrame: number,
+  milestones: SceneMilestone[],
+  transitionFrames = 18
+): number {
+  if (!Array.isArray(milestones) || milestones.length === 0) return 0;
+  if (milestones.length === 1) return milestones[0].value;
+
+  const sorted = [...milestones].sort((a, b) => a.sceneIndex - b.sceneIndex);
+  const inputRange: number[] = [];
+  const outputRange: number[] = [];
+
+  for (let i = 0; i < sorted.length; i++) {
+    const m = sorted[i];
+    const timing = getSceneTiming(m.sceneIndex);
+    const startF = Math.max(0, timing.startFrame);
+    const endF = Math.max(startF + 6, timing.endFrame);
+    const ramp = Math.min(Math.max(4, transitionFrames), Math.max(4, Math.floor((endF - startF) * 0.35)));
+    const settleF = startF + ramp;
+
+    if (i === 0) {
+      inputRange.push(startF);
+      outputRange.push(m.value);
+      if (endF - 2 > startF) {
+        inputRange.push(endF - 2);
+        outputRange.push(m.value);
+      }
+      continue;
+    }
+
+    const prevEnd = inputRange[inputRange.length - 1];
+    const safeSettle = Math.max(prevEnd + 1, settleF);
+    inputRange.push(safeSettle);
+    outputRange.push(m.value);
+
+    const safeDwellEnd = Math.max(safeSettle + 1, endF - 2);
+    if (i < sorted.length - 1 && safeDwellEnd > safeSettle) {
+      inputRange.push(safeDwellEnd);
+      outputRange.push(m.value);
+    }
+  }
+
+  return interpolate(globalFrame, inputRange, outputRange, {
+    easing: Easing.inOut(Easing.cubic),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+}
+
+export interface KenBurnsMediaProps {
+  src: string;
+  zoomFrom?: number;
+  zoomTo?: number;
+  panX?: number;
+  panY?: number;
+  opacity?: number;
+  filter?: string;
+  scrimGradient?: string;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Full-bleed photographic layer with smooth deterministic Ken Burns motion and optional readability scrim.
+ */
+export const KenBurnsMedia: React.FC<KenBurnsMediaProps> = ({
+  src,
+  zoomFrom = 1.04,
+  zoomTo = 1.15,
+  panX = -18,
+  panY = -10,
+  opacity = 1,
+  filter = 'contrast(1.06) saturate(1.08)',
+  scrimGradient = 'linear-gradient(90deg, rgba(2,6,23,0.82) 0%, rgba(2,6,23,0.45) 55%, rgba(2,6,23,0.68) 100%)',
+  style,
+}) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const dur = Math.max(2, durationInFrames);
+
+  const scale = interpolate(frame, [0, dur], [zoomFrom, zoomTo], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const tx = interpolate(frame, [0, dur], [0, panX], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const ty = interpolate(frame, [0, dur], [0, panY], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', opacity, pointerEvents: 'none', ...style }}>
+      <Img
+        src={src}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          filter,
+          transform: `scale(${scale}) translate(${tx}px, ${ty}px)`,
+        }}
+      />
+      {scrimGradient ? <AbsoluteFill style={{ background: scrimGradient }} /> : null}
+    </AbsoluteFill>
+  );
+};
+
+export interface AtmosphericParticlesProps {
+  count?: number;
+  color?: string;
+  secondaryColor?: string;
+  direction?: 'up' | 'down' | 'drift';
+  speed?: number;
+  minSize?: number;
+  maxSize?: number;
+  opacity?: number;
+  glow?: boolean;
+  seedPrefix?: string;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Deterministic seeded floating particle field (dust motes, underwater plankton, cosmos sparks).
+ */
+export const AtmosphericParticles: React.FC<AtmosphericParticlesProps> = ({
+  count = 36,
+  color = '#38bdf8',
+  secondaryColor = '#e2e8f0',
+  direction = 'up',
+  speed = 0.25,
+  minSize = 2,
+  maxSize = 6,
+  opacity = 0.55,
+  glow = true,
+  seedPrefix = 'atmo',
+  style,
+}) => {
+  const frame = useCurrentFrame();
+  const particles = useMemo(
+    () =>
+      Array.from({ length: Math.max(1, Math.min(120, count)) }, (_, i) => ({
+        id: i,
+        x: random(`${seedPrefix}-x-${i}`) * 100,
+        y: random(`${seedPrefix}-y-${i}`) * 100,
+        size: minSize + random(`${seedPrefix}-s-${i}`) * Math.max(0.5, maxSize - minSize),
+        speedMul: 0.5 + random(`${seedPrefix}-v-${i}`) * 0.9,
+        phase: random(`${seedPrefix}-p-${i}`) * Math.PI * 2,
+        hue: random(`${seedPrefix}-c-${i}`) > 0.5 ? color : secondaryColor,
+      })),
+    [count, color, secondaryColor, minSize, maxSize, seedPrefix]
+  );
+
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', pointerEvents: 'none', ...style }}>
+      {particles.map((p) => {
+        const delta = frame * speed * p.speedMul;
+        const rawY =
+          direction === 'up'
+            ? (p.y - delta) % 100
+            : direction === 'down'
+            ? (p.y + delta) % 100
+            : p.y + Math.sin(frame / 45 + p.phase) * 3;
+        const yPct = rawY < 0 ? rawY + 100 : rawY;
+        const xWobble = Math.sin(frame / 30 + p.phase) * 1.4;
+        const pulse = 0.55 + 0.45 * Math.sin(frame / 22 + p.phase);
+
+        return (
+          <div
+            key={p.id}
+            style={{
+              position: 'absolute',
+              left: `${p.x + xWobble}%`,
+              top: `${yPct}%`,
+              width: p.size,
+              height: p.size,
+              borderRadius: '50%',
+              backgroundColor: p.hue,
+              opacity: opacity * pulse,
+              boxShadow: glow ? `0 0 ${p.size * 3}px ${p.hue}` : undefined,
+            }}
+          />
+        );
+      })}
+    </AbsoluteFill>
+  );
+};
+
+export interface CinematicLightSweepProps {
+  color?: string;
+  opacity?: number;
+  angle?: number;
+  cycleFrames?: number;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Bounded atmospheric light beam / volumetric sweep that runs seamlessly across any timeline length.
+ */
+export const CinematicLightSweep: React.FC<CinematicLightSweepProps> = ({
+  color = 'rgba(56, 189, 248, 0.22)',
+  opacity = 0.75,
+  angle = -18,
+  cycleFrames = 240,
+  style,
+}) => {
+  const frame = useCurrentFrame();
+  const safeCycle = Math.max(30, cycleFrames);
+  const t = (frame % safeCycle) / safeCycle;
+  const xPct = interpolate(t, [0, 1], [-35, 115]);
+
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', pointerEvents: 'none', opacity, ...style }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: '-25%',
+          bottom: '-25%',
+          left: `${xPct}%`,
+          width: '28%',
+          background: `linear-gradient(90deg, transparent 0%, ${color} 50%, transparent 100%)`,
+          transform: `rotate(${angle}deg)`,
+          filter: 'blur(28px)',
+        }}
+      />
+    </AbsoluteFill>
   );
 };

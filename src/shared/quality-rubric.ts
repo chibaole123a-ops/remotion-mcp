@@ -13,10 +13,11 @@ export interface ValidationContext {
 }
 
 export const VISION_FRAME_CRITERIA = [
-  '1. Safe-Zone & No Overlap: Verify all titles, captions, and focal graphics sit cleanly inside safe margins (6-8% landscape; 12% top / 18-22% bottom / 12% right for 9:16 portrait) with no unintended clipping or overlapping text.',
-  '2. 1-Second Legibility & Contrast: Verify primary text is immediately readable against the background (sufficient luminance contrast, scrim/backdrop if placed over busy media).',
-  '3. Focal Hierarchy & Spatial Depth: Verify the eye lands on one clear Focal Point and the frame exhibits visual depth (foreground/midground/background layering, lighting, or intentional minimalism) rather than a flat slide.',
-  '4. Palette & Mood Cohesion: Verify colors, typography, and visual assets feel unified and faithful to your chosen creative direction.',
+  '1. Safe-Zone & Legibility: Verify all titles, captions, HUDs, and focal graphics sit cleanly inside safe margins with strong luminance contrast (scrim/backdrop over busy media) and crisp diacritics.',
+  '2. Spoken-vs-Shown Semantic Sync: Compare each frame against the narration spoken at that timestamp — verify live counters, gauges, labels, and visual metaphors match the active scene context rather than running ahead of speech.',
+  '3. Cross-Scene Visual Parity & Depth: Compare the weakest frame in the Contact Sheet against the strongest frame — verify every scene maintains balanced depth (media, 3D, lighting, particles, or intentional craft) with no half-rich / half-flat dropoff.',
+  '4. Focal Hierarchy & Kinetic Evolution: Verify each beat leads the eye to one unmistakable Focal Point and evolves visually across scenes.',
+  '5. Polish Gate: If ANY frame falls below bar on Semantic Sync, Visual Parity, or Legibility, apply 1 targeted refinement pass + preview_frames before dispatching full render_video.',
 ] as const;
 
 export const DIRECTOR_EVALUATION_FRAMEWORK = `
@@ -227,7 +228,89 @@ export function validateTsxComposition(tsxCode: string, ctx: ValidationContext =
     );
   }
 
+  // --- Universal Compositional Balance & Semantic Sync Analyzers (Style-Agnostic) ---
+  const wordsPerPageMatch = activeCode.match(/<ProKaraokeCaptions\b[^>]*\bwordsPerPage\s*=\s*\{\s*(\d+)\s*\}/);
+  if (hasVietnameseText && wordsPerPageMatch && Number(wordsPerPageMatch[1]) >= 6) {
+    warnings.push(
+      `ADVISORY: \`<ProKaraokeCaptions wordsPerPage={${wordsPerPageMatch[1]}} />\` on Vietnamese narration may split phrases awkwardly across lines. Prefer \`wordsPerPage={4}\` or \`5\` for tighter reading rhythm.`
+    );
+  }
+
+  // Global counter/HUD drift detector: linear interpolation across scene boundaries without milestone dwelling
+  const usesGlobalCounter =
+    /(?:getSceneTiming|getSegmentStartFrame|getTelemetryTotalFrames)/.test(activeCode) &&
+    /(?:toLocaleString|Math\.round|\.toFixed)/.test(activeCode) &&
+    /\binterpolate\s*\(/.test(activeCode) &&
+    !/\binterpolateSceneMilestones\s*\(/.test(activeCode);
+  if (usesGlobalCounter && hasVoiceoverScenes && ctx.audioConfig!.scenes!.length >= 2) {
+    warnings.push(
+      'DIRECTOR_NOTE: Dynamic numeric counter/HUD detected across multiple scenes without `interpolateSceneMilestones(...)`. Verify in `preview_frames` that live numbers dwell near the active scene milestone instead of drifting ahead of the spoken narration (or use `interpolateSceneMilestones` from `./audio-sync`).'
+    );
+  }
+
+  // Per-scene visual parity analyzer across <SyncedScene sceneIndex={i}> blocks
+  const sceneAnalysis = analyzeSceneVisualParity(activeCode);
+  if (sceneAnalysis.richScenes.length > 0 && sceneAnalysis.flatScenes.length > 0) {
+    warnings.push(
+      `DIRECTOR_NOTE: Visual density parity check — Scene(s) [${sceneAnalysis.richScenes.join(', ')}] use real media/3D/FX layers while Scene(s) [${sceneAnalysis.flatScenes.join(', ')}] rely solely on flat DOM/SVG shapes. Verify on your Contact Sheet that those lighter scenes match the visual richness of the rest of the film (consider adding <KenBurnsMedia>, <Img>, <ThreeCanvas>, <LightLeak>, or <CinematicLightSweep> if unintentional).`
+    );
+  }
+
   return warnings;
+}
+
+/**
+ * Inspect `<SyncedScene sceneIndex={i}>` blocks (including single-component children like `<Scene1 />`)
+ * to detect uneven visual-depth richness across scenes without prescribing any specific aesthetic.
+ */
+export function analyzeSceneVisualParity(activeCode: string): {
+  totalSyncedScenes: number;
+  richScenes: number[];
+  flatScenes: number[];
+} {
+  const depthLayerRegex =
+    /<\s*(?:Img|OffthreadVideo|ThreeCanvas|KenBurnsMedia|LightLeak|CameraMotionBlur|Trail|AtmosphericParticles|CinematicLightSweep)\b|\bevolvePath\s*\(/;
+  const syncedRegex = /<SyncedScene\b[^>]*\bsceneIndex\s*=\s*\{\s*(\d+)\s*\}[^>]*>([\s\S]*?)<\/SyncedScene>/g;
+
+  const richScenes: number[] = [];
+  const flatScenes: number[] = [];
+  let totalSyncedScenes = 0;
+
+  let m: RegExpExecArray | null;
+  while ((m = syncedRegex.exec(activeCode)) !== null) {
+    totalSyncedScenes++;
+    const idx = Number(m[1]);
+    const body = m[2] || '';
+    let combinedSource = body;
+
+    // Resolve local custom component tags used inside <SyncedScene> (e.g., <Scene1Twilight />)
+    const compMatches = body.matchAll(/<([A-Z][A-Za-z0-9_]*)\b/g);
+    for (const cm of compMatches) {
+      const compName = cm[1];
+      const defStart = activeCode.search(
+        new RegExp(`(?:const|function)\\s+${compName}\\b`)
+      );
+      if (defStart >= 0) {
+        // Grab up to the next top-level component or export (~3500 chars bounded slice)
+        const nextComp = activeCode
+          .slice(defStart + 20)
+          .search(/\n(?:export\s+(?:const|function)|const\s+[A-Z][A-Za-z0-9_]*\s*(?::|=)|function\s+[A-Z][A-Za-z0-9_]*\s*\()/);
+        const defSlice =
+          nextComp > 0
+            ? activeCode.slice(defStart, defStart + 20 + nextComp)
+            : activeCode.slice(defStart, defStart + 3500);
+        combinedSource += '\n' + defSlice;
+      }
+    }
+
+    if (depthLayerRegex.test(combinedSource)) {
+      richScenes.push(idx);
+    } else {
+      flatScenes.push(idx);
+    }
+  }
+
+  return { totalSyncedScenes, richScenes, flatScenes };
 }
 
 export interface QualityEvaluationInput {
@@ -266,15 +349,19 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
     Boolean(volumeFnRefMatch) &&
     new RegExp(`\\b(?:const|let|function)\\s+${volumeFnRefMatch![1]}\\b`).test(activeCode);
 
+  const sceneParity = analyzeSceneVisualParity(activeCode);
+
   const detectedSignals = {
     usesSpringPhysics: /\bspring\s*\(/.test(activeCode),
     usesInterpolation: /\binterpolate\s*\(/.test(activeCode),
+    usesMilestoneSync: /\binterpolateSceneMilestones\s*\(/.test(activeCode),
     uses3DOrCanvas: /ThreeCanvas|@remotion\/three/.test(activeCode),
     usesTransitions: /TransitionSeries|@remotion\/transitions/.test(activeCode),
     usesStoryboardCanvas: /StoryboardCanvas|SyncedScene/.test(activeCode),
     usesCaptions: /ProKaraokeCaptions|WordHighlightCaptions/.test(activeCode),
     usesDynamicAudioDucking: hasInlineDucking || hasNamedDucking,
     usesGoogleFontsOrCustomFont: /loadFont|@remotion\/google-fonts|@remotion\/fonts/.test(activeCode),
+    sceneVisualParity: sceneParity,
   };
 
   return {

@@ -311,6 +311,27 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const telemetry = calculateSpeechTelemetry(scenesInput, voice, fps, rate);
         const inputArray = Array.isArray(args.scenes) ? args.scenes : [];
 
+        const sampleIndices =
+          telemetry.scenes.length <= 6
+            ? telemetry.scenes.map((_: any, i: number) => i)
+            : [
+                0,
+                Math.floor((telemetry.scenes.length - 1) * 0.33),
+                Math.floor((telemetry.scenes.length - 1) * 0.66),
+                telemetry.scenes.length - 1,
+              ];
+        const previewFrameTranscripts = [...new Set<number>(sampleIndices)].map((i) => {
+          const s = telemetry.scenes[i];
+          const midFrame = Math.round(s.startFrame + Math.max(10, s.durationInFrames * 0.48));
+          return {
+            frame: Math.min(Math.max(15, midFrame), Math.max(15, telemetry.totalDurationInFrames - 10)),
+            sceneIndex: s.sceneIndex,
+            sceneName: inputArray[i]?.sceneName || undefined,
+            spokenText: s.text,
+          };
+        });
+        const recommendedPreviewFrames = previewFrameTranscripts.map((p) => p.frame);
+
         return {
           jsonrpc: '2.0',
           id,
@@ -339,6 +360,8 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       audioFile: s.audioFileName,
                       usageSnippet: `<SyncedScene sceneIndex={${s.sceneIndex}}>{/* trigger beats with getWordTrigger(${s.sceneIndex}, "${s.anchorKeywords?.[0] || ''}", frame) */}</SyncedScene>`,
                     })),
+                    recommendedPreviewFrames,
+                    previewFrameTranscripts,
                     audioConfigPayload: telemetry.audioConfigPayload,
                     directorQualityReminder: {
                       targetDurationInFrames: telemetry.totalDurationInFrames,
@@ -349,7 +372,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                     },
                     directorCodeBlueprint: DIRECTOR_CODE_BLUEPRINT,
                     instructionsForAgent:
-                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames).\nNEXT MANDATORY STEPS:\n1) Call search_visual_media + search_soundtrack (prefer directMp3: true) + search_sfx.\n2) Write DynamicVideo.tsx following directorCodeBlueprint above (Continuous World + SyncedScene transitionStyle + getWordTrigger + @remotion/google-fonts/BeVietnamPro + ProKaraokeCaptions + dynamic BGM ducking).\n3) Call evaluate_video_quality -> fix any CRITICAL/ADVISORY.\n4) Call preview_frames with 4 keyframes and inspect the Contact Sheet via get_task_status BEFORE render_video(durationInFrames: ${telemetry.totalDurationInFrames}, audioConfig).`,
+                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames).\nNEXT MANDATORY STEPS:\n1) Call search_visual_media + search_soundtrack (prefer directMp3: true) + search_sfx.\n2) Write DynamicVideo.tsx following directorCodeBlueprint above (Continuous World + SyncedScene transitionStyle + getWordTrigger + @remotion/google-fonts/BeVietnamPro + ProKaraokeCaptions + dynamic BGM ducking).\n3) Call evaluate_video_quality -> fix any CRITICAL/ADVISORY.\n4) Call preview_frames(frames: ${JSON.stringify(recommendedPreviewFrames)}, audioConfig: audioConfigPayload) and inspect the Contact Sheet via get_task_status against previewFrameTranscripts (1-pass polish if needed) BEFORE render_video(durationInFrames: ${telemetry.totalDurationInFrames}, audioConfig).`,
                   },
                   null,
                   2
@@ -443,6 +466,26 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           const stillUrl = `${baseUrl}/still/${jobId}.png${secretQuery}`;
           const downloadUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
 
+          let frameNarrationContext: Array<{ frame: number; sceneIndex: number; spokenText: string }> | undefined;
+          if (Array.isArray(audioConfig?.scenes) && audioConfig.scenes.length > 0) {
+            const previewTelemetry = calculateSpeechTelemetry(
+              audioConfig.scenes,
+              audioConfig.voice || 'vi-VN-NamMinhNeural',
+              fps,
+              audioConfig.rate || '+0%'
+            );
+            frameNarrationContext = resolvedFrames.map((f: number) => {
+              const matched =
+                previewTelemetry.scenes.find((s: any) => f >= s.startFrame && f < s.endFrame) ||
+                previewTelemetry.scenes[previewTelemetry.scenes.length - 1];
+              return {
+                frame: f,
+                sceneIndex: matched.sceneIndex,
+                spokenText: matched.text,
+              };
+            });
+          }
+
           return {
             jsonrpc: '2.0',
             id,
@@ -455,6 +498,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       status: 'frame_dispatched_to_cloud',
                       jobId,
                       capturedFrames: resolvedFrames,
+                      frameNarrationContext,
                       contactSheetMode: resolvedFrames.length > 1,
                       specs: `${width}x${height} @ ${fps}fps`,
                       previewImageUrl: stillUrl,
@@ -462,7 +506,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       qualityAdvisories: qualityAdvisories.length > 0 ? qualityAdvisories : undefined,
                       visionInspectionCriteria: VISION_FRAME_CRITERIA,
                       instructionsForAgent:
-                        `Frame capture job for frame(s) [${resolvedFrames.join(', ')}] dispatched to Cloud runner! Call get_task_status(jobId: "${jobId}", waitForCompletion: true) to retrieve the ${resolvedFrames.length > 1 ? 'Contact Sheet' : 'still frame'} into your Vision context.`,
+                        `Frame capture job for frame(s) [${resolvedFrames.join(', ')}] dispatched to Cloud runner! Call get_task_status(jobId: "${jobId}", waitForCompletion: true) to retrieve the ${resolvedFrames.length > 1 ? 'Contact Sheet' : 'still frame'}, compare every frame against frameNarrationContext + visionInspectionCriteria, and apply 1 polish pass if any frame looks flat or out-of-sync before render_video.`,
                     },
                     null,
                     2
@@ -637,7 +681,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 cloudRunnerDiagnostics: workflowInfo,
                 message: ready
                   ? isStill
-                    ? 'Preview image / Contact Sheet is ready! Inspect the attached image block using the Vision criteria above.'
+                    ? 'Preview Contact Sheet is ready! Audit every tile against visionInspectionCriteria + frameNarrationContext: (1) verify numbers/HUDs match the spoken sentence at that frame, (2) compare the weakest tile vs strongest tile for balanced visual depth across all scenes, (3) do 1 polish edit + preview_frames if any tile feels under-crafted or out-of-sync, otherwise proceed to render_video.'
                     : finalSheetBase64
                     ? 'Video is completed, mastered (-14 LUFS), and ready! Review the attached 2x2 final MP4 Contact Sheet (showing real CTC subtitles) against Vision criteria before delivering the watch link.'
                     : 'Video is completed, mastered, and ready to watch or download!'

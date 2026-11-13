@@ -33,8 +33,9 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
   - \`<SceneAnchoredSequence sceneIndex={i} offsetFrames={0} durationInFrames={45} fromEnd={false}>\` — anchors SFX & cues dynamically to real telemetry scene boundaries!
   - \`getSceneTiming(i)\`, \`getSegmentStartFrame(i)\`, \`getSceneFrames(i)\` & \`getTelemetryTotalFrames()\` — inspect exact measured scene & total frame counts dynamically inside BGM ducking curves.
   - \`<MasterAudioTrack voiceVolume={1} bgmSrc={...} bgmVolume={0.2} enableDucking={true} />\` — mounts \`voiceover.mp3\` cleanly (NEVER also mount \`voice-i.mp3\` when using \`<MasterAudioTrack />\`).
-  - \`<ProKaraokeCaptions stylePreset="minimal" | "hormozi" | "glow" | "cyber" fontFamily={...} fontSize={42} bottomOffset={64} wordsPerPage={5} highlightColor="#facc15" />\` — real MMS-300M CTC acoustic word-level captions (\`"minimal"\` renders clean borderless cinema subtitles with zero dark footer box).
+  - \`<ProKaraokeCaptions stylePreset="minimal" | "hormozi" | "glow" | "cyber" fontFamily={...} fontSize={42} bottomOffset={64} wordsPerPage={5} highlightColor="#facc15" />\` — real MMS-300M CTC acoustic word-level captions (\`"minimal"\` renders clean borderless cinema subtitles with zero dark footer box; \`wordsPerPage={4}\` or \`5\` keeps Vietnamese phrases crisp).
   - \`getWordTrigger(sceneIndex, "keyword", frame, transitionDurationFrames)\` & \`getWordProgress(sceneIndex, "startWord", "endWord", frame)\` — trigger animations on the exact spoken word!
+  - **Optional Cinema Primitives (\`./audio-sync\`)**: \`<KenBurnsMedia src={...} scrimGradient={...} />\`, \`<AtmosphericParticles count={36} color="#38bdf8" direction="up" | "down" | "drift" />\`, \`<CinematicLightSweep color="..." />\`, and \`interpolateSceneMilestones(globalFrame, [{ sceneIndex: 0, value: 0 }, { sceneIndex: 1, value: 200 }])\` (ensures live numbers/HUDs dwell around each scene's milestone while spoken instead of drifting ahead).
 - **Vietnamese Typography**: Always import \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'\` (PascalCase — NEVER kebab-case like \`be-vietnam-pro\`) when script contains Vietnamese diacritics and pass \`fontFamily\` to \`<ProKaraokeCaptions />\`.
 - **3D & Vector**: \`@remotion/three\` (\`ThreeCanvas\`), \`@react-three/fiber\`, \`@react-three/drei\`, \`@remotion/shapes\`, \`@remotion/paths\` (\`evolvePath\`, \`interpolatePath\`), \`@remotion/skia\`, \`@remotion/lottie\`, \`@remotion/rive\`.
 - **Transitions, Blur & Light**: \`@remotion/transitions\` (\`TransitionSeries\`, \`slide\`, \`fade\`, \`wipe\`, \`flip\`), \`@remotion/motion-blur\` (\`CameraMotionBlur\`, \`Trail\`), \`@remotion/light-leaks\` (\`LightLeak\`), \`@remotion/noise\` (\`noise2D\`, \`noise3D\`).
@@ -58,8 +59,8 @@ ${DIRECTOR_EVALUATION_FRAMEWORK}
 
 export const DIRECTOR_CODE_BLUEPRINT = `
 ### 🎬 VERIFIED REMOTION STUDIO BLUEPRINT (USE DIRECTLY IN DynamicVideo.tsx)
-1. **Mandatory Pro Workflow Order**:
-   \`plan_storyboard_timeline\` → \`search_visual_media\` + \`search_soundtrack\` (prefer \`directMp3: true\`) + \`search_sfx\` → write \`DynamicVideo.tsx\` → \`evaluate_video_quality\` → \`preview_frames([start, mid1, mid2, end])\` + \`get_task_status\` (visually inspect Contact Sheet!) → \`render_video\` → \`get_task_status\` (inspect final MP4 Contact Sheet + QC).
+1. **Mandatory Pro Workflow Order (with 1-Pass Polish Gate)**:
+   \`plan_storyboard_timeline\` → \`search_visual_media\` + \`search_soundtrack\` (prefer \`directMp3: true\`) + \`search_sfx\` → write \`DynamicVideo.tsx\` → \`evaluate_video_quality\` → \`preview_frames(recommendedPreviewFrames, audioConfig)\` + \`get_task_status\` (audit Spoken-vs-Shown sync & cross-scene depth parity; refine 1 pass if any tile is weaker/out-of-sync!) → \`render_video\` → \`get_task_status\` (inspect final MP4 Contact Sheet + QC).
 
 2. **Exact Verified Imports & Props (\`./audio-sync\`)**:
    - \`SyncedScene\`: \`sceneIndex\`, \`transitionStyle="zoom-through" | "whip-pan" | "wipe" | "fade" | "cut"\`, \`overlapFrames={10}\`, \`enterFrames={12}\`, \`exitFrames={12}\`
@@ -67,7 +68,7 @@ export const DIRECTOR_CODE_BLUEPRINT = `
    - \`ChapterProgressSpine\`: optional — omit by default so there are no top/bottom duration progress bars; use ONLY if the user's topic/request benefits from chapter progress indicators.
    - \`MasterAudioTrack\`: \`voiceVolume={1}\` (OR pass \`bgmSrc={...} bgmVolume={0.2} enableDucking={true}\` directly; NEVER mount \`voice-X.mp3\` alongside \`MasterAudioTrack\`)
    - \`SceneAnchoredSequence\`: \`sceneIndex\`, \`offsetFrames={0}\`, \`durationInFrames={45}\`, \`fromEnd={false}\` (anchors SFX to exact speech boundaries)
-   - Helpers: \`getWordTrigger(sceneIndex, "keyword", localFrame, 20)\`, \`getWordProgress(sceneIndex, "startWord", "endWord", localFrame)\`, \`getSceneTiming(sceneIndex)\`, \`getTelemetryTotalFrames()\`
+   - Helpers & Cinema Primitives: \`getWordTrigger\`, \`getWordProgress\`, \`getSceneTiming\`, \`getTelemetryTotalFrames\`, \`interpolateSceneMilestones\`, \`KenBurnsMedia\`, \`AtmosphericParticles\`, \`CinematicLightSweep\`
 
 3. **Vietnamese Font & Strictly Increasing \`interpolate\` Safety**:
    - Load font for Vietnamese captions & titles (note PascalCase module name): \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily: bodyFont } = loadFont();\`

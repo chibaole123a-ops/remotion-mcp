@@ -4,6 +4,7 @@ import { spawnSync } from 'child_process';
 const jobId = process.env.JOB_ID || '';
 const videoPath = `outputs/video-${jobId}.mp4`;
 const qcOutPath = `outputs/qc-${jobId}.json`;
+const finalSheetPath = `outputs/final-sheet-${jobId}.jpg`;
 
 function safeRun(cmd, args) {
   try {
@@ -97,6 +98,26 @@ function main() {
 
   fs.writeFileSync(qcOutPath, JSON.stringify(qcReport, null, 2));
   console.log(`✅ Measured QC telemetry written to ${qcOutPath}`);
+
+  // Extract a compact 2x2 visual audit Contact Sheet directly from the final mastered MP4 (with real CTC captions)
+  const dur = qcReport.durationSec || 0;
+  if (dur > 0.5) {
+    try {
+      const timestamps = [0.08, 0.36, 0.64, 0.90].map((r) => Math.max(0.1, Number((dur * r).toFixed(2))));
+      const inputArgs = timestamps.flatMap((t) => ['-ss', String(t), '-i', videoPath]);
+      const filter = '[0:v][1:v][2:v][3:v]xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0,scale=960:-2[out]';
+      spawnSync(
+        'ffmpeg',
+        ['-y', ...inputArgs, '-filter_complex', filter, '-map', '[out]', '-frames:v', '1', '-q:v', '5', finalSheetPath],
+        { encoding: 'utf8' }
+      );
+      if (fs.existsSync(finalSheetPath) && fs.statSync(finalSheetPath).size > 2048) {
+        console.log(`🖼️ Generated final MP4 visual audit sheet -> ${finalSheetPath}`);
+      }
+    } catch (sheetErr) {
+      console.warn('Final audit sheet extraction skipped:', sheetErr?.message || sheetErr);
+    }
+  }
 }
 
 try {

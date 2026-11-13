@@ -131,6 +131,26 @@ export async function listReleaseVideosOnGitHub(env: Env, baseUrl: string) {
   }
 }
 
+async function fetchReleaseAssetBase64(repo: string, assetName: string): Promise<string | undefined> {
+  try {
+    const assetUrl = `https://github.com/${repo}/releases/download/videos-store/${assetName}`;
+    const res = await fetch(assetUrl, {
+      headers: { 'User-Agent': USER_AGENT },
+      redirect: 'follow',
+    });
+    if (!res.ok) return undefined;
+    const arrBuf = await res.arrayBuffer();
+    const bytes = new Uint8Array(arrBuf);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function checkReleaseAssetsOnGitHub(
   env: Env,
   jobId: string
@@ -139,6 +159,7 @@ export async function checkReleaseAssetsOnGitHub(
   stillReady: boolean;
   errorLogText?: string;
   stillBase64?: string;
+  finalSheetBase64?: string;
   qcTelemetry?: Record<string, any>;
   projectSourceAvailable?: boolean;
 }> {
@@ -153,30 +174,15 @@ export async function checkReleaseAssetsOnGitHub(
 
     const videoReady = assets.some((a) => a.name === `video-${jobId}.mp4` && a.state === 'uploaded');
     const stillAsset = assets.find((a) => a.name === `still-${jobId}.png` && a.state === 'uploaded');
+    const finalSheetAsset = assets.find((a) => a.name === `final-sheet-${jobId}.jpg` && a.state === 'uploaded');
     const stillReady = Boolean(stillAsset);
     const errAsset = assets.find((a) => a.name === `error-${jobId}.txt` && a.state === 'uploaded');
     const qcAsset = assets.find((a) => a.name === `qc-${jobId}.json` && a.state === 'uploaded');
     const projectSourceAvailable = assets.some((a) => a.name === `project-${jobId}.json` && a.state === 'uploaded');
 
-    let stillBase64: string | undefined;
-    if (stillAsset) {
-      try {
-        const stillUrl = `https://github.com/${repo}/releases/download/videos-store/still-${jobId}.png`;
-        const stillRes = await fetch(stillUrl, {
-          headers: { 'User-Agent': USER_AGENT },
-          redirect: 'follow',
-        });
-        if (stillRes.ok) {
-          const arrBuf = await stillRes.arrayBuffer();
-          const bytes = new Uint8Array(arrBuf);
-          let binary = '';
-          for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          stillBase64 = btoa(binary);
-        }
-      } catch {}
-    }
+    const stillBase64 = stillAsset ? await fetchReleaseAssetBase64(repo, `still-${jobId}.png`) : undefined;
+    const finalSheetBase64 =
+      videoReady && finalSheetAsset ? await fetchReleaseAssetBase64(repo, `final-sheet-${jobId}.jpg`) : undefined;
 
     let errorLogText: string | undefined;
     if (errAsset) {
@@ -204,7 +210,7 @@ export async function checkReleaseAssetsOnGitHub(
       } catch {}
     }
 
-    return { videoReady, stillReady, errorLogText, stillBase64, qcTelemetry, projectSourceAvailable };
+    return { videoReady, stillReady, errorLogText, stillBase64, finalSheetBase64, qcTelemetry, projectSourceAvailable };
   } catch {
     return { videoReady: false, stillReady: false };
   }

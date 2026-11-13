@@ -5,8 +5,8 @@ export const TOOLS = [
   {
     name: 'plan_storyboard_timeline',
     description:
-      'STAGE 1 — STORYBOARD & AUDIO TIMELINE ORCHESTRATOR: Compute frame-accurate speech timing, scene boundaries (startFrame, durationInFrames), audioConfigPayload, and suggested anchorKeywords for getWordTrigger() sync.\n' +
-      'Call this BEFORE writing DynamicVideo.tsx whenever your video includes voiceover narration or structured scenes.',
+      'STAGE 1 — STORYBOARD, TIMELINE & CODE BLUEPRINT ORCHESTRATOR: Compute frame-accurate speech timing, scene boundaries (startFrame, durationInFrames), audioConfigPayload, anchorKeywords, AND the verified Continuous-World DynamicVideo.tsx Blueprint.\n' +
+      'Mandatory workflow: 1) plan_storyboard_timeline -> 2) search_visual_media + search_soundtrack + search_sfx -> 3) evaluate_video_quality -> 4) preview_frames (4 keyframes) + get_task_status Vision check -> 5) render_video -> 6) get_task_status final audit.',
     inputSchema: {
       type: 'object',
       properties: {

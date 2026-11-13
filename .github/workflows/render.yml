@@ -242,6 +242,9 @@ jobs:
           if [ -f "outputs/project-${{ inputs.jobId }}.json" ]; then
             gh release upload "$TAG" "outputs/project-${{ inputs.jobId }}.json" --clobber || true
           fi
+          if [ -f "outputs/final-sheet-${{ inputs.jobId }}.jpg" ]; then
+            gh release upload "$TAG" "outputs/final-sheet-${{ inputs.jobId }}.jpg" --clobber || true
+          fi
           if [ -f "outputs/video-${{ inputs.jobId }}.mp4" ]; then
             gh release upload "$TAG" "outputs/video-${{ inputs.jobId }}.mp4" --clobber
           fi

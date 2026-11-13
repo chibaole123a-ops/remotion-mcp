@@ -1,5 +1,6 @@
 import type { Env } from "../types.js";
 import { TOOLS } from "./tools.js";
+import { ECOSYSTEM_DOCS, DIRECTOR_CODE_BLUEPRINT } from "./prompts.js";
 import {
   randomJobId,
   sanitizeJobId,
@@ -45,11 +46,54 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         protocolVersion: '2024-11-05',
         capabilities: {
           tools: {},
+          prompts: { listChanged: false },
         },
         serverInfo: {
           name: 'remotion-cloud-mcp',
-          version: '7.1.0',
+          version: '7.4.0',
         },
+      },
+    };
+  }
+
+  if (method === 'prompts/list') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        prompts: [
+          {
+            name: 'director_workflow',
+            description: 'Complete 6-stage AI Video Director workflow, Remotion API blueprint, Vietnamese fonts, and Continuous World code pattern.',
+          },
+        ],
+      },
+    };
+  }
+
+  if (method === 'prompts/get') {
+    const promptName = params?.name;
+    if (promptName !== 'director_workflow') {
+      return {
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32602, message: `Unknown prompt: ${promptName}` },
+      };
+    }
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        description: 'Remotion Cloud Director Playbook & Code Blueprint',
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: `${ECOSYSTEM_DOCS}\n\n${DIRECTOR_CODE_BLUEPRINT}`,
+            },
+          },
+        ],
       },
     };
   }
@@ -303,8 +347,9 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       creativeFreedom:
                         'Design any visual style, pacing, 2D/3D medium, or camera flow that best serves your narrative intent.',
                     },
+                    directorCodeBlueprint: DIRECTOR_CODE_BLUEPRINT,
                     instructionsForAgent:
-                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames). Next: source real media/audio via search_visual_media, search_soundtrack, and search_sfx, then pass durationInFrames: ${telemetry.totalDurationInFrames} and audioConfig to render_video.`,
+                      `Storyboard & Timeline verified! Total duration: ${telemetry.totalDurationSec}s (${telemetry.totalDurationInFrames} frames).\nNEXT MANDATORY STEPS:\n1) Call search_visual_media + search_soundtrack (prefer directMp3: true) + search_sfx.\n2) Write DynamicVideo.tsx following directorCodeBlueprint above (Continuous World + SyncedScene transitionStyle + getWordTrigger + @remotion/google-fonts/be-vietnam-pro + ProKaraokeCaptions + dynamic BGM ducking).\n3) Call evaluate_video_quality -> fix any CRITICAL/ADVISORY.\n4) Call preview_frames with 4 keyframes and inspect the Contact Sheet via get_task_status BEFORE render_video(durationInFrames: ${telemetry.totalDurationInFrames}, audioConfig).`,
                   },
                   null,
                   2
@@ -530,6 +575,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         let errorLogText: string | undefined;
         let workflowInfo: any = null;
         let stillBase64: string | undefined;
+        let finalSheetBase64: string | undefined;
         let qcTelemetry: Record<string, any> | undefined;
         let projectSourceAvailable = false;
 
@@ -539,6 +585,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           isStill = check.stillReady;
           errorLogText = check.errorLogText;
           stillBase64 = check.stillBase64;
+          finalSheetBase64 = check.finalSheetBase64;
           qcTelemetry = check.qcTelemetry;
           projectSourceAvailable = Boolean(check.projectSourceAvailable);
           if (ready || errorLogText) break;
@@ -582,12 +629,17 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                 assetUrl: videoUrl,
                 qcTelemetry: !isStill && ready ? qcTelemetry : undefined,
                 projectSourceAvailable: !isStill && ready ? projectSourceAvailable : undefined,
-                visionInspectionCriteria: isStill && ready ? VISION_FRAME_CRITERIA : undefined,
+                visionInspectionCriteria:
+                  (isStill && ready) || (!isStill && ready && finalSheetBase64)
+                    ? VISION_FRAME_CRITERIA
+                    : undefined,
                 compilerErrorDetails: errorLogText,
                 cloudRunnerDiagnostics: workflowInfo,
                 message: ready
                   ? isStill
                     ? 'Preview image / Contact Sheet is ready! Inspect the attached image block using the Vision criteria above.'
+                    : finalSheetBase64
+                    ? 'Video is completed, mastered (-14 LUFS), and ready! Review the attached 2x2 final MP4 Contact Sheet (showing real CTC subtitles) against Vision criteria before delivering the watch link.'
                     : 'Video is completed, mastered, and ready to watch or download!'
                   : isFailed
                   ? 'Render job failed on GitHub Actions. Call inspect_task_logs or read compilerErrorDetails to see error trace, fix tsxCode and re-call render_video.'
@@ -605,6 +657,13 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
             data: stillBase64,
             mimeType: 'image/png',
             mime_type: 'image/png',
+          });
+        } else if (!isStill && ready && finalSheetBase64) {
+          contentBlocks.push({
+            type: 'image',
+            data: finalSheetBase64,
+            mimeType: 'image/jpeg',
+            mime_type: 'image/jpeg',
           });
         }
 

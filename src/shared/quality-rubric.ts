@@ -167,6 +167,45 @@ export function validateTsxComposition(tsxCode: string, ctx: ValidationContext =
         'ADVISORY: Detected background `<Audio>` with static volume >= 0.35 alongside active voiceover scenes. Prefer dynamic ducking `volume={(f) => ...}` or `0.12–0.22` so BGM does not mask narration.'
       );
     }
+
+    const usesCaptionsComp = /ProKaraokeCaptions|WordHighlightCaptions/.test(activeCode);
+    if (!usesCaptionsComp) {
+      warnings.push(
+        'ADVISORY: Voiceover scenes detected without `<ProKaraokeCaptions />` or `<WordHighlightCaptions />`. Mount `<ProKaraokeCaptions stylePreset="hormozi" />` to render MMS-300M CTC word-synced subtitles.'
+      );
+    }
+
+    if (
+      ctx.audioConfig!.scenes!.length >= 2 &&
+      !/\bgetWordTrigger\s*\(|\bgetWordProgress\s*\(|transitionStyle\s*=/.test(activeCode)
+    ) {
+      warnings.push(
+        'DIRECTOR_NOTE: Multi-scene composition detected without `transitionStyle` or `getWordTrigger()` word-synced sub-beats. Use `<SyncedScene transitionStyle="zoom-through" | "whip-pan" | "wipe">` and trigger kinetic beats inside each scene to avoid a static slide feel.'
+      );
+    }
+  }
+
+  // Detect Vietnamese diacritics without an explicit Vietnamese-safe font import
+  const combinedScriptText = [
+    activeCode,
+    ...(ctx.audioConfig?.scenes || []).map((s) => (typeof s === 'string' ? s : s?.text || '')),
+  ].join('\n');
+  const hasVietnameseText =
+    /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(combinedScriptText);
+  if (hasVietnameseText && !/@remotion\/google-fonts|BeVietnamPro|Noto\s+Sans/i.test(activeCode)) {
+    warnings.push(
+      'ADVISORY: Vietnamese text detected without `@remotion/google-fonts/be-vietnam-pro` or `BeVietnamPro`. Import `{ loadFont } from "@remotion/google-fonts/be-vietnam-pro"` and pass `fontFamily` to `<ProKaraokeCaptions />` so Vietnamese diacritics render cleanly.'
+    );
+  }
+
+  // Guard against Remotion interpolate() crashing on equal/non-monotonic telemetry boundaries
+  const interpDynamicMatch = activeCode.match(
+    /\binterpolate\s*\([^,]+,\s*\[[^\]]*(?:getSegmentStartFrame|getSceneTiming|getTelemetryTotalFrames)[^\]]*(?:getSegmentStartFrame|getSceneTiming|getTelemetryTotalFrames)[^\]]*\]/
+  );
+  if (interpDynamicMatch && !/Math\.max\s*\(/.test(interpDynamicMatch[0])) {
+    warnings.push(
+      'ADVISORY: Multiple dynamic telemetry calls appear inside a single `interpolate()` inputRange without `Math.max(...)`. Ensure adjacent `inputRange` values are strictly increasing (`curr > prev`) so Remotion never throws a non-monotonic range error.'
+    );
   }
 
   if (
@@ -276,6 +315,8 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
     nextRecommendedAction:
       criticalIssues.length > 0
         ? 'Fix the CRITICAL technical invariant(s) above before rendering.'
-        : 'Hard invariants passed! Optionally run `preview_frame` on 1-2 key frames to visually inspect composition/contrast, or proceed directly to `render_video`.',
+        : advisories.length > 0
+        ? 'Address the ADVISORIES above (font, captions, interpolate monotonicity, transitions), then run `preview_frames` with 4 keyframes before `render_video`.'
+        : 'All technical & craft checks passed! Next: call `preview_frames` with 4 key frame indices (e.g. start, mid-scenes, outro) and inspect the Contact Sheet via `get_task_status` BEFORE calling `render_video`.',
   };
 }

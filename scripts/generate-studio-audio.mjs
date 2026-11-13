@@ -1,7 +1,9 @@
 import fs from 'fs';
 import { execSync } from 'child_process';
 
-const audioB64 = process.env.AUDIO_B64 || '';
+const audioB64 = fs.existsSync('outputs/hydrated-audio.json')
+  ? fs.readFileSync('outputs/hydrated-audio.json').toString('base64')
+  : (process.env.AUDIO_B64 || '');
 const fps = Number(process.env.FPS || 30);
 const defaultDurationFrames = Number(process.env.DURATION || 600);
 

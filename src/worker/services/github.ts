@@ -18,7 +18,7 @@ function githubHeaders(token: string, extra?: Record<string, string>): Record<st
 }
 
 export interface RenderDispatchOptions {
-  mode?: 'video' | 'still';
+  mode?: 'video' | 'still' | 'stitch';
   stillFrame?: number;
   stillFrames?: number[];
   audioMastering?: {
@@ -26,6 +26,71 @@ export interface RenderDispatchOptions {
     targetLufs?: number;
     truePeakDbtp?: number;
   };
+  stitchConfig?: {
+    chapters: Array<{
+      jobId?: string;
+      videoUrl?: string;
+      title?: string;
+    }>;
+    transition?: 'crossfade' | 'cut';
+    fadeDurationSec?: number;
+    targetWidth?: number;
+    targetHeight?: number;
+    targetFps?: number;
+  };
+}
+
+async function ensureVideosStoreRelease(env: Env): Promise<{ id: number; upload_url: string; assets: any[] }> {
+  const repo = getRepo(env);
+  const tagRes = await fetch(`https://api.github.com/repos/${repo}/releases/tags/videos-store`, {
+    headers: githubHeaders(env.GITHUB_TOKEN),
+  });
+  if (tagRes.ok) {
+    return (await tagRes.json()) as { id: number; upload_url: string; assets: any[] };
+  }
+  const createRes = await fetch(`https://api.github.com/repos/${repo}/releases`, {
+    method: 'POST',
+    headers: githubHeaders(env.GITHUB_TOKEN, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      tag_name: 'videos-store',
+      name: 'Rendered Videos Storage',
+      body: 'Automated storage for Remotion MCP rendered MP4 files and job payloads',
+    }),
+  });
+  if (!createRes.ok) {
+    const errText = await createRes.text();
+    throw new Error(`Failed to ensure videos-store release (${createRes.status}): ${errText}`);
+  }
+  return (await createRes.json()) as { id: number; upload_url: string; assets: any[] };
+}
+
+export async function uploadReleaseJsonAsset(env: Env, assetName: string, data: unknown): Promise<string> {
+  const repo = getRepo(env);
+  const release = await ensureVideosStoreRelease(env);
+  const existing = (release.assets || []).find((a: any) => a.name === assetName);
+  if (existing?.id) {
+    await fetch(`https://api.github.com/repos/${repo}/releases/assets/${existing.id}`, {
+      method: 'DELETE',
+      headers: githubHeaders(env.GITHUB_TOKEN),
+    });
+  }
+
+  const uploadBase = release.upload_url.replace(/\{.*$/, '');
+  const uploadUrl = `${uploadBase}?name=${encodeURIComponent(assetName)}`;
+  const bodyStr = JSON.stringify(data);
+
+  const upRes = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: githubHeaders(env.GITHUB_TOKEN, {
+      'Content-Type': 'application/json; charset=utf-8',
+    }),
+    body: bodyStr,
+  });
+  if (!upRes.ok) {
+    const errText = await upRes.text();
+    throw new Error(`Failed to upload payload asset ${assetName} (${upRes.status}): ${errText}`);
+  }
+  return assetName;
 }
 
 export async function dispatchGitHubRender(
@@ -38,7 +103,7 @@ export async function dispatchGitHubRender(
   width: number,
   height: number,
   audioConfig: any,
-  modeOrOpts: 'video' | 'still' | RenderDispatchOptions = 'video',
+  modeOrOpts: 'video' | 'still' | 'stitch' | RenderDispatchOptions = 'video',
   stillFrame = 0
 ) {
   const opts: RenderDispatchOptions =
@@ -53,6 +118,23 @@ export async function dispatchGitHubRender(
       ? opts.stillFrames.join(',')
       : '';
   const masteringJson = opts.audioMastering ? JSON.stringify(opts.audioMastering) : '';
+
+  const tsxCodeB64 = tsxCode ? toBase64Utf8(tsxCode) : '';
+  const audioConfigB64 = toBase64Utf8(JSON.stringify(audioConfig || {}));
+  const audioMasteringB64 = masteringJson ? toBase64Utf8(masteringJson) : '';
+  const inlineTotalChars = tsxCodeB64.length + audioConfigB64.length + audioMasteringB64.length;
+
+  // Offload large long-video payloads (or stitch manifests) to GitHub Release asset to bypass the 65KB workflow_dispatch limit
+  let payloadAssetName = '';
+  const shouldOffload = mode === 'stitch' || Boolean(opts.stitchConfig) || inlineTotalChars > 36000;
+  if (shouldOffload) {
+    payloadAssetName = await uploadReleaseJsonAsset(env, `payload-${jobId}.json`, {
+      tsxCode,
+      audioConfig: audioConfig || {},
+      audioMastering: opts.audioMastering || null,
+      stitchConfig: opts.stitchConfig || null,
+    });
+  }
 
   const repo = getRepo(env);
   const res = await fetch(
@@ -72,13 +154,14 @@ export async function dispatchGitHubRender(
           fps: String(fps),
           width: String(width),
           height: String(height),
-          tsxCodeBase64: toBase64Utf8(tsxCode),
-          audioConfigBase64: toBase64Utf8(JSON.stringify(audioConfig || {})),
+          tsxCodeBase64: shouldOffload ? '' : tsxCodeB64,
+          audioConfigBase64: shouldOffload ? '' : audioConfigB64,
           callbackUrl: '',
           mode,
           stillFrame: String(resolvedStillFrame),
           stillFrames: stillFramesCsv,
-          audioMasteringBase64: masteringJson ? toBase64Utf8(masteringJson) : '',
+          audioMasteringBase64: shouldOffload ? '' : audioMasteringB64,
+          payloadAssetName,
         },
       }),
     }
@@ -88,6 +171,8 @@ export async function dispatchGitHubRender(
     const errText = await res.text();
     throw new Error(`GitHub Actions dispatch error (${res.status}): ${errText}`);
   }
+
+  return { payloadOffloaded: shouldOffload, payloadAssetName: payloadAssetName || undefined };
 }
 
 export async function listReleaseVideosOnGitHub(env: Env, baseUrl: string) {

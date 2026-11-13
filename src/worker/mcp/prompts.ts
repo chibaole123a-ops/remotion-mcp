@@ -24,6 +24,9 @@ Even from a 1-sentence prompt, operate like a **Professional Video Director & Ed
    - Dispatch \`render_video\` (with \`audioMastering\` enabled by default for automatic FFmpeg two-pass \`-14 LUFS\` normalization) and poll \`get_task_status(jobId, waitForCompletion: true)\` until completed.
 6. **Iterative Editing (\`get_project_source\`)**:
    - If the user asks to refine an existing video, call \`get_project_source(jobId)\` to load its exact \`tsxCode\` and \`audioConfig\` and iterate surgically.
+7. **Long-Form Video Strategy (> 4–30+ minutes)**:
+   - Large \`tsxCode\`/\`audioConfig\` payloads (> 36 KB) are automatically offloaded safely beyond GitHub's 65 KB dispatch limit.
+   - For videos longer than ~4 minutes, **split into 2–3 minute focused chapters** (\`Chapter 1\`, \`Chapter 2\`, ...), render each cleanly via \`render_video\`, and combine them with \`stitch_video_chapters\` (auto-normalizes resolution/fps, adds smooth \`crossfade\`, and masters the full track to \`-14 LUFS\`).
 
 ## 📦 INSTALLED REMOTION PACKAGES & HELPERS:
 - **Core (\`remotion\`)**: \`useCurrentFrame()\`, \`useVideoConfig()\`, \`interpolate(..., { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })\`, \`spring({ frame, fps, config })\`, \`interpolateColors()\`, \`AbsoluteFill\`, \`Sequence\`, \`Series\`, \`Img\`, \`OffthreadVideo\`, \`Audio\`, \`staticFile()\`, \`random("seed")\`, \`Easing\`.

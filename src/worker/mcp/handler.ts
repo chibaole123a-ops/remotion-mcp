@@ -17,7 +17,7 @@ import {
   fetchProjectSourceFromGitHub,
 } from "../services/github.js";
 import { searchSoundtrackQuery } from "../services/music.js";
-import { searchVisualMedia, searchSfxCatalog, verifyExternalAsset } from "../services/media.js";
+import { searchVisualMedia, searchSfxCatalog, verifyExternalAsset, validatePublicMediaUrl } from "../services/media.js";
 
 function normalizePreviewFrames(args: any): number[] | null {
   if (Array.isArray(args?.frames) && args.frames.length > 0) {
@@ -830,6 +830,134 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           result: {
             isError: !verified.verified,
             content,
+          },
+        };
+      }
+
+      if (toolName === 'stitch_video_chapters') {
+        const rawChapters = Array.isArray(args.chapters) ? args.chapters : [];
+        if (rawChapters.length < 2 || rawChapters.length > 25) {
+          return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: `stitch_video_chapters requires between 2 and 25 chapters (received ${rawChapters.length}).`,
+                },
+              ],
+            },
+          };
+        }
+
+        const sanitizedChapters: Array<{ jobId?: string; videoUrl?: string; title?: string }> = [];
+        for (let i = 0; i < rawChapters.length; i++) {
+          const ch = rawChapters[i] || {};
+          const chJobId = ch.jobId ? sanitizeJobId(String(ch.jobId)) : undefined;
+          const chVideoUrl = ch.videoUrl ? String(ch.videoUrl).trim() : undefined;
+
+          if (!chJobId && !chVideoUrl) {
+            return {
+              jsonrpc: '2.0',
+              id,
+              result: {
+                isError: true,
+                content: [{ type: 'text', text: `Chapter #${i + 1} must specify either "jobId" or "videoUrl".` }],
+              },
+            };
+          }
+          if (chVideoUrl) {
+            const urlCheck = validatePublicMediaUrl(chVideoUrl);
+            if (!urlCheck.ok) {
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  isError: true,
+                  content: [{ type: 'text', text: `Chapter #${i + 1} invalid videoUrl: ${urlCheck.reason}` }],
+                },
+              };
+            }
+          }
+          sanitizedChapters.push({
+            ...(chJobId ? { jobId: chJobId } : {}),
+            ...(chVideoUrl ? { videoUrl: chVideoUrl } : {}),
+            ...(ch.title ? { title: String(ch.title).slice(0, 120) } : {}),
+          });
+        }
+
+        const stitchJobId = randomJobId();
+        const title = String(args.title || 'Stitched Long-Form Video').slice(0, 120);
+        const transition = args.transition === 'cut' ? 'cut' : 'crossfade';
+        const fadeDurationSec = Math.max(0.15, Math.min(1.5, Number(args.fadeDurationSec ?? 0.5)));
+        const targetWidth = args.width ? Math.max(360, Math.min(3840, Number(args.width))) : 1920;
+        const targetHeight = args.height ? Math.max(360, Math.min(3840, Number(args.height))) : 1080;
+        const targetFps = args.fps ? Math.max(15, Math.min(60, Number(args.fps))) : 30;
+        const audioMastering =
+          args.audioMastering && typeof args.audioMastering === 'object'
+            ? {
+                enabled: args.audioMastering.enabled !== false,
+                targetLufs: Number(args.audioMastering.targetLufs ?? -14),
+                truePeakDbtp: Number(args.audioMastering.truePeakDbtp ?? -1.5),
+              }
+            : { enabled: true, targetLufs: -14, truePeakDbtp: -1.5 };
+
+        await dispatchGitHubRender(
+          env,
+          stitchJobId,
+          title,
+          '',
+          0,
+          targetFps,
+          targetWidth,
+          targetHeight,
+          {},
+          {
+            mode: 'stitch',
+            audioMastering,
+            stitchConfig: {
+              chapters: sanitizedChapters,
+              transition,
+              fadeDurationSec,
+              targetWidth,
+              targetHeight,
+              targetFps,
+            },
+          }
+        );
+
+        const watchPageUrl = `${baseUrl}/watch/${stitchJobId}${secretQuery}`;
+        const streamUrl = `${baseUrl}/video/${stitchJobId}.mp4${secretQuery}`;
+        const videoUrl = `https://github.com/${repo}/releases/download/videos-store/video-${stitchJobId}.mp4`;
+
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: 'stitching_on_cloud',
+                    jobId: stitchJobId,
+                    title,
+                    chaptersCount: sanitizedChapters.length,
+                    transition,
+                    fadeDurationSec: transition === 'crossfade' ? fadeDurationSec : 0,
+                    targetSpecs: `${targetWidth}x${targetHeight} @ ${targetFps}fps`,
+                    watchPageUrl,
+                    streamUrl,
+                    assetUrl: videoUrl,
+                    instructionsForAgent: `Chapter stitching dispatched to Cloud Runner! Immediately poll get_task_status(jobId: "${stitchJobId}", waitForCompletion: true) until status is "completed", then inspect the final Contact Sheet and share the watch link with the user.`,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
           },
         };
       }

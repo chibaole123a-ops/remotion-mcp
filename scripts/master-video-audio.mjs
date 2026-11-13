@@ -2,7 +2,9 @@ import fs from 'fs';
 import { execFileSync, spawnSync } from 'child_process';
 
 const jobId = process.env.JOB_ID || '';
-const masteringB64 = process.env.AUDIO_MASTERING_B64 || '';
+const masteringB64 = fs.existsSync('outputs/hydrated-mastering.json')
+  ? fs.readFileSync('outputs/hydrated-mastering.json').toString('base64')
+  : (process.env.AUDIO_MASTERING_B64 || '');
 const videoPath = `outputs/video-${jobId}.mp4`;
 const masteredTmp = `outputs/video-${jobId}.mastered.mp4`;
 

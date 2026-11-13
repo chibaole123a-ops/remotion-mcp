@@ -1,6 +1,8 @@
 import fs from 'fs';
 
-const tsxB64 = process.env.TSX_B64 || '';
+const tsxB64 = fs.existsSync('outputs/hydrated-tsx.txt')
+  ? fs.readFileSync('outputs/hydrated-tsx.txt').toString('base64')
+  : (process.env.TSX_B64 || '');
 const durationEnv = Number(process.env.DURATION || 600);
 const fpsEnv = Number(process.env.FPS || 30);
 const widthEnv = Number(process.env.WIDTH || 1920);

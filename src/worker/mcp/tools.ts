@@ -374,4 +374,61 @@ export const TOOLS = [
       openWorldHint: true,
     },
   },
+  {
+    name: 'stitch_video_chapters',
+    description:
+      'STAGE 6 — LONG-FORM VIDEO CHAPTER STITCHER (10–30+ MIN PIPELINE): Seamlessly combine 2 to 25 individually rendered chapters (by jobId or public MP4 URL) into one long-form mastered MP4 with optional smooth video/audio crossfades, uniform resolution/fps normalization, and -14 LUFS loudness mastering.\n' +
+      'For videos longer than ~4 minutes, render focused 2–3 minute chapters via render_video so every chapter keeps peak visual craft, then merge them here.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Final title for the stitched long-form video.',
+        },
+        chapters: {
+          type: 'array',
+          description: 'Ordered list of 2 to 25 chapters. Provide jobId (from completed render_video) or videoUrl.',
+          items: {
+            type: 'object',
+            properties: {
+              jobId: { type: 'string', description: 'Completed chapter jobId in videos-store.' },
+              videoUrl: { type: 'string', description: 'Optional public direct MP4 URL.' },
+              title: { type: 'string', description: 'Optional chapter label for logs.' },
+            },
+          },
+        },
+        transition: {
+          type: 'string',
+          enum: ['crossfade', 'cut'],
+          default: 'crossfade',
+          description: 'Transition between chapters: smooth audio/video crossfade or hard cut.',
+        },
+        fadeDurationSec: {
+          type: 'number',
+          default: 0.5,
+          description: 'Crossfade duration in seconds (0.15 to 1.5, used when transition="crossfade").',
+        },
+        width: { type: 'number', default: 1920, description: 'Target output width (defaults to first chapter or 1920).' },
+        height: { type: 'number', default: 1080, description: 'Target output height (defaults to first chapter or 1080).' },
+        fps: { type: 'number', default: 30, description: 'Target output FPS (defaults to first chapter or 30).' },
+        audioMastering: {
+          type: 'object',
+          description: 'Optional FFmpeg studio loudness mastering across the full stitched video (default enabled at -14 LUFS).',
+          properties: {
+            enabled: { type: 'boolean', default: true },
+            targetLufs: { type: 'number', default: -14 },
+            truePeakDbtp: { type: 'number', default: -1.5 },
+          },
+        },
+      },
+      required: ['chapters'],
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  },
 ];

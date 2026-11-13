@@ -41,7 +41,7 @@ on:
         required: false
         type: string
       mode:
-        description: 'Render mode: video or still'
+        description: 'Render mode: video, still, or stitch'
         required: false
         default: 'video'
         type: string
@@ -57,6 +57,11 @@ on:
         type: string
       audioMasteringBase64:
         description: 'Base64 encoded JSON for FFmpeg studio audio mastering'
+        required: false
+        default: ''
+        type: string
+      payloadAssetName:
+        description: 'Optional GitHub Release JSON asset name for large payloads or stitch manifests'
         required: false
         default: ''
         type: string
@@ -77,7 +82,15 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Hydrate Offloaded Job Payload (Bypass 65KB Limit)
+        if: inputs.payloadAssetName != ''
+        env:
+          PAYLOAD_ASSET_NAME: ${{ inputs.payloadAssetName }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/hydrate-job-payload.mjs
+
       - name: Cache node_modules and Remotion Browser
+        if: inputs.mode != 'stitch'
         id: cache_deps
         uses: actions/cache@v4
         with:
@@ -88,21 +101,22 @@ jobs:
           key: remotion-deps-${{ runner.os }}-${{ hashFiles('package.json') }}
 
       - name: Install dependencies (Full Remotion Ecosystem)
-        if: steps.cache_deps.outputs.cache-hit != 'true'
+        if: inputs.mode != 'stitch' && steps.cache_deps.outputs.cache-hit != 'true'
         run: |
           npm install --legacy-peer-deps
 
       - name: Ensure Remotion Browser
+        if: inputs.mode != 'stitch'
         run: npx remotion browser ensure --quiet
 
-      - name: Ensure FFmpeg CLI (Shared for Previews & Mastering)
+      - name: Ensure FFmpeg CLI (Shared for Previews, Stitch & Mastering)
         run: |
           if ! command -v ffmpeg &> /dev/null; then
             sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg curl
           fi
 
       - name: Cache Python Audio Tools (Edge-TTS & yt-dlp, Video Render Only)
-        if: inputs.mode != 'still'
+        if: inputs.mode == 'video'
         id: cache_tts
         uses: actions/cache@v4
         with:
@@ -110,7 +124,7 @@ jobs:
           key: tts-tools-v1-${{ runner.os }}
 
       - name: Setup Python Edge-TTS, yt-dlp & Conditional YouTube POT (Video Render Only)
-        if: inputs.mode != 'still'
+        if: inputs.mode == 'video'
         env:
           TSX_B64: ${{ inputs.tsxCodeBase64 }}
         run: |
@@ -121,7 +135,7 @@ jobs:
             "$TTS_VENV/bin/pip" install --upgrade edge-tts mutagen yt-dlp bgutil-ytdlp-pot-provider
           fi
           echo "$TTS_VENV/bin" >> "$GITHUB_PATH"
-          if echo "$TSX_B64" | base64 -d 2>/dev/null | grep -qiE "youtube\.com|youtu\.be"; then
+          if (echo "$TSX_B64" | base64 -d 2>/dev/null; cat outputs/hydrated-tsx.txt outputs/hydrated-audio.json 2>/dev/null || true) | grep -qiE "youtube\.com|youtu\.be"; then
             docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider || true
             sleep 2
             curl -s http://127.0.0.1:4416/ping || echo "POT provider initialized"
@@ -130,7 +144,7 @@ jobs:
           fi
 
       - name: Cache CTC Forced Aligner & HuggingFace MMS Model
-        if: inputs.mode != 'still'
+        if: inputs.mode == 'video'
         id: cache_ctc
         uses: actions/cache@v4
         with:
@@ -140,7 +154,7 @@ jobs:
           key: ctc-aligner-cpu-v1-${{ runner.os }}
 
       - name: Setup CTC Acoustic Forced Aligner (CPU MMS-300M, Video Render Only)
-        if: inputs.mode != 'still'
+        if: inputs.mode == 'video'
         run: |
           VENV_DIR="$HOME/.ctc-aligner-venv"
           if [ "${{ steps.cache_ctc.outputs.cache-hit }}" != "true" ] || [ ! -f "$VENV_DIR/bin/python" ]; then
@@ -157,7 +171,7 @@ jobs:
           fi
 
       - name: Prepare YouTube Cookies if configured
-        if: inputs.mode != 'still'
+        if: inputs.mode == 'video'
         env:
           YT_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
@@ -167,6 +181,7 @@ jobs:
           fi
 
       - name: Generate AI Voiceover & Audio Telemetry
+        if: inputs.mode != 'stitch'
         env:
           AUDIO_B64: ${{ inputs.audioConfigBase64 }}
           FPS: ${{ inputs.fps }}
@@ -177,6 +192,7 @@ jobs:
           node scripts/generate-studio-audio.mjs
 
       - name: Prepare DynamicVideo.tsx, Pre-fetch External Assets & Guard Imports
+        if: inputs.mode != 'stitch'
         env:
           TSX_B64: ${{ inputs.tsxCodeBase64 }}
           DURATION: ${{ inputs.durationInFrames }}
@@ -188,7 +204,7 @@ jobs:
           mkdir -p public
           node scripts/prepare-render.mjs
 
-      - name: Render Video or Still with Remotion
+      - name: Render Video, Stitch Chapters, or Preview Still
         id: render_step
         env:
           JOB_ID: ${{ inputs.jobId }}
@@ -202,11 +218,15 @@ jobs:
           HEIGHT: ${{ inputs.height }}
           FPS: ${{ inputs.fps }}
           DURATION: ${{ inputs.durationInFrames }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p outputs
           set +e
           if [ "${{ inputs.mode }}" = "still" ]; then
             node scripts/render-preview-frames.mjs
+            EXIT_CODE=$?
+          elif [ "${{ inputs.mode }}" = "stitch" ]; then
+            node scripts/stitch-chapters.mjs 2> outputs/error-${{ inputs.jobId }}.txt
             EXIT_CODE=$?
           else
             npx remotion render src/remotion/index.ts DynamicVideo outputs/video-${{ inputs.jobId }}.mp4 \
@@ -232,7 +252,9 @@ jobs:
             if [ "${{ inputs.mode }}" != "still" ] && [ -f "outputs/video-${{ inputs.jobId }}.mp4" ]; then
               node scripts/master-video-audio.mjs || true
               node scripts/measure-video-qc.mjs || true
-              node scripts/save-project-source.mjs || true
+              if [ "${{ inputs.mode }}" != "stitch" ]; then
+                node scripts/save-project-source.mjs || true
+              fi
             fi
           fi
 

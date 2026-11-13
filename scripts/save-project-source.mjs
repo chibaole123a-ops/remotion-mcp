@@ -2,8 +2,12 @@ import fs from 'fs';
 
 const jobId = process.env.JOB_ID || '';
 const title = process.env.VIDEO_TITLE || 'Remotion Video';
-const tsxB64 = process.env.TSX_B64 || '';
-const audioB64 = process.env.AUDIO_B64 || '';
+const tsxB64 = fs.existsSync('outputs/hydrated-tsx.txt')
+  ? fs.readFileSync('outputs/hydrated-tsx.txt').toString('base64')
+  : (process.env.TSX_B64 || '');
+const audioB64 = fs.existsSync('outputs/hydrated-audio.json')
+  ? fs.readFileSync('outputs/hydrated-audio.json').toString('base64')
+  : (process.env.AUDIO_B64 || '');
 const width = Number(process.env.WIDTH || 1920);
 const height = Number(process.env.HEIGHT || 1080);
 const fps = Number(process.env.FPS || 30);

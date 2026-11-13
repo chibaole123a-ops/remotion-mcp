@@ -20,6 +20,16 @@ export const VISION_FRAME_CRITERIA = [
   '5. Polish Gate: If ANY frame falls below bar on Semantic Sync, Visual Parity, or Legibility, apply 1 targeted refinement pass + preview_frames before dispatching full render_video.',
 ] as const;
 
+export function getVisionFrameCriteria(width?: number, height?: number): string[] {
+  const base: string[] = [...VISION_FRAME_CRITERIA];
+  if (width && height && height > width * 1.1) {
+    base.push(
+      '6. Portrait 9:16 Safe-Zone Audit (TikTok/Shorts/Reels): Verify foreground titles, stats, and captions stay clear of the top ~13% app header, right ~14% action icons, and bottom ~22% channel/caption overlay while background visuals stay full-bleed.'
+    );
+  }
+  return base;
+}
+
 export const DIRECTOR_EVALUATION_FRAMEWORK = `
 ## 🏆 QUALITY EVALUATION FRAMEWORK (STRICT GUARDRAILS, 100% CREATIVE FREEDOM)
 

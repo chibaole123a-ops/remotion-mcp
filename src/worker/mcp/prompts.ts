@@ -68,11 +68,11 @@ export const DIRECTOR_CODE_BLUEPRINT = `
 
 2. **Exact Verified Imports & Props (\`./audio-sync\`)**:
    - \`SyncedScene\`: \`sceneIndex\`, \`transitionStyle="zoom-through" | "whip-pan" | "wipe" | "fade" | "cut"\`, \`overlapFrames={10}\`, \`enterFrames={12}\`, \`exitFrames={12}\`
-   - \`ProKaraokeCaptions\`: \`stylePreset="minimal"\` (default borderless cinema subtitles) or \`"hormozi" | "glow" | "cyber"\`, \`fontFamily={bodyFont}\`, \`fontSize={42}\`, \`bottomOffset={64}\`, \`wordsPerPage={5}\`, \`highlightColor="#facc15"\`
+   - \`ProKaraokeCaptions\`: \`stylePreset="minimal"\` (default borderless cinema subtitles; auto-adapts \`bottomOffset\` & side margins for 9:16 portrait vs 16:9 landscape, or override with explicit \`bottomOffset\`) or \`"hormozi" | "glow" | "cyber"\`, \`fontFamily={bodyFont}\`, \`fontSize={42}\`, \`wordsPerPage={5}\`, \`highlightColor="#facc15"\`
    - \`ChapterProgressSpine\`: optional — omit by default so there are no top/bottom duration progress bars; use ONLY if the user's topic/request benefits from chapter progress indicators.
    - \`MasterAudioTrack\`: \`voiceVolume={1}\` (OR pass \`bgmSrc={...} bgmVolume={0.2} enableDucking={true}\` directly; NEVER mount \`voice-X.mp3\` alongside \`MasterAudioTrack\`)
    - \`SceneAnchoredSequence\`: \`sceneIndex\`, \`offsetFrames={0}\`, \`durationInFrames={45}\`, \`fromEnd={false}\` (anchors SFX to exact speech boundaries)
-   - Helpers & V8 Cinema Kit (\`./audio-sync\`): \`getWordTrigger\`, \`getWordProgress\`, \`getSceneTiming\`, \`getTelemetryTotalFrames\`, \`interpolateSceneMilestones\`, \`getSmoothDuckingVolume\`, \`KenBurnsMedia\`, \`AtmosphericParticles\`, \`CinematicLightSweep\`, \`StaggerReveal\`, \`CameraRig\`, \`ParallaxDepthLayers\`, \`AutoFitTitle\`, \`CinematicFinish\`
+   - Helpers & V8 Cinema Kit (\`./audio-sync\`): \`getWordTrigger\`, \`getWordProgress\`, \`getSceneTiming\`, \`getTelemetryTotalFrames\`, \`interpolateSceneMilestones\`, \`getSmoothDuckingVolume\`, \`getSafeZoneInsets\`, \`SafeAreaLayer\`, \`KenBurnsMedia\`, \`AtmosphericParticles\`, \`CinematicLightSweep\`, \`StaggerReveal\`, \`CameraRig\`, \`ParallaxDepthLayers\`, \`AutoFitTitle\`, \`CinematicFinish\`
 
 3. **Vietnamese Font & Strictly Increasing \`interpolate\` Safety**:
    - Load font for Vietnamese captions & titles (note PascalCase module name): \`import { loadFont } from '@remotion/google-fonts/BeVietnamPro'; const { fontFamily: bodyFont } = loadFont();\`
@@ -86,7 +86,7 @@ import { ThreeCanvas } from '@remotion/three';
 import { whoosh, vineBoom } from '@remotion/sfx';
 import { loadFont } from '@remotion/google-fonts/BeVietnamPro';
 import {
-  StoryboardCanvas, SyncedScene, MasterAudioTrack, CinematicFinish,
+  StoryboardCanvas, SyncedScene, SafeAreaLayer, MasterAudioTrack, CinematicFinish,
   SceneAnchoredSequence, ProKaraokeCaptions, getWordTrigger, getSmoothDuckingVolume, getTelemetryTotalFrames
 } from './audio-sync';
 
@@ -111,7 +111,7 @@ export const DynamicVideo: React.FC = () => {
       </SyncedScene>
 
       <CinematicFinish vignette={0.3} grainOpacity={0.03} colorMood="clean" />
-      <ProKaraokeCaptions stylePreset="minimal" fontFamily={bodyFont} bottomOffset={56} wordsPerPage={5} />
+      <ProKaraokeCaptions stylePreset="minimal" fontFamily={bodyFont} wordsPerPage={5} />{/* auto safe-zone for 16:9 & 9:16 */}
       <MasterAudioTrack voiceVolume={1} />
       <Audio src={BGM_URL} loop volume={(f) => getSmoothDuckingVolume(f, { lowVolume: 0.13, highVolume: 0.28 })} />
       <SceneAnchoredSequence sceneIndex={1} offsetFrames={-5} durationInFrames={36}>

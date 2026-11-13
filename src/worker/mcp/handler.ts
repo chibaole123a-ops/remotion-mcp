@@ -9,7 +9,7 @@ import {
   estimateAudioMinFrames,
   buildAdaptiveChapterPlan,
 } from "../utils.js";
-import { buildQualityEvaluationReport, VISION_FRAME_CRITERIA } from "../../shared/quality-rubric.js";
+import { buildQualityEvaluationReport, VISION_FRAME_CRITERIA, getVisionFrameCriteria } from "../../shared/quality-rubric.js";
 import {
   dispatchGitHubRender,
   listReleaseVideosOnGitHub,
@@ -532,7 +532,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                       previewImageUrl: stillUrl,
                       directDownloadUrl: downloadUrl,
                       qualityAdvisories: qualityAdvisories.length > 0 ? qualityAdvisories : undefined,
-                      visionInspectionCriteria: VISION_FRAME_CRITERIA,
+                      visionInspectionCriteria: getVisionFrameCriteria(width, height),
                       instructionsForAgent:
                         `Frame capture job for frame(s) [${resolvedFrames.join(', ')}] dispatched to Cloud runner! Call get_task_status(jobId: "${jobId}", waitForCompletion: true) to retrieve the ${resolvedFrames.length > 1 ? 'Contact Sheet' : 'still frame'}, compare every frame against frameNarrationContext + visionInspectionCriteria, and apply 1 polish pass if any frame looks flat or out-of-sync before render_video.`,
                     },

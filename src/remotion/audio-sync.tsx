@@ -834,6 +834,59 @@ export const ContinuousAudioTrack: React.FC<{ bgmVolume?: number; voiceVolume?: 
   );
 };
 
+export interface SafeZoneInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  captionBottomOffset: number;
+  isPortrait: boolean;
+  isSquare: boolean;
+}
+
+/**
+ * Aspect-aware UI safe-zone insets (full-bleed media stays edge-to-edge while foreground text/HUDs stay unobstructed).
+ * For 9:16 portrait (TikTok/Shorts/Reels), automatically protects top nav (~13%), right action rail (~14%), and bottom caption/bar (~22%).
+ */
+export function getSafeZoneInsets(width: number, height: number): SafeZoneInsets {
+  const safeW = Math.max(320, width || 1920);
+  const safeH = Math.max(320, height || 1080);
+  const isPortrait = safeH > safeW * 1.1;
+  const isSquare = !isPortrait && Math.abs(safeW - safeH) <= safeW * 0.12;
+
+  if (isPortrait) {
+    return {
+      top: Math.round(safeH * 0.13),
+      right: Math.round(safeW * 0.14),
+      bottom: Math.round(safeH * 0.22),
+      left: Math.round(safeW * 0.06),
+      captionBottomOffset: Math.round(safeH * 0.215),
+      isPortrait: true,
+      isSquare: false,
+    };
+  }
+  if (isSquare) {
+    return {
+      top: Math.round(safeH * 0.08),
+      right: Math.round(safeW * 0.08),
+      bottom: Math.round(safeH * 0.11),
+      left: Math.round(safeW * 0.08),
+      captionBottomOffset: Math.round(safeH * 0.1),
+      isPortrait: false,
+      isSquare: true,
+    };
+  }
+  return {
+    top: Math.round(safeH * 0.06),
+    right: Math.round(safeW * 0.05),
+    bottom: 64,
+    left: Math.round(safeW * 0.05),
+    captionBottomOffset: 64,
+    isPortrait: false,
+    isSquare: false,
+  };
+}
+
 export interface ProKaraokeCaptionsProps {
   stylePreset?: 'hormozi' | 'glow' | 'minimal' | 'cyber';
   highlightColor?: string;
@@ -858,12 +911,14 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
   textColor = '#ffffff',
   fontFamily = 'BeVietnamPro, "Noto Sans", system-ui, sans-serif',
   fontSize = 42,
-  bottomOffset = 64,
+  bottomOffset,
   wordsPerPage = 5,
   style,
 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
+  const safeZone = getSafeZoneInsets(width, height);
+  const resolvedBottom = bottomOffset ?? safeZone.captionBottomOffset;
 
   const allWords = useMemo(() => {
     return (audioTelemetry?.allWords || []) as WordToken[];
@@ -950,9 +1005,9 @@ export const ProKaraokeCaptions: React.FC<ProKaraokeCaptionsProps> = ({
     <div
       style={{
         position: 'absolute',
-        left: '5%',
-        right: '5%',
-        bottom: bottomOffset,
+        left: safeZone.left,
+        right: safeZone.right,
+        bottom: resolvedBottom,
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
@@ -1082,12 +1137,14 @@ export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({
   activeBgColor = 'rgba(56, 189, 248, 0.22)',
   textColor = '#f8fafc',
   fontSize = 38,
-  bottomOffset = 58,
+  bottomOffset,
   combineTokensWithinMilliseconds = 1400,
   style,
 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
+  const safeZone = getSafeZoneInsets(width, height);
+  const resolvedBottom = bottomOffset ?? safeZone.captionBottomOffset;
 
   const resolved = useMemo(() => {
     const scenes = audioTelemetry?.scenes || [];
@@ -1144,9 +1201,9 @@ export const WordHighlightCaptions: React.FC<WordHighlightCaptionsProps> = ({
     <div
       style={{
         position: 'absolute',
-        left: '6%',
-        right: '6%',
-        bottom: bottomOffset,
+        left: safeZone.left,
+        right: safeZone.right,
+        bottom: resolvedBottom,
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
@@ -1746,6 +1803,43 @@ export const CinematicFinish: React.FC<CinematicFinishProps> = ({
           <rect width="100%" height="100%" filter="url(#v8StudioGrain)" />
         </svg>
       ) : null}
+    </AbsoluteFill>
+  );
+};
+
+export interface SafeAreaLayerProps {
+  children: React.ReactNode;
+  showGuide?: boolean;
+  extraPadding?: number;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Foreground Safe-Zone wrapper: automatically adjusts padding from useVideoConfig() for 16:9, 9:16 (TikTok/Shorts/Reels), or 1:1
+ * while keeping background <Img>, <OffthreadVideo>, and <ThreeCanvas> full-bleed underneath.
+ */
+export const SafeAreaLayer: React.FC<SafeAreaLayerProps> = ({
+  children,
+  showGuide = false,
+  extraPadding = 0,
+  style,
+}) => {
+  const { width, height } = useVideoConfig();
+  const insets = getSafeZoneInsets(width, height);
+
+  return (
+    <AbsoluteFill
+      style={{
+        paddingTop: insets.top + extraPadding,
+        paddingRight: insets.right + extraPadding,
+        paddingBottom: insets.bottom + extraPadding,
+        paddingLeft: insets.left + extraPadding,
+        boxSizing: 'border-box',
+        border: showGuide ? '2px dashed rgba(56, 189, 248, 0.55)' : undefined,
+        ...style,
+      }}
+    >
+      {children}
     </AbsoluteFill>
   );
 };

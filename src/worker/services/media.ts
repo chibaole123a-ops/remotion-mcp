@@ -1,4 +1,4 @@
-const USER_AGENT = 'Remotion-Cloud-MCP-Studio/7.0 (https://github.com/chibaole123a-ops/remotion-mcp)';
+const USER_AGENT = 'Remotion-Cloud-MCP-Studio/7.4 (https://github.com/chibaole123a-ops/remotion-mcp)';
 
 export interface VisualMediaItem {
   id: string;

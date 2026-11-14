@@ -242,7 +242,7 @@ export const TOOLS = [
         frames: {
           type: 'array',
           items: { type: 'number' },
-          description: 'Recommended: Array of 1 to 6 frame indices (e.g. [15, 180, 420]) to inspect Hook, Midground, and Outro in one labeled Contact Sheet.',
+          description: 'Recommended: Array of 1 to 6 frame indices (`recommendedPreviewFrames` from plan_storyboard_timeline covering Cold Open, Scene mids, and Outro Tail) rendered into one labeled Contact Sheet.',
         },
         frame: {
           type: 'number',
@@ -287,7 +287,7 @@ export const TOOLS = [
         height: { type: 'number', description: 'Height in pixels (1080 landscape, 1920 portrait).', default: 1080 },
         audioConfig: {
           type: 'object',
-          description: 'Optional AI Voiceover & BGM config: { voice?: "vi-VN-NamMinhNeural" | "vi-VN-HoaiMyNeural", rate?: "+0%", bgm?: "lofi" | "cinematic" | "tech", scenes?: Array<{ text: string, voice?: string }> }',
+          description: 'Optional AI Voiceover & BGM config: { voice?: "vi-VN-NamMinhNeural" | "vi-VN-HoaiMyNeural", rate?: "+0%", bgm?: "lofi" | "cinematic" | "tech", scenes?: Array<{ text: string, voice?: string, pauseAfterSec?: number }> }',
         },
         audioMastering: {
           type: 'object',

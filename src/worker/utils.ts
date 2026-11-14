@@ -324,7 +324,11 @@ export function buildAdaptiveChapterPlan(
       audioConfigPayload: {
         voice: defaultVoice,
         rate,
-        scenes: grp.map((s) => ({ text: s.text, voice: s.voice })),
+        scenes: grp.map((s) => ({
+          text: s.text,
+          voice: s.voice,
+          ...(typeof (s as any).pauseAfterSec === 'number' ? { pauseAfterSec: (s as any).pauseAfterSec } : {}),
+        })),
       },
       chapterFocusCue: midScene?.meta?.sceneName || undefined,
     };

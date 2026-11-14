@@ -480,7 +480,16 @@ if (isPreviewMode && segments.length > 0) {
     const seg = segments[i];
     const segText = (typeof seg === 'string' ? seg : seg?.text || '').trim();
     const wc = segText.split(/\s+/).filter(Boolean).length;
-    const estSec = Math.max(1.2, (wc / (3.65 * rateMultiplier)) + 0.35);
+    const commas = (segText.match(/[,;](\s|$)/g) || []).length;
+    const periods = (segText.match(/[.!?](\s|$)/g) || []).length;
+    const pauseDur = (commas * 0.12 + periods * 0.22) / rateMultiplier;
+    const rawPause = Number(typeof seg === 'object' ? seg?.pauseAfterSec : NaN);
+    const interScenePad = Number.isFinite(rawPause)
+      ? Math.max(0.08, Math.min(2.0, rawPause))
+      : i === segments.length - 1
+      ? 0.45
+      : 0.28;
+    const estSec = Math.max(1.2, wc / (3.65 * rateMultiplier) + pauseDur + interScenePad);
     const segFrames = Math.ceil(estSec * fps);
     const localWords = buildProportionalWords(segText, Math.round(estSec * 1000), fps);
     const globalWords = localWords.map((w) => ({
@@ -507,7 +516,7 @@ if (isPreviewMode && segments.length > 0) {
     cursorFrame += segFrames;
   }
 } else if (isMasterSpineMode) {
-  console.log(`✨ Master Audio Spine V7.3 active: Synthesizing segments, CTC acoustic alignment & lossless voiceover.mp3...`);
+  console.log(`✨ Master Audio Spine V7.4 active: Synthesizing segments, CTC acoustic alignment & lossless voiceover.mp3...`);
 
   const wavInputs = [];
   const alignManifest = [];

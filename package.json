@@ -1,7 +1,7 @@
 {
   "name": "remotion-mcp-cloud",
-  "version": "6.1.0",
-  "description": "Antigravity-Style Pure Creative Remotion v4.0.541 AI Video Studio on Cloudflare Workers & GitHub Actions",
+  "version": "7.4.0",
+  "description": "Cloud AI Video Director & Pro Editor Remotion v4.0.542 MCP Studio on Cloudflare Workers & GitHub Actions",
   "type": "module",
   "scripts": {
     "deploy": "npx wrangler deploy",

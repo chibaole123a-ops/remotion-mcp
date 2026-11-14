@@ -4,7 +4,7 @@ async function verifyDirectAudioReachability(url: string): Promise<{ reachable: 
   try {
     const res = await fetch(url, {
       method: 'HEAD',
-      headers: { 'User-Agent': 'Remotion-Cloud-MCP-Studio/7.0' },
+      headers: { 'User-Agent': 'Remotion-Cloud-MCP-Studio/7.4' },
       redirect: 'follow',
       signal: controller.signal,
     });

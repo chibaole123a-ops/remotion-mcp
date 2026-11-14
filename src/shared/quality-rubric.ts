@@ -49,7 +49,7 @@ Quality is evaluated across **3 non-restrictive tiers** — technical invariants
 
 ### Tier 3 — Intent-Relative Self-Critique & Vision Loop
 - **Declare Your Creative Intent First**: Silently choose your target mood, visual language (e.g., 2.5D documentary, 3D WebGL, bold kinetic typography, serene minimalism), and pacing before coding — judge your work against *that* intent, never against generic templates.
-- **Inspect with \`preview_frame\`**: When checking still frames, verify the 4 Vision Criteria: (1) Safe-Zone & No Overlap, (2) 1-Second Legibility & Contrast, (3) Focal Hierarchy & Depth, (4) Palette & Mood Cohesion.
+- **Inspect with \`preview_frames\`**: Check the multi-frame Contact Sheet against the 5 Vision Criteria: (1) Safe-Zone & Legibility, (2) Spoken-vs-Shown Semantic Sync, (3) Visual World Cohesion & Parity, (4) Focal Hierarchy & Kinetic Evolution, (5) Polish Gate.
 `;
 
 /**
@@ -489,7 +489,7 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
       criticalIssues.length > 0
         ? 'Fix the CRITICAL technical invariant(s) above before rendering.'
         : advisories.length > 0
-        ? 'Address the ADVISORIES above (font, captions, interpolate monotonicity, transitions), then run `preview_frames` with 4 keyframes before `render_video`.'
-        : 'All technical & craft checks passed! Next: call `preview_frames` with 4 key frame indices (e.g. start, mid-scenes, outro) and inspect the Contact Sheet via `get_task_status` BEFORE calling `render_video`.',
+        ? 'Address the ADVISORIES above (font, captions, interpolate monotonicity, word-aligned sub-cuts, transitions), then run `preview_frames` using `recommendedPreviewFrames` before `render_video`.'
+        : 'All technical & craft checks passed! Next: call `preview_frames(frames: recommendedPreviewFrames)` (covering Cold Open, scene mids, and Outro Tail) and inspect the Contact Sheet via `get_task_status` BEFORE calling `render_video`.',
   };
 }

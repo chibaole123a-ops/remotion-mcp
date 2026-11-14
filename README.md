@@ -1,7 +1,7 @@
-# 🎬 Remotion Cloud MCP Studio (v6.1.0)
+# 🎬 Remotion Cloud MCP Studio (v7.4.0)
 ### Máy Chủ MCP Điều Phối Video AI 100% Cloud-Native: Cloudflare Workers + GitHub Actions (16GB RAM)
 
-> **Kiến trúc Vận hành:** Toàn bộ hệ thống chạy 100% trên Điện toán Đám mây (Cloud Serverless & Cloud CI/CD Runner). Hỗ trợ render video Remotion đầy đủ tính năng (Three.js 3D, Rough Notation, Google Fonts, Transitions, Vector Shapes) mà không cần cấu hình phần cứng cục bộ.
+> **Kiến trúc Vận hành:** Toàn bộ hệ thống chạy 100% trên Điện toán Đám mây (Cloud Serverless & Cloud CI/CD Runner). Tích hợp **Edge-TTS + MMS-300M CTC Forced Alignment**, thư viện **5-layer Studio Audio (-14 LUFS Two-Pass Loudnorm)**, **Media Cache Preview→Render**, kiểm duyệt **Spoken-vs-Shown + Safe-Zone 9:16/16:9**, và kết xuất **Remotion v4.0.542** (Three.js 3D, Skia, Rough Notation, Google Fonts, Transitions).
 
 ---
 
@@ -50,14 +50,20 @@
 
 ---
 
-## 🛠️ Danh Sách MCP Tools Tích Hợp (v6.1.0)
+## 🛠️ Danh Sách MCP Tools Tích Hợp (v7.4.0)
 
 | Tên Tool | Chức Năng |
 | :--- | :--- |
-| `remotion` | Công cụ kết xuất Remotion Studio hoàn chỉnh (v4.0.542). Hỗ trợ render full video hoặc bắt nhanh 1 frame tĩnh xem trước bằng tham số `frame`. |
-| `get_task_status` | Theo dõi tiến độ thời gian thực của job trên GitHub Actions, nhận link xem trực tiếp `/watch` hoặc link ảnh preview `/still`. |
-| `inspect_task_logs` | Trích xuất chi tiết lỗi biên dịch, stack trace trên GitHub Actions để AI tự chẩn đoán và tự sửa lỗi (Self-Healing). |
-| `list_system_assets` | Liệt kê danh sách video và asset đã render lưu trữ trong kho Cloud Release CDN. |
+| `plan_storyboard_timeline` | Khóa timeline theo lời đọc, sinh `audioConfigPayload`, `recommendedPreviewFrames` (tối đa 6 mốc gồm Cold Open, giữa các cảnh, Outro Tail) và kế hoạch chia chương dài `adaptiveChapterPlan`. |
+| `search_visual_media` | Tìm ảnh/video thực tế theo batch (`queries`) từ Wikimedia Commons, NASA, Wikipedia, Openverse, Internet Archive, Pexels/Pixabay và đính kèm ảnh Vision cho AI kiểm tra trực tiếp. |
+| `search_soundtrack` / `search_sfx` | Tìm nhạc nền MP3 sạch bản quyền (`search_soundtrack`) và hiệu ứng `@remotion/sfx` + ambience thực địa Internet Archive (`search_sfx`). |
+| `verify_external_asset` | Kiểm tra an toàn SSRF, loại bỏ domain stock dính watermark và kiểm tra MIME/Vision cho URL media bên ngoài. |
+| `evaluate_video_quality` | Kiểm định nhanh TSX theo 3 tầng quy chuẩn (Hard Guardrails + `DIRECTOR_NOTE`s + `VISION_FRAME_CRITERIA`). |
+| `preview_frames` | Chạy kiểm duyệt tĩnh tự động, cache media trước, lưu snapshot và kết xuất Contact Sheet (1–6 khung hình) kèm phụ đề CTC giả lập để kiểm tra trước khi render. |
+| `render_video` | Kết xuất MP4 trên GitHub Actions 16GB RAM (hỗ trợ `fromPreviewJobId` tái sử dụng snapshot không cần gửi lại TSX), mastering `-14 LUFS`, lưu `project-*.json` và đo QC (`qc-*.json` + `final-sheet-*.jpg`). |
+| `stitch_video_chapters` | Ghép 2–25 chương video dài kèm `masterBgmUrl` + FFmpeg `sidechaincompress` ducking xuyên suốt và mastering `-14 LUFS`. |
+| `get_task_status` / `inspect_task_logs` | Theo dõi tiến độ Cloud, nhận link `/watch`, `/still`, `qcTelemetry`, ảnh Contact Sheet đầu/cuối và log lỗi chi tiết. |
+| `list_system_assets` / `get_project_source` | Liệt kê kho video đã render trong `videos-store` hoặc nạp lại mã nguồn TSX/audioConfig của job cũ để chỉnh sửa từng phần. |
 
 ---
 

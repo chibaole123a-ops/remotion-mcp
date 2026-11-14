@@ -122,7 +122,7 @@ import { whoosh, vineBoom } from '@remotion/sfx';
 import { loadFont } from '@remotion/google-fonts/BeVietnamPro';
 import {
   StoryboardCanvas, SyncedScene, SafeAreaLayer, MasterAudioTrack, CinematicFinish,
-  SceneAnchoredSequence, ProKaraokeCaptions, getWordTrigger, getSmoothDuckingVolume, getTelemetryTotalFrames
+  SceneAnchoredSequence, ProKaraokeCaptions, getWordFrame, getWordTrigger, getSmoothDuckingVolume, getTelemetryTotalFrames
 } from './audio-sync';
 
 const { fontFamily: bodyFont } = loadFont();

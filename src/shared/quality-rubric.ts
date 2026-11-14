@@ -13,11 +13,11 @@ export interface ValidationContext {
 }
 
 export const VISION_FRAME_CRITERIA = [
-  '1. Safe-Zone & Legibility: Verify all titles, captions, HUDs, and focal graphics sit cleanly inside safe margins with strong luminance contrast (scrim/backdrop over busy media) and crisp diacritics.',
-  '2. Spoken-vs-Shown Semantic Sync: Compare each frame against the narration spoken at that timestamp — verify live counters, gauges, labels, and visual metaphors match the active scene context rather than running ahead of speech.',
-  '3. Cross-Scene Visual Parity & Depth: Compare the weakest frame in the Contact Sheet against the strongest frame — verify every scene maintains balanced depth (media, 3D, lighting, particles, or intentional craft) with no half-rich / half-flat dropoff.',
-  '4. Focal Hierarchy & Kinetic Evolution: Verify each beat leads the eye to one unmistakable Focal Point and evolves visually across scenes.',
-  '5. Polish Gate: If ANY frame falls below bar on Semantic Sync, Visual Parity, or Legibility, apply 1 targeted refinement pass + preview_frames before dispatching full render_video.',
+  '1. Safe-Zone & Legibility: Verify all titles, captions, HUDs, and focal graphics sit cleanly inside safe margins with strong luminance contrast (scrim/backdrop behind light text over bright media, without double-darkening already dark night/space footage) and crisp diacritics.',
+  '2. Spoken-vs-Shown Semantic Sync: Compare each frame against the exact clause spoken at that timestamp — verify photos, clips, diagrams, counters, and cards literally illustrate what is being spoken right then (never show a headline card announcing a later sentence, and reject off-topic keyword stock B-roll).',
+  '3. Visual World Cohesion & Parity: Compare all frames side-by-side — verify shots share a unified aesthetic/color language (no jarring random stock collage jumps or late-scene snap-backs to earlier shots) with balanced depth across scenes.',
+  '4. Focal Hierarchy & Kinetic Evolution: Verify each beat leads the eye to one unmistakable Focal Point and evolves meaningfully with the narration.',
+  '5. Polish Gate: If ANY frame fails Spoken-vs-Shown Sync, Narrative Clarity, Exposure, or Continuity, refine TSX/visuals + preview_frames before dispatching full render_video.',
 ] as const;
 
 export function getVisionFrameCriteria(width?: number, height?: number): string[] {
@@ -302,6 +302,28 @@ export function validateTsxComposition(tsxCode: string, ctx: ValidationContext =
     );
   }
 
+  // Spoken-vs-Shown Sub-Cut Sync & Snap-Back Guard
+  const hasHardcodedSubCutGuess =
+    /\b(?:cut\d*Opacity|subCut\d*|shot\d*Opacity)\s*=\s*interpolate\s*\(\s*frame\s*,\s*\[\s*(?:[4-9]\d|\d{3,})\s*,\s*\d+\s*\]/.test(
+      activeCode
+    ) && !/\b(?:getWordFrame|getBeatFrame)\s*\(/.test(activeCode);
+  const finiteSubSeqMatch = activeCode.match(
+    /<Sequence\b[^>]*\bfrom\s*=\s*\{\s*([4-9]\d|[1-3]\d\d)\s*\}[^>]*\bdurationInFrames\s*=\s*\{\s*(\d{2,3})\s*\}/
+  );
+  if (hasVoiceoverScenes && (hasHardcodedSubCutGuess || (finiteSubSeqMatch && !/<Audio\b/.test(finiteSubSeqMatch[0])))) {
+    warnings.push(
+      'DIRECTOR_NOTE: Sub-cut `<Sequence>` or opacity crossfade uses guessed numeric frame boundaries (e.g. `from={140} durationInFrames={122}` or `[104, 118]`). Actual Edge-TTS scene lengths vary — anchor mid-scene cuts directly to the spoken phrase via `getWordFrame(sceneIndex, "exact phrase")` (or `getBeatFrame`) and OMIT `durationInFrames` on a scene\'s final visual `<Sequence>` so it never unmounts early and snaps back to shot 1.'
+    );
+  }
+
+  const safeLayerCount = (activeCode.match(/<SafeAreaLayer\b/g) || []).length;
+  const usesCaptions = /ProKaraokeCaptions|WordHighlightCaptions/.test(activeCode);
+  if (hasVoiceoverScenes && usesCaptions && safeLayerCount >= Math.max(4, ctx.audioConfig!.scenes!.length)) {
+    warnings.push(
+      'DIRECTOR_NOTE: Every scene includes a `<SafeAreaLayer>` overlay/card alongside `<ProKaraokeCaptions />`. Only show a visual label/diagram at the exact moment that phrase is spoken (`getWordTrigger`), never spoil later sentences early, and leave atmospheric scenes purely visual when captions already carry the narration.'
+    );
+  }
+
   return warnings;
 }
 
@@ -404,7 +426,8 @@ export function buildQualityEvaluationReport(input: QualityEvaluationInput) {
   const detectedSignals = {
     usesSpringPhysics: /\bspring\s*\(/.test(activeCode),
     usesInterpolation: /\binterpolate\s*\(/.test(activeCode),
-    usesMilestoneSync: /\b(?:interpolateSceneMilestones|getWordTrigger|getWordProgress)\s*\(/.test(activeCode),
+    usesWordAlignedCuts: /\b(?:getWordFrame|getBeatFrame)\s*\(/.test(activeCode),
+    usesMilestoneSync: /\b(?:interpolateSceneMilestones|getWordTrigger|getWordProgress|getWordFrame)\s*\(/.test(activeCode),
     uses3DOrCanvas: /ThreeCanvas|@remotion\/three/.test(activeCode),
     usesTransitions: /TransitionSeries|@remotion\/transitions|\btransitionStyle\s*=/.test(activeCode),
     usesVariedTransitions: new Set(transitionStyleMatches).size >= 2,

@@ -19,9 +19,13 @@ export const TOOLS = [
             properties: {
               text: { type: 'string', description: 'Narration script or lyric lines for this scene' },
               sceneName: { type: 'string', description: 'Optional scene name (e.g. "Hook", "Climax", "Outro")' },
-              visualConcept: { type: 'string', description: 'Your creative visual direction for this scene' },
+              visualConcept: { type: 'string', description: 'Your creative visual direction matching this exact spoken sentence' },
               continuityFromPrevScene: { type: 'string', description: 'Visual/rhythmic bridge from previous scene' },
               voice: { type: 'string', description: 'Voice ID (e.g. "vi-VN-NamMinhNeural", "vi-VN-HoaiMyNeural")' },
+              pauseAfterSec: {
+                type: 'number',
+                description: 'Optional breathing pause after this scene in seconds (0.08-2.0, default 0.28; use 0.45-0.65 before a twist or climax).',
+              },
             },
             required: ['text'],
           },

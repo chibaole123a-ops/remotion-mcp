@@ -109,7 +109,13 @@ export function calculateSpeechTelemetry(
     const periods = (text.match(/[.!?](\s|$)/g) || []).length;
     const pauseDur = (commas * 0.12 + periods * 0.22) / rateMultiplier;
 
-    const durationSec = Number(Math.max(1.2, baseDur + pauseDur + 0.15).toFixed(2));
+    const pauseAfterSec = Number(typeof item === 'object' ? item?.pauseAfterSec : NaN);
+    const interScenePad = Number.isFinite(pauseAfterSec)
+      ? Math.max(0.08, Math.min(2.0, pauseAfterSec))
+      : idx === list.length - 1
+      ? 0.45
+      : 0.28;
+    const durationSec = Number(Math.max(1.2, baseDur + pauseDur + interScenePad).toFixed(2));
     const durationInFrames = Math.ceil(durationSec * fps);
 
     const startFrame = cumulativeFrames;
@@ -118,10 +124,15 @@ export function calculateSpeechTelemetry(
     cumulativeFrames += durationInFrames;
     cumulativeSec += durationSec;
 
+    const clampedPause = Number.isFinite(pauseAfterSec)
+      ? Math.max(0.08, Math.min(2.0, pauseAfterSec))
+      : undefined;
+
     return {
       sceneIndex: idx,
       text,
       voice,
+      ...(clampedPause !== undefined ? { pauseAfterSec: clampedPause } : {}),
       wordCount,
       durationSec,
       durationInFrames,
@@ -144,7 +155,11 @@ export function calculateSpeechTelemetry(
     audioConfigPayload: {
       voice: defaultVoice,
       rate: rateStr,
-      scenes: scenes.map((s) => ({ text: s.text, voice: s.voice })),
+      scenes: scenes.map((s) => ({
+        text: s.text,
+        voice: s.voice,
+        ...(typeof s.pauseAfterSec === 'number' ? { pauseAfterSec: s.pauseAfterSec } : {}),
+      })),
     },
     message: `Synthesized timing for ${scenes.length} scene(s). Total duration: ${cumulativeSec.toFixed(1)}s (${cumulativeFrames} frames @ ${fps}fps). Use these exact frame boundaries in your Remotion <Sequence> components!`,
   };

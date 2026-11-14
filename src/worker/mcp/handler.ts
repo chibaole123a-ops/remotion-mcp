@@ -460,25 +460,52 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
         const telemetry = calculateSpeechTelemetry(scenesInput, voice, fps, rate);
         const inputArray = Array.isArray(args.scenes) ? args.scenes : [];
 
-        const sampleIndices =
-          telemetry.scenes.length <= 6
-            ? telemetry.scenes.map((_: any, i: number) => i)
-            : [
-                0,
-                Math.floor((telemetry.scenes.length - 1) * 0.33),
-                Math.floor((telemetry.scenes.length - 1) * 0.66),
-                telemetry.scenes.length - 1,
-              ];
-        const previewFrameTranscripts = [...new Set<number>(sampleIndices)].map((i) => {
-          const s = telemetry.scenes[i];
-          const midFrame = Math.round(s.startFrame + Math.max(10, s.durationInFrames * 0.48));
-          return {
-            frame: Math.min(Math.max(15, midFrame), Math.max(15, telemetry.totalDurationInFrames - 10)),
-            sceneIndex: s.sceneIndex,
-            sceneName: inputArray[i]?.sceneName || undefined,
-            spokenText: s.text,
-          };
-        });
+        const checkpoints: Array<{ frame: number; sceneIndex: number; checkpoint: string; text: string }> = [];
+        const seenFrames = new Set<number>();
+        const pushCheckpoint = (rawFrame: number, sceneIdx: number, label: string, text: string) => {
+          const maxF = Math.max(15, telemetry.totalDurationInFrames - 10);
+          const f = Math.min(Math.max(8, Math.round(rawFrame)), maxF);
+          if (seenFrames.has(f) || checkpoints.length >= 6) return;
+          seenFrames.add(f);
+          checkpoints.push({ frame: f, sceneIndex: sceneIdx, checkpoint: label, text });
+        };
+
+        if (telemetry.scenes.length > 0) {
+          const s0 = telemetry.scenes[0];
+          pushCheckpoint(Math.min(12, Math.floor(s0.durationInFrames * 0.2)), 0, 'Cold Open (Frame ~12)', s0.text);
+
+          const midSceneIndices =
+            telemetry.scenes.length <= 4
+              ? telemetry.scenes.map((_: any, i: number) => i)
+              : [
+                  0,
+                  Math.floor((telemetry.scenes.length - 1) * 0.35),
+                  Math.floor((telemetry.scenes.length - 1) * 0.68),
+                  telemetry.scenes.length - 1,
+                ];
+          for (const i of midSceneIndices) {
+            const s = telemetry.scenes[i];
+            const ratio = i === 0 ? 0.62 : 0.48;
+            pushCheckpoint(s.startFrame + Math.max(10, s.durationInFrames * ratio), s.sceneIndex, `Scene ${i} Mid`, s.text);
+          }
+
+          const lastIdx = telemetry.scenes.length - 1;
+          const sLast = telemetry.scenes[lastIdx];
+          pushCheckpoint(
+            sLast.endFrame - 12,
+            sLast.sceneIndex,
+            'Outro Tail (Verify Clean Ending)',
+            sLast.text
+          );
+        }
+
+        const previewFrameTranscripts = checkpoints.map((c) => ({
+          frame: c.frame,
+          sceneIndex: c.sceneIndex,
+          checkpoint: c.checkpoint,
+          sceneName: inputArray[c.sceneIndex]?.sceneName || undefined,
+          spokenText: c.text,
+        }));
         const recommendedPreviewFrames = previewFrameTranscripts.map((p) => p.frame);
         const adaptiveChapterPlan = buildAdaptiveChapterPlan(
           telemetry.scenes,
@@ -543,10 +570,10 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
                         ? 'LONG-FORM OPTIONS: You have full creative freedom to choose Option A (Adaptive Chapters via adaptiveChapterPlan + stitch_video_chapters with masterBgmUrl sidechain ducking for heavy/long multi-act films) OR Option B (Single render_video if lightweight 2D/lyrics/ambient where one React timeline is cleaner; payloads > 36 KB offload automatically).'
                         : 'Mount ONLY ONE voiceover method (either <MasterAudioTrack /> OR segmented <Audio src={staticFile("voice-X.mp3")} />), and duck BGM during speech.',
                       proEditorChecklist: [
-                        'Frame 0 Cold Open: start with immediate kinetic motion/hook (no slow fade-in from black on Scene 0).',
-                        'Genre-Adaptive Pacing: for documentary/discovery/viral explainers, slice 6-9s scenes into 2-3 B-roll beats (~2.5-3.5s/shot) and vary camera directions + transitionStyles (keep slow unbroken takes free for poetic/lyric/3D).',
-                        'Pure Cinema Variety: do NOT stamp a corner badge + title card onto every scene — leave 30-40%+ of scenes clean (visual + lighting + ProKaraokeCaptions only) and never leave half a split-screen empty waiting on a late word.',
-                        '5-Layer Audio & Grading: lead cuts with -5f SFX (J-cut), optionally layer subtle room-tone ambience via search_sfx(category: "ambience", includeWebFoley: true), use brief climax silence, and unify stock color via CinematicFinish.',
+                        'One Cohesive Story > Fact List: deliver 1 clear narrative arc (Hook -> Mechanism -> Twist -> Complete Resolution); never cram 4 disconnected textbook definitions or end on an unanswered mystery.',
+                        'Word-Synced Sub-Cuts (`getWordFrame`): NEVER guess hardcoded frame cuts (`[104, 118]`) or put `durationInFrames` on a scene\'s final sub-cut `<Sequence>` — anchor mid-scene cuts to exact spoken phrases via `getWordFrame(sceneIndex, "phrase")` so nothing drifts or snaps back.',
+                        'Literal Visual Proof & Cohesive World: every clip, 3D scene, or SVG diagram must literally match what is spoken at that moment within one unified visual palette (build custom Remotion visuals when stock footage doesn\'t match abstract concepts); avoid repeating captions as static early top banners.',
+                        '5-Layer Audio & Breathing Pauses: use natural punctuation/pauseAfterSec, lead cuts with -5f SFX (J-cut), optionally layer room-tone ambience (search_sfx category: "ambience", includeWebFoley: true), use brief climax silence, and skip heavy dark scrims on already-dark space/night shots without top text.',
                       ],
                       creativeFreedom:
                         'Design any visual style, pacing, 2D/3D medium, or camera flow that best serves your narrative intent.',
@@ -638,7 +665,7 @@ export async function handleJsonRpc(body: any, env: Env, baseUrl: string) {
           fps,
           width,
           height,
-          audioConfig: isFramePreview ? undefined : audioConfig,
+          audioConfig,
         });
         if (warnings.some((w) => w.startsWith('CRITICAL:'))) {
           return {

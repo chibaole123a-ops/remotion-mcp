@@ -569,8 +569,13 @@ if (isPreviewMode && segments.length > 0) {
     const speechDurSec = resolveExactAudioDurationSec(rawMp3, pyDurationMs);
     const speechDurMs = Math.round(speechDurSec * 1000);
 
-    // Pad crisp 140ms breath between segments (350ms after final scene) inside decoded PCM WAV for 0-drift concatenation
-    const padSec = i === segments.length - 1 ? 0.35 : 0.14;
+    // Natural inter-scene breathing pause (0.28s default, 0.45s clean outro tail, or explicit per-scene pauseAfterSec)
+    const customPauseSec = Number(typeof seg === 'object' ? seg?.pauseAfterSec : NaN);
+    const padSec = Number.isFinite(customPauseSec)
+      ? Math.max(0.08, Math.min(2.0, customPauseSec))
+      : i === segments.length - 1
+      ? 0.45
+      : 0.28;
     execSync(
       `ffmpeg -y -i "${rawMp3}" -af "apad=pad_dur=${padSec}" -ar 24000 -ac 1 "${segWav}"`,
       { stdio: 'ignore' }
